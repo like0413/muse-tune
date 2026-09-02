@@ -1,0 +1,15 @@
+{
+  "recommendations": [
+    "Vue.volar",
+    "dbaeumer.vscode-eslint",
+    "EditorConfig.EditorConfig",
+    "oxc.oxc-vscode",
+    "VoidZero.vite-plus-extension-pack",
+    "tauri-apps.tauri-vscode",
+    "bradlc.vscode-tailwindcss",
+    "rust-lang.rust-analyzer",
+    "Selemondev.shadcn-vue",
+    "oxc.oxc-vscode",
+    "EditorConfig.EditorConfig"
+  ]
+}

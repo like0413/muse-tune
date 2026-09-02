@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions for the main Muse Tune window",
+  "platforms": ["windows"],
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "store:default",
+    "log:default",
+    "updater:default",
+    "autostart:default",
+    "fs:default"
+  ]
+}

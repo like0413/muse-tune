@@ -1,0 +1,68 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "muse-tune",
+  "version": "0.1.0",
+  "identifier": "com.like.muse-tune",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1480",
+    "beforeDevCommand": "vp dev",
+    "beforeBuildCommand": "vp build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "muse-tune",
+        "width": 800,
+        "height": 600,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "connect-src": "ipc: http://ipc.localhost",
+        "font-src": "'self' data:",
+        "img-src": "'self' data: blob:",
+        "style-src": "'self' 'unsafe-inline'",
+        "script-src": "'self'",
+        "object-src": "'none'",
+        "frame-src": "'none'",
+        "base-uri": "'none'",
+        "form-action": "'none'"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "targets": ["nsis"],
+    "shortDescription": "Windows 11 taskbar media controller",
+    "longDescription": "Muse Tune shows and controls the current Windows media session from the Windows 11 taskbar.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdDNzZFQkQ1MEFFMkZDNDMKUldSRC9PSUsxZXQyZkFGY3hhMGdoMXhhbmxlbU45aDd3UUtVbjYyZlRIUC9EaUY4M3lhL29rYm0K",
+      "endpoints": ["https://github.com/like0413/muse-tune/releases/latest/download/latest.json"],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}
