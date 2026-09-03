@@ -6,9 +6,9 @@ import tailwindcss from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
 import MotionResolver from 'motion-v/resolver'
 import AutoImport from 'unplugin-auto-import/vite'
-import TurboConsole from 'unplugin-turbo-console/vite'
+// import TurboConsole from 'unplugin-turbo-console/vite'
 import Components from 'unplugin-vue-components/vite'
-import vueDevTools from 'vite-plugin-vue-devtools'
+// import vueDevTools from 'vite-plugin-vue-devtools'
 import { defineConfig, lazyPlugins } from 'vite-plus'
 
 // https://vite.dev/config/
@@ -115,8 +115,8 @@ export default defineConfig({
     VueI18nPlugin({
       include: resolve(dirname(fileURLToPath(import.meta.url)), './src/locales/**'),
     }),
-    TurboConsole(),
-    vueDevTools(),
+    // TurboConsole(),
+    // vueDevTools(),
   ]),
   resolve: {
     alias: {

@@ -13,5 +13,6 @@ declare module 'vue' {
   export interface GlobalComponents {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    TaskbarPlayer: typeof import('./src/components/taskbar/TaskbarPlayer.vue')['default']
   }
 }

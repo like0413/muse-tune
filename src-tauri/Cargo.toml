@@ -29,6 +29,16 @@ tauri-plugin-store = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-fs = "2"
 
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61.3", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_UI_Accessibility",
+  "Win32_UI_HiDpi",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
 [profile.dev]
 incremental = true
 

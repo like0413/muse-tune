@@ -1,7 +1,7 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import TaskbarPlayer from '@/components/taskbar/TaskbarPlayer.vue'
+</script>
 
 <template>
-  <h1>You did it!</h1>
+  <TaskbarPlayer />
 </template>
-
-<style scoped></style>

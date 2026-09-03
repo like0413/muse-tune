@@ -27,7 +27,9 @@
 
 Windows 11 没有向普通桌面应用开放“在任务栏 XAML 布局中注册任意自定义控件”的稳定公共 API。因此，本文四种方案都不能让 Windows 自动为 Muse Tune 分配布局槽位。
 
-无论采用哪种方案，应用都需要自行完成：
+无论采用哪种方案，应用都需要自行完成任务栏定位、DPI、生命周期和可见性同步。只有在产品要求避让原生任务按钮时，才需要进一步测量开始按钮、Widgets 和应用按钮组。当前 Owner 原型明确允许覆盖任务按钮，因此只使用任务栏整体矩形和系统托盘边界。
+
+完整的非覆盖布局通常还需要：
 
 - 查找主任务栏 `Shell_TrayWnd`；
 - 查找副屏任务栏 `Shell_SecondaryTrayWnd`；
@@ -96,7 +98,7 @@ TaskbarDockManager
 
 ### 3.2 TaskbarLayoutProbe
 
-Windows 11 的任务栏主体是 XAML，经典子 HWND 无法可靠反映全部任务按钮的真实宽度。建议：
+Windows 11 的任务栏主体是 XAML，经典子 HWND 无法可靠反映全部任务按钮的真实宽度。仅当产品重新要求避让任务按钮时，再考虑：
 
 - 使用 Win32 `GetWindowRect` 获取任务栏整体边界；
 - 主屏通知区域可以使用 `TrayNotifyWnd` 作为快速参考；
@@ -106,18 +108,7 @@ Windows 11 的任务栏主体是 XAML，经典子 HWND 无法可靠反映全部�
 
 ### 3.3 TaskbarPlacement
 
-布局层统一使用物理像素，最终再根据目标任务栏的 DPI 转换为 WebView 的逻辑尺寸。
-
-建议支持响应式宽度：
-
-```text
-空间充足：封面 + 歌曲 + 歌手 + 控制按钮 + 进度条 + 歌词
-空间一般：封面 + 歌曲/歌手 + 核心控制按钮
-空间较小：封面 + 播放/暂停
-没有安全空间：隐藏任务栏窗口，保留托盘入口
-```
-
-任何模式都不得覆盖开始按钮、任务按钮、Widgets、输入法、通知区域、时钟和显示桌面区域。
+布局层统一使用物理像素，最终再根据目标任务栏的 DPI 转换为 WebView 的逻辑尺寸。当前 Owner 原型固定为 360 DIP，右边缘贴住系统托盘左边缘；可用空间不足时允许覆盖任务按钮，不缩小、不切换到左侧，也不因拥挤隐藏。系统托盘和时钟本身仍作为定位边界，不主动覆盖。
 
 ### 3.4 LifecycleWatcher
 
@@ -129,6 +120,8 @@ Windows 11 的任务栏主体是 XAML，经典子 HWND 无法可靠反映全部�
 - `WM_DPICHANGED`：目标显示器缩放变化；
 - `EVENT_OBJECT_LOCATIONCHANGE`：通过 `SetWinEventHook` 低成本监听任务栏移动和尺寸变化；
 - 低频校准定时器：用于恢复丢失的 Z-order 或处理未产生可靠事件的 Shell 状态变化。
+
+当前 Owner 原型以 `SetWinEventHook` 处理正常状态变化，仅保留 1 秒窗口存活检查；挂载或定位失败时以 400ms 间隔重试。由于 Owner 被销毁时 owned window 也会被系统销毁，Tauri 进程会阻止“最后窗口关闭”导致的自动退出，并由监督线程按原窗口配置重建 bar。
 
 ## 4. 方案一：Owner 任务栏伴随窗口
 
@@ -150,7 +143,7 @@ Desktop
 5. 添加 `WS_EX_TOOLWINDOW`；
 6. 根据交互需求添加 `WS_EX_NOACTIVATE`；
 7. 调用 `SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, taskbar_hwnd)` 设置 Owner；
-8. 调用 `SetWindowPos` 使窗口覆盖在计算出的任务栏空白区域；
+8. 调用 `SetWindowPos` 将窗口固定在系统托盘左侧；当前原型允许覆盖该区域内的任务按钮；
 9. 在任务栏位置、DPI、可见性和 Z-order 变化时同步窗口。
 
 ### 4.3 优点
@@ -175,7 +168,7 @@ Desktop
 
 - 这是四种方案中最接近 Tauri 官方稳定使用方式的方案；
 - 不应只依靠任务栏 WebView 维持应用生命周期；
-- 建议保留隐藏的生命周期/消息窗口或托盘入口；
+- 必须保证 bar 被 Explorer 连带销毁后进程仍存活；当前实现使用 Tauri `ExitRequested` 的官方阻止退出机制，并由监督线程重建窗口；
 - Rust 侧统一执行原生窗口操作，Vue 侧不应自行计算屏幕坐标；
 - 窗口创建应放在 Tauri `setup` 阶段或安全的异步路径，避免在同步 IPC 回调中创建 WebView2 窗口。
 
@@ -365,7 +358,7 @@ Shell_TrayWnd
 
 ### 阶段一：共享探测层
 
-实现 `TaskbarLocator`、`TaskbarLayoutProbe`、`DpiMapper` 和 `LifecycleWatcher`。这些工作四种方案都需要，不会因最终选择发生浪费。
+实现 `TaskbarLocator`、`DpiMapper` 和 `LifecycleWatcher`。只有重新启用非覆盖布局时才实现 `TaskbarLayoutProbe`，避免提前引入 UI Automation。
 
 ### 阶段二：双原型对比
 
@@ -432,11 +425,11 @@ Shell_TrayWnd
 ### 10.5 验收标准
 
 - Explorer 重启后 3 秒内恢复显示；
-- 不覆盖任何系统任务栏控件；
+- 系统托盘边界可识别时不覆盖托盘和时钟；空间不足时允许覆盖任务按钮；
 - 不改变其他应用的桌面工作区；
 - 不因 DPI 转换错误出现双倍位移或尺寸；
 - 不抢夺用户当前应用的键盘焦点；
-- 无安全空间时自动缩小或隐藏；
+- 不因任务按钮空间不足而缩小、切换方向或隐藏；
 - 挂载失败不会导致 Explorer 崩溃；
 - 所有挂载操作都有明确错误日志和可恢复路径。
 
@@ -447,8 +440,8 @@ Shell_TrayWnd
 - Windows 平台代码使用 `#[cfg(target_os = "windows")]` 隔离；
 - 原生回调不得直接执行耗时 UI Automation、磁盘或网络操作；
 - `SetWinEventHook` 回调需要防止重入，并把实际工作投递到受控线程；
-- 所有 HWND 在使用前检查有效性和所属进程；
-- 所有窗口样式修改都保存旧值，并提供完整恢复逻辑；
+- 所有 HWND 在使用前检查有效性；若未来支持第三方任务栏替代工具，再增加进程归属策略；
+- Child 方案修改原窗口样式时必须保存旧值并提供恢复逻辑；当前 Owner 原型在 Explorer 重启后按 Tauri 配置重建窗口；
 - 所有物理像素与逻辑单位转换集中在 `DpiMapper`；
 - 不修改或 subclass 属于 Explorer 进程的窗口过程；
 - 不在 Explorer 进程中注入代码。
