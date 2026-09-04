@@ -1,5 +1,5 @@
 #[cfg(target_os = "windows")]
-mod taskbar_owner;
+mod taskbar;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -16,7 +16,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             #[cfg(target_os = "windows")]
-            taskbar_owner::initialize(app)?;
+            taskbar::initialize(app)?;
 
             Ok(())
         })

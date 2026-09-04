@@ -12,8 +12,8 @@
   "app": {
     "windows": [
       {
-        "label": "main",
-        "title": "muse-tune",
+        "label": "taskbar",
+        "url": "index.html#/taskbar",
         "width": 360,
         "height": 48,
         "resizable": false,

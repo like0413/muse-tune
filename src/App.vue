@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import TaskbarPlayer from '@/components/taskbar/TaskbarPlayer.vue'
+import { RouterView } from 'vue-router'
 </script>
 
 <template>
-  <TaskbarPlayer />
+  <RouterView />
 </template>
