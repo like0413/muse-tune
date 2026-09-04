@@ -10,6 +10,23 @@ const BAR_WIDTH_DIP: i32 = 360;
 const BASE_DPI: u32 = 96;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum TaskbarSide {
+    Left,
+    Right,
+}
+
+impl TaskbarSide {
+    /// 将设置值转换为任务栏停靠方向。
+    pub(super) const fn from_right_aligned(right_aligned: bool) -> Self {
+        if right_aligned {
+            Self::Right
+        } else {
+            Self::Left
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct ScreenRect {
     pub(super) left: i32,
     pub(super) top: i32,
@@ -72,15 +89,24 @@ pub(super) fn is_rect_within(rect: ScreenRect, bounds: ScreenRect) -> bool {
         && rect.bottom <= bounds.bottom
 }
 
-/// 根据任务栏矩形、托盘锚点和 DPI 计算播放器位置。
-pub(super) fn calculate_bar_rect(taskbar: ScreenRect, anchor_right: i32, dpi: u32) -> ScreenRect {
+/// 根据任务栏矩形、右侧锚点、DPI 和停靠方向计算播放器位置。
+pub(super) fn calculate_bar_rect(
+    taskbar: ScreenRect,
+    anchor_right: i32,
+    dpi: u32,
+    side: TaskbarSide,
+) -> ScreenRect {
     let dpi = if dpi == 0 { BASE_DPI } else { dpi };
-    let width = scale_dip(BAR_WIDTH_DIP, dpi);
+    let width = scale_dip(BAR_WIDTH_DIP, dpi).min(taskbar.width());
+    let (left, right) = match side {
+        TaskbarSide::Left => (taskbar.left, taskbar.left + width),
+        TaskbarSide::Right => (anchor_right - width, anchor_right),
+    };
 
     ScreenRect {
-        left: anchor_right - width,
+        left,
         top: taskbar.top,
-        right: anchor_right,
+        right,
         bottom: taskbar.bottom,
     }
 }

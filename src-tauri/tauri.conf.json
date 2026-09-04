@@ -13,6 +13,7 @@
     "windows": [
       {
         "label": "taskbar",
+        "title": "Muse Tune",
         "url": "index.html#/taskbar",
         "width": 360,
         "height": 48,
@@ -23,6 +24,18 @@
         "focusable": false,
         "skipTaskbar": true,
         "visible": false
+      },
+      {
+        "label": "settings",
+        "title": "Muse Tune 设置",
+        "url": "index.html#/settings",
+        "width": 720,
+        "height": 520,
+        "minWidth": 520,
+        "minHeight": 360,
+        "center": true,
+        "visible": false,
+        "create": false
       }
     ],
     "security": {

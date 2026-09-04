@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Pause, Play, SkipBack, SkipForward } from '@lucide/vue'
+import { invoke } from '@tauri-apps/api/core'
 import { shallowRef } from 'vue'
 
 import { Button } from '@/components/ui/button'
@@ -12,12 +13,22 @@ const progress = 42
 function togglePlayback() {
   isPlaying.value = !isPlaying.value
 }
+
+/** 打开或唤醒设置窗口。 */
+async function openSettings() {
+  try {
+    await invoke('open_settings_window')
+  } catch (error) {
+    console.error('打开设置窗口失败', error)
+  }
+}
 </script>
 
 <template>
   <main
     class="bg-background/80 text-foreground flex size-full items-center gap-2 overflow-hidden rounded-lg border px-2 py-1 shadow-sm backdrop-blur-xl select-none"
     aria-label="Muse Tune 任务栏播放器"
+    @contextmenu.prevent="openSettings"
   >
     <div
       class="bg-primary text-primary-foreground grid size-8 shrink-0 place-items-center overflow-hidden rounded-md text-base font-medium"

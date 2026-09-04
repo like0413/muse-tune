@@ -1,9 +1,9 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions for the Muse Tune taskbar window",
+  "description": "Permissions for the Muse Tune taskbar and settings windows",
   "platforms": ["windows"],
-  "windows": ["taskbar"],
+  "windows": ["taskbar", "settings"],
   "permissions": [
     "core:default",
     "store:default",

@@ -6,7 +6,7 @@ use windows::Win32::Foundation::HWND;
 
 use super::{
     events::{TaskbarChange, WinEventHooks, wait_for_taskbar_change},
-    geometry::{calculate_bar_rect, is_rect_within, monitor_rect, window_rect},
+    geometry::{TaskbarSide, calculate_bar_rect, is_rect_within, monitor_rect, window_rect},
     platform::{
         attach_bar_to_taskbar, find_primary_taskbar, find_system_tray_left_edge, hide_bar,
         is_bar_attached_to_taskbar, is_bar_topmost, is_taskbar_covered_by_fullscreen_window,
@@ -17,6 +17,7 @@ use super::{
 
 const RECOVERY_RETRY_DELAY: Duration = Duration::from_millis(400);
 const WINDOW_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(1);
+const DEFAULT_TASKBAR_SIDE: TaskbarSide = TaskbarSide::from_right_aligned(false);
 
 /// 在窗口存活期间同步任务栏所有权、可见性和位置。
 pub(super) fn run(window_handle: isize) {
@@ -70,19 +71,24 @@ pub(super) fn run(window_handle: isize) {
         } else {
             let mut placement_changed = false;
             if placement_needs_update || last_bar_rect.is_none() {
-                let tray_left = find_system_tray_left_edge(taskbar, taskbar_rect);
-                if tray_left.is_some() || last_bar_rect.is_none() {
-                    let anchor_right = tray_left.unwrap_or(taskbar_rect.right);
-                    let bar_rect =
-                        calculate_bar_rect(taskbar_rect, anchor_right, window_dpi(taskbar));
-                    placement_changed = last_bar_rect != Some(bar_rect);
-                    if !placement_changed || place_bar(bar, bar_rect) {
-                        last_bar_rect = Some(bar_rect);
-                        placement_needs_update = false;
-                    } else {
-                        last_bar_rect = None;
-                        retry_needed = true;
-                    }
+                let anchor_right = match DEFAULT_TASKBAR_SIDE {
+                    TaskbarSide::Left => taskbar_rect.right,
+                    TaskbarSide::Right => find_system_tray_left_edge(taskbar, taskbar_rect)
+                        .unwrap_or(taskbar_rect.right),
+                };
+                let bar_rect = calculate_bar_rect(
+                    taskbar_rect,
+                    anchor_right,
+                    window_dpi(taskbar),
+                    DEFAULT_TASKBAR_SIDE,
+                );
+                placement_changed = last_bar_rect != Some(bar_rect);
+                if !placement_changed || place_bar(bar, bar_rect) {
+                    last_bar_rect = Some(bar_rect);
+                    placement_needs_update = false;
+                } else {
+                    last_bar_rect = None;
+                    retry_needed = true;
                 }
             }
 
