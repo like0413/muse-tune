@@ -29,7 +29,7 @@ const props = withDefaults(
     :data-size="size"
     :as="as"
     :as-child="asChild"
-    :class="cn(itemVariants({ variant, size }), props.class)"
+    :class="cn(itemVariants({ variant, size }), 'rounded-xl', props.class)"
   >
     <slot />
   </Primitive>

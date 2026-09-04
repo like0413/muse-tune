@@ -45,7 +45,7 @@ async function openSettings() {
       <Progress :model-value="progress" class="h-0.5" aria-label="播放进度 42%" />
     </div>
 
-    <div class="flex shrink-0 gap-0.5" aria-label="播放控制">
+    <div class="flex shrink-0" aria-label="播放控制">
       <Button variant="ghost" size="icon-sm" type="button" title="上一曲" aria-label="上一曲">
         <SkipBack data-icon="inline-start" />
       </Button>

@@ -1,0 +1,34 @@
+import type { Component } from 'vue'
+
+export type SettingsSection = 'general' | 'taskbar' | 'appearance' | 'about'
+
+export type NavigationItem = {
+  id: SettingsSection
+  label: string
+  icon: Component
+  iconClass?: string
+}
+
+export interface SettingsSectionMeta {
+  title: string
+  description: string
+}
+
+export const SETTINGS_SECTION_META: Record<SettingsSection, SettingsSectionMeta> = {
+  general: {
+    title: '常规',
+    description: '管理应用的启动与运行方式',
+  },
+  taskbar: {
+    title: '任务栏',
+    description: '调整任务栏播放器的位置与显示内容',
+  },
+  appearance: {
+    title: '外观',
+    description: '选择界面的主题与视觉风格',
+  },
+  about: {
+    title: '关于',
+    description: '查看 Muse Tune 的版本与项目信息',
+  },
+}
