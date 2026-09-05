@@ -9,8 +9,15 @@ use std::{thread, time::Duration};
 
 use tauri::{AppHandle, Manager, Runtime};
 
+pub use geometry::TaskbarPlacement;
+
 const TASKBAR_WINDOW_LABEL: &str = "taskbar";
 const RECOVERY_RETRY_DELAY: Duration = Duration::from_millis(400);
+
+/// 更新播放器定位偏好，并通知监控线程立即重新计算位置。
+pub fn set_placement(placement: TaskbarPlacement) {
+    sync::set_placement(placement);
+}
 
 /// 启动独立监控线程，持续维护任务栏与播放器窗口的所有者关系。
 pub fn initialize<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::Error>> {

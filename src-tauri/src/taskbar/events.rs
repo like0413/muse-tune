@@ -1,21 +1,22 @@
 //! 通过 WinEvent 与线程消息循环感知任务栏及前台窗口变化。
 
 use std::{
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicU32, Ordering},
     time::{Duration, Instant},
 };
 
 use windows::Win32::{
-    Foundation::HWND,
+    Foundation::{HWND, LPARAM, WPARAM},
+    System::Threading::GetCurrentThreadId,
     UI::{
         Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent},
         WindowsAndMessaging::{
             DispatchMessageW, EVENT_OBJECT_CREATE, EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
             EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_REORDER, EVENT_OBJECT_SHOW,
             EVENT_SYSTEM_FOREGROUND, GA_ROOT, GetAncestor, GetForegroundWindow, MSG,
-            MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, OBJID_WINDOW, PM_REMOVE,
-            PeekMessageW, QS_ALLINPUT, TranslateMessage, WINEVENT_OUTOFCONTEXT,
-            WINEVENT_SKIPOWNPROCESS,
+            MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, OBJID_WINDOW, PM_NOREMOVE, PM_REMOVE,
+            PeekMessageW, PostThreadMessageW, QS_ALLINPUT, TranslateMessage, WINEVENT_OUTOFCONTEXT,
+            WINEVENT_SKIPOWNPROCESS, WM_APP,
         },
     },
 };
@@ -24,6 +25,19 @@ use super::platform::find_primary_taskbar;
 
 static WINDOW_STATE_CHANGED: AtomicBool = AtomicBool::new(false);
 static TASKBAR_LAYOUT_CHANGED: AtomicBool = AtomicBool::new(false);
+static MONITOR_THREAD_ID: AtomicU32 = AtomicU32::new(0);
+
+/// 标记布局失效，并通过线程消息立即唤醒任务栏监控循环。
+pub(super) fn request_layout_update() {
+    TASKBAR_LAYOUT_CHANGED.store(true, Ordering::Release);
+    WINDOW_STATE_CHANGED.store(true, Ordering::Release);
+
+    let thread_id = MONITOR_THREAD_ID.load(Ordering::Acquire);
+    if thread_id != 0 {
+        // SAFETY: 线程 ID 仅在监控消息循环存活期间发布；消息不携带指针或资源所有权。
+        let _ = unsafe { PostThreadMessageW(thread_id, WM_APP, WPARAM(0), LPARAM(0)) };
+    }
+}
 
 pub(super) enum TaskbarChange {
     WindowState,
@@ -41,6 +55,12 @@ pub(super) struct WinEventHooks {
 impl WinEventHooks {
     /// 安装前台、窗口结构和位置变化钩子。
     pub(super) fn install() -> Self {
+        let mut message = MSG::default();
+        // SAFETY: 空范围 PeekMessage 仅确保当前线程拥有消息队列，不移除或分发消息。
+        let _ = unsafe { PeekMessageW(&mut message, None, 0, 0, PM_NOREMOVE) };
+        // SAFETY: 当前函数运行在唯一的任务栏监控线程上。
+        MONITOR_THREAD_ID.store(unsafe { GetCurrentThreadId() }, Ordering::Release);
+
         Self {
             foreground: install_win_event_hook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND),
             structure: install_win_event_hook(EVENT_OBJECT_CREATE, EVENT_OBJECT_REORDER),
@@ -59,6 +79,7 @@ impl WinEventHooks {
 
 impl Drop for WinEventHooks {
     fn drop(&mut self) {
+        MONITOR_THREAD_ID.store(0, Ordering::Release);
         uninstall_win_event_hook(self.foreground.take());
         uninstall_win_event_hook(self.structure.take());
         uninstall_win_event_hook(self.location.take());

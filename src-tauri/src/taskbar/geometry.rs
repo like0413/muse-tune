@@ -15,13 +15,23 @@ pub(super) enum TaskbarSide {
     Right,
 }
 
-impl TaskbarSide {
-    /// 将设置值转换为任务栏停靠方向。
-    pub(super) const fn from_right_aligned(right_aligned: bool) -> Self {
-        if right_aligned {
-            Self::Right
-        } else {
-            Self::Left
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize)]
+#[repr(u8)]
+#[serde(rename_all = "lowercase")]
+pub enum TaskbarPlacement {
+    #[default]
+    Auto,
+    Left,
+    Right,
+}
+
+impl TaskbarPlacement {
+    /// 从跨线程存储值恢复定位偏好，非法值回退到自动模式。
+    pub(super) const fn from_stored(value: u8) -> Self {
+        match value {
+            value if value == Self::Left as u8 => Self::Left,
+            value if value == Self::Right as u8 => Self::Right,
+            _ => Self::Auto,
         }
     }
 }

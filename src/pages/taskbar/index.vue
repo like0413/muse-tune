@@ -8,7 +8,9 @@ import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import {
+  applyTaskbarPlacement,
   getTaskbarMaterial,
+  getTaskbarPlacement,
   listenTaskbarMaterialChange,
   type TaskbarMaterial,
 } from '@/lib/settings'
@@ -57,6 +59,15 @@ async function initializeMaterial() {
   }
 }
 
+/** 恢复播放器位置并同步到原生定位线程。 */
+async function initializePlacement() {
+  try {
+    await applyTaskbarPlacement(await getTaskbarPlacement())
+  } catch (error) {
+    console.error('初始化播放器位置失败', error)
+  }
+}
+
 /** 切换当前播放状态。 */
 function togglePlayback() {
   isPlaying.value = !isPlaying.value
@@ -72,6 +83,7 @@ async function openSettings() {
 }
 
 onMounted(initializeMaterial)
+onMounted(initializePlacement)
 onUnmounted(() => unlistenMaterialChange?.())
 </script>
 

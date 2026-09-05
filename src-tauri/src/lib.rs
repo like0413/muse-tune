@@ -14,7 +14,8 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
-            commands::settings::open_settings_window
+            commands::settings::open_settings_window,
+            commands::taskbar::set_taskbar_placement
         ])
         .setup(|app| {
             taskbar::initialize(app)?;

@@ -3,6 +3,7 @@
 use windows::{
     Win32::{
         Foundation::HWND,
+        System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW},
         UI::{
             HiDpi::GetDpiForWindow,
             Shell::{ABM_GETSTATE, ABS_AUTOHIDE, APPBARDATA, SHAppBarMessage},
@@ -20,6 +21,30 @@ use windows::{
 };
 
 use super::geometry::{ScreenRect, window_rect};
+
+/// 读取 Windows 11 任务栏按钮对齐方式；读取失败时使用系统默认的居中布局。
+pub(super) fn taskbar_buttons_center_aligned() -> bool {
+    let mut alignment = 1_u32;
+    let mut byte_count = std::mem::size_of_val(&alignment) as u32;
+    // SAFETY: 使用预定义的当前用户根键，只读取一个 REG_DWORD 到有效的可写存储。
+    let result = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            windows::core::w!(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"),
+            windows::core::w!("TaskbarAl"),
+            RRF_RT_REG_DWORD,
+            None,
+            Some((&raw mut alignment).cast()),
+            Some(&mut byte_count),
+        )
+    };
+
+    if result.is_err() {
+        log::warn!("读取 Windows 任务栏对齐方式失败，按居中布局处理: {result:?}");
+    }
+
+    alignment != 0
+}
 
 /// 查找主任务栏窗口。
 pub(super) fn find_primary_taskbar() -> Option<HWND> {

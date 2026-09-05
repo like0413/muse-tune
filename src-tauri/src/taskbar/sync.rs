@@ -1,23 +1,45 @@
 //! 协调任务栏状态、窗口所有权与播放器布局。
 
-use std::time::Duration;
+use std::{
+    sync::atomic::{AtomicU8, Ordering},
+    time::Duration,
+};
 
 use windows::Win32::Foundation::HWND;
 
 use super::{
     events::{TaskbarChange, WinEventHooks, wait_for_taskbar_change},
-    geometry::{TaskbarSide, calculate_bar_rect, is_rect_within, monitor_rect, window_rect},
+    geometry::{
+        TaskbarPlacement, TaskbarSide, calculate_bar_rect, is_rect_within, monitor_rect,
+        window_rect,
+    },
     platform::{
         attach_bar_to_taskbar, find_primary_taskbar, find_system_tray_left_edge, hide_bar,
         is_bar_attached_to_taskbar, is_bar_topmost, is_taskbar_covered_by_fullscreen_window,
         is_window_alive, is_window_visible, place_bar, show_bar, taskbar_auto_hide_enabled,
-        window_dpi,
+        taskbar_buttons_center_aligned, window_dpi,
     },
 };
 
 const RECOVERY_RETRY_DELAY: Duration = Duration::from_millis(400);
 const WINDOW_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(1);
-const DEFAULT_TASKBAR_SIDE: TaskbarSide = TaskbarSide::from_right_aligned(false);
+static TASKBAR_PLACEMENT: AtomicU8 = AtomicU8::new(TaskbarPlacement::Auto as u8);
+
+/// 跨线程更新定位偏好，并通过线程消息唤醒同步循环。
+pub(super) fn set_placement(placement: TaskbarPlacement) {
+    TASKBAR_PLACEMENT.store(placement as u8, Ordering::Release);
+    super::events::request_layout_update();
+}
+
+/// 将用户偏好和系统任务栏对齐方式解析为实际停靠侧。
+fn resolve_taskbar_side() -> TaskbarSide {
+    match TaskbarPlacement::from_stored(TASKBAR_PLACEMENT.load(Ordering::Acquire)) {
+        TaskbarPlacement::Auto if taskbar_buttons_center_aligned() => TaskbarSide::Left,
+        TaskbarPlacement::Auto => TaskbarSide::Right,
+        TaskbarPlacement::Left => TaskbarSide::Left,
+        TaskbarPlacement::Right => TaskbarSide::Right,
+    }
+}
 
 /// 在窗口存活期间同步任务栏所有权、可见性和位置。
 pub(super) fn run(window_handle: isize) {
@@ -71,7 +93,8 @@ pub(super) fn run(window_handle: isize) {
         } else {
             let mut placement_changed = false;
             if placement_needs_update || last_bar_rect.is_none() {
-                let anchor_right = match DEFAULT_TASKBAR_SIDE {
+                let taskbar_side = resolve_taskbar_side();
+                let anchor_right = match taskbar_side {
                     TaskbarSide::Left => taskbar_rect.right,
                     TaskbarSide::Right => find_system_tray_left_edge(taskbar, taskbar_rect)
                         .unwrap_or(taskbar_rect.right),
@@ -80,7 +103,7 @@ pub(super) fn run(window_handle: isize) {
                     taskbar_rect,
                     anchor_right,
                     window_dpi(taskbar),
-                    DEFAULT_TASKBAR_SIDE,
+                    taskbar_side,
                 );
                 placement_changed = last_bar_rect != Some(bar_rect);
                 if !placement_changed || place_bar(bar, bar_rect) {
