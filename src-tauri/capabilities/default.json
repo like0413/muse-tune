@@ -6,6 +6,7 @@
   "windows": ["taskbar", "settings"],
   "permissions": [
     "core:default",
+    "core:window:allow-set-effects",
     "store:default",
     "log:default",
     "updater:default",

@@ -1,13 +1,61 @@
 <script setup lang="ts">
 import { Pause, Play, SkipBack, SkipForward } from '@lucide/vue'
 import { invoke } from '@tauri-apps/api/core'
-import { shallowRef } from 'vue'
+import type { UnlistenFn } from '@tauri-apps/api/event'
+import { Effect, getCurrentWindow } from '@tauri-apps/api/window'
+import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
 
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import {
+  getTaskbarMaterial,
+  listenTaskbarMaterialChange,
+  type TaskbarMaterial,
+} from '@/lib/settings'
+import { cn } from '@/lib/utils'
 
 const isPlaying = shallowRef(true)
+const material = shallowRef<TaskbarMaterial>('normal')
 const progress = 42
+let unlistenMaterialChange: UnlistenFn | undefined
+let effectQueue = Promise.resolve()
+
+const MATERIAL_CLASSES: Record<TaskbarMaterial, string> = {
+  normal: 'bg-taskbar-background text-taskbar-foreground',
+  transparent: 'bg-transparent',
+  acrylic: 'bg-background/55',
+}
+
+const materialClass = computed(() => MATERIAL_CLASSES[material.value])
+
+/** 按顺序应用系统窗口效果，避免快速切换时旧请求覆盖新选择。 */
+function applyMaterial(nextMaterial: TaskbarMaterial) {
+  material.value = nextMaterial
+  effectQueue = effectQueue
+    .then(async () => {
+      const window = getCurrentWindow()
+
+      if (nextMaterial === 'acrylic') {
+        await window.setEffects({ effects: [Effect.Acrylic] })
+        return
+      }
+
+      await window.clearEffects()
+    })
+    .catch((error) => {
+      console.error('应用任务栏窗口材质失败', error)
+    })
+}
+
+/** 恢复设置并订阅设置窗口的实时变更。 */
+async function initializeMaterial() {
+  try {
+    unlistenMaterialChange = await listenTaskbarMaterialChange(applyMaterial)
+    applyMaterial(await getTaskbarMaterial())
+  } catch (error) {
+    console.error('初始化任务栏窗口材质失败', error)
+  }
+}
 
 /** 切换当前播放状态。 */
 function togglePlayback() {
@@ -22,11 +70,20 @@ async function openSettings() {
     console.error('打开设置窗口失败', error)
   }
 }
+
+onMounted(initializeMaterial)
+onUnmounted(() => unlistenMaterialChange?.())
 </script>
 
 <template>
   <main
-    class="bg-background/80 text-foreground flex size-full items-center gap-2 overflow-hidden rounded-lg border px-2 py-1 shadow-sm backdrop-blur-xl select-none"
+    :class="
+      cn(
+        'text-foreground flex size-full items-center gap-2 overflow-hidden px-2 py-1 shadow-sm select-none',
+        materialClass,
+      )
+    "
+    :data-material="material"
     aria-label="Muse Tune 任务栏播放器"
     @contextmenu.prevent="openSettings"
   >

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { Languages, MoonStar, Rocket } from '@lucide/vue'
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
-import { useColorMode } from '@vueuse/core'
-import { computed, onMounted, shallowRef } from 'vue'
+import { onMounted, shallowRef } from 'vue'
 
 import {
   Item,
@@ -14,8 +13,8 @@ import {
 } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { colorMode } from '@/lib/color-mode'
 
-const colorMode = useColorMode()
 const selectedColorMode = colorMode.store
 
 const autostartEnabled = shallowRef(false)

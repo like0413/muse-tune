@@ -39,6 +39,18 @@
       }
     ],
     "security": {
+      "devCsp": {
+        "default-src": "'self'",
+        "connect-src": "ipc: http://ipc.localhost ws://localhost:1480",
+        "font-src": "'self' data:",
+        "img-src": "'self' data: blob:",
+        "style-src": "'self' 'unsafe-inline'",
+        "script-src": "'self'",
+        "object-src": "'none'",
+        "frame-src": "'none'",
+        "base-uri": "'none'",
+        "form-action": "'none'"
+      },
       "csp": {
         "default-src": "'self'",
         "connect-src": "ipc: http://ipc.localhost",

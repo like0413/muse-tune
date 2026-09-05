@@ -25,3 +25,11 @@ release. Add a tool name to select part of the graph. For example, run
 - [ ] If setup, runtime, or package-manager behavior looks wrong, run `vp env doctor` and include its output when asking for help.
 
 <!--VITE PLUS END-->
+
+## 项目约定
+
+- [ ] 请先读取codex的自定义说明
+- [ ] 尽可能使用 @vueuse/core、@vueuse/components 来实现相同的功能，而不是自己实现
+- [ ] 尽可能使用 es-toolkit 来实现相同的功能，而不是自己实现
+- [ ] 项目已使用了 unplugin-auto-import，所以不需再重复导入
+- [ ] 项目已使用了 unplugin-vue-components，所以不需再重复导入
