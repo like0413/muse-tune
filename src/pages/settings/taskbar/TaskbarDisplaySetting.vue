@@ -56,9 +56,7 @@ async function loadDisplayTarget() {
 
 /** 每次展开选择器时刷新列表，兼容显示器热插拔。 */
 async function refreshTaskbarDisplays(open: boolean) {
-  if (!open) {
-    return
-  }
+  if (!open) return
 
   try {
     taskbarDisplays.value = await listTaskbarDisplays()
