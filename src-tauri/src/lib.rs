@@ -25,7 +25,8 @@ pub fn run() {
             commands::taskbar::list_taskbar_displays,
             commands::taskbar::set_taskbar_display_target,
             commands::taskbar::set_taskbar_overlap_priority,
-            commands::taskbar::set_taskbar_placement
+            commands::taskbar::set_taskbar_placement,
+            commands::taskbar::set_taskbar_width
         ])
         .setup(|app| {
             taskbar::initialize(app)?;

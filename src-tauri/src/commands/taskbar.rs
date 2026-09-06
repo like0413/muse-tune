@@ -25,3 +25,10 @@ pub fn set_taskbar_overlap_priority(priority: TaskbarOverlapPriority) -> Result<
     taskbar::set_overlap_priority(priority);
     Ok(())
 }
+
+/// 更新 bar 基准宽度，并立即唤醒所有任务栏同步线程。
+#[tauri::command]
+pub fn set_taskbar_width(width: i32) -> Result<(), String> {
+    taskbar::set_content_width(width);
+    Ok(())
+}

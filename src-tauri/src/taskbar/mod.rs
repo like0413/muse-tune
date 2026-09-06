@@ -29,6 +29,7 @@ const DISPLAY_TOPOLOGY_CHECK_INTERVAL: Duration = Duration::from_secs(1);
 const ALL_DISPLAYS: &str = "all";
 const SETTINGS_STORE_PATH: &str = "settings.json";
 const DISPLAY_TARGET_KEY: &str = "taskbar.displayTarget";
+const WIDTH_KEY: &str = "taskbar.width";
 const PLACEMENT_KEY: &str = "taskbar.placement";
 const OVERLAP_PRIORITY_KEY: &str = "taskbar.overlapPriority";
 
@@ -84,6 +85,11 @@ pub fn set_overlap_priority(priority: TaskbarOverlapPriority) {
     sync::set_overlap_priority(priority);
 }
 
+/// 更新 bar 基准宽度，并通知监控线程立即重新计算位置与裁剪区域。
+pub fn set_content_width(width: i32) {
+    sync::set_content_width(width);
+}
+
 /// 返回当前拥有 Windows 任务栏的显示器。
 pub fn available_displays() -> Vec<TaskbarDisplay> {
     displays::available_taskbar_displays()
@@ -135,6 +141,13 @@ fn restore_native_settings<R: Runtime>(app: &tauri::App<R>) {
     {
         set_placement(placement);
     }
+    if let Some(width) = store
+        .get(WIDTH_KEY)
+        .and_then(|value| value.as_i64())
+        .and_then(|value| i32::try_from(value).ok())
+    {
+        set_content_width(width);
+    }
     if let Some(priority) = store
         .get(OVERLAP_PRIORITY_KEY)
         .and_then(|value| serde_json::from_value::<TaskbarOverlapPriority>(value).ok())
@@ -163,7 +176,6 @@ fn maintain_bar_windows<R: Runtime>(app: AppHandle<R>) {
     else {
         return;
     };
-    let content_width_dip = base_config.width.round().clamp(1.0, f64::from(i32::MAX)) as i32;
     let mut bars: HashMap<String, ManagedBar<R>> = HashMap::new();
 
     loop {
@@ -237,7 +249,7 @@ fn maintain_bar_windows<R: Runtime>(app: AppHandle<R>) {
             let worker_stop = Arc::clone(&stop);
             let worker = thread::Builder::new()
                 .name(format!("taskbar-sync-{label}"))
-                .spawn(move || sync::run(bar, taskbar, content_width_dip, worker_stop));
+                .spawn(move || sync::run(bar, taskbar, worker_stop));
             if worker.is_err() {
                 let _ = window.close();
                 continue;

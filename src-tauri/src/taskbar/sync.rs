@@ -3,7 +3,7 @@
 use std::{
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -31,8 +31,11 @@ use super::{
 const RECOVERY_RETRY_DELAY: Duration = Duration::from_millis(400);
 const WINDOW_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(1);
 const UIA_FALLBACK_QUERY_INTERVAL: Duration = Duration::from_secs(1);
+const MIN_CONTENT_WIDTH_DIP: i32 = 200;
+const MAX_CONTENT_WIDTH_DIP: i32 = 360;
 static TASKBAR_PLACEMENT: AtomicU8 = AtomicU8::new(TaskbarPlacement::Auto as u8);
 static TASKBAR_OVERLAP_PRIORITY: AtomicU8 = AtomicU8::new(TaskbarOverlapPriority::Bar as u8);
+static TASKBAR_CONTENT_WIDTH_DIP: AtomicI32 = AtomicI32::new(MAX_CONTENT_WIDTH_DIP);
 
 /// 跨线程更新定位偏好，并通过线程消息唤醒同步循环。
 pub(super) fn set_placement(placement: TaskbarPlacement) {
@@ -44,6 +47,19 @@ pub(super) fn set_placement(placement: TaskbarPlacement) {
 pub(super) fn set_overlap_priority(priority: TaskbarOverlapPriority) {
     TASKBAR_OVERLAP_PRIORITY.store(priority as u8, Ordering::Release);
     super::events::request_all_layout_updates();
+}
+
+/// 跨线程更新 bar 基准宽度；仅在值变化时唤醒全部同步线程。
+pub(super) fn set_content_width(width: i32) {
+    let width = width.clamp(MIN_CONTENT_WIDTH_DIP, MAX_CONTENT_WIDTH_DIP);
+    if TASKBAR_CONTENT_WIDTH_DIP.swap(width, Ordering::AcqRel) != width {
+        super::events::request_all_layout_updates();
+    }
+}
+
+/// 读取已经规范化的 bar 基准宽度。
+fn content_width() -> i32 {
+    TASKBAR_CONTENT_WIDTH_DIP.load(Ordering::Acquire)
 }
 
 /// 读取当前遮挡优先级。
@@ -62,12 +78,7 @@ fn resolve_taskbar_side() -> TaskbarSide {
 }
 
 /// 在窗口存活期间同步任务栏所有权、可见性、位置与硬裁剪方向。
-pub(super) fn run(
-    window_handle: isize,
-    taskbar_handle: isize,
-    content_width_dip: i32,
-    stop: Arc<AtomicBool>,
-) {
+pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicBool>) {
     let taskbar = HWND(taskbar_handle as *mut _);
     let hooks = WinEventHooks::install(taskbar);
     let hook_fallback_needed = hooks.fallback_needed();
@@ -173,7 +184,6 @@ pub(super) fn run(
                 match measure_layout(
                     taskbar,
                     taskbar_rect,
-                    content_width_dip,
                     active_priority,
                     taskbar_elements.as_ref(),
                 ) {
@@ -250,7 +260,6 @@ pub(super) fn run(
 fn measure_layout(
     taskbar: HWND,
     taskbar_rect: ScreenRect,
-    content_width_dip: i32,
     priority: TaskbarOverlapPriority,
     taskbar_elements: Option<&TaskbarElements>,
 ) -> windows::core::Result<BarLayout> {
@@ -261,7 +270,7 @@ fn measure_layout(
         TaskbarSide::Right => tray_rect.map_or(taskbar_rect.right, |rect| rect.left),
     };
     let dpi = window_dpi(taskbar);
-    let ideal_rect = calculate_bar_rect(taskbar_rect, anchor_right, dpi, side, content_width_dip);
+    let ideal_rect = calculate_bar_rect(taskbar_rect, anchor_right, dpi, side, content_width());
     let visible_rect = if priority == TaskbarOverlapPriority::TaskbarElements {
         if let Some(elements) = taskbar_elements {
             hard_clip_bar_rect(
