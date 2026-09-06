@@ -20,12 +20,12 @@ import {
   SidebarProvider,
 } from '@/components/ui/sidebar'
 
-import AboutSettingsPanel from './about/AboutSettingsPanel.vue'
-import AppearanceSettingsPanel from './appearance/AppearanceSettingsPanel.vue'
-import GeneralSettingsPanel from './general/GeneralSettingsPanel.vue'
+import AboutSettingsPanel from './about/index.vue'
+import AppearanceSettingsPanel from './appearance/index.vue'
+import GeneralSettingsPanel from './general/index.vue'
 import type { NavigationItem, SettingsSection } from './model'
 import { SETTINGS_SECTION_META } from './model'
-import TaskbarSettingsPanel from './taskbar/TaskbarSettingsPanel.vue'
+import TaskbarSettingsPanel from './taskbar/index.vue'
 
 const activeSection = shallowRef<SettingsSection>('general')
 
