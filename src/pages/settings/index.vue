@@ -101,7 +101,9 @@ function selectSection(section: SettingsSection) {
       <Separator />
 
       <div class="flex-1 overflow-y-auto p-4">
-        <component :is="activePanel" class="w-full" />
+        <KeepAlive>
+          <component :is="activePanel" class="w-full" />
+        </KeepAlive>
       </div>
     </SidebarInset>
   </SidebarProvider>

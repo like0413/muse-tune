@@ -18,7 +18,7 @@ export const itemVariants = cva(
     variants: {
       variant: {
         default: 'bg-transparent',
-        outline: 'border-border',
+        outline: 'border-border dark:bg-muted/50',
         muted: 'bg-muted/50',
       },
       size: {
@@ -27,8 +27,8 @@ export const itemVariants = cva(
       },
     },
     defaultVariants: {
-      variant: 'default',
-      size: 'default',
+      variant: 'outline',
+      size: 'sm',
     },
   },
 )
@@ -46,7 +46,7 @@ export const itemMediaVariants = cva(
       },
     },
     defaultVariants: {
-      variant: 'default',
+      variant: 'icon',
     },
   },
 )

@@ -3,6 +3,10 @@
 use windows::{
     Win32::{
         Foundation::HWND,
+        Graphics::Gdi::{
+            CreateRectRgn, DeleteObject, HGDIOBJ, RDW_ALLCHILDREN, RDW_ERASE, RDW_FRAME,
+            RDW_INVALIDATE, RDW_UPDATENOW, RedrawWindow, SetWindowRgn,
+        },
         System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW},
         UI::{
             HiDpi::GetDpiForWindow,
@@ -52,8 +56,8 @@ pub(super) fn find_primary_taskbar() -> Option<HWND> {
     unsafe { FindWindowW(PCWSTR(windows::core::w!("Shell_TrayWnd").as_ptr()), None).ok() }
 }
 
-/// 查找系统托盘左边界，用于避免播放器覆盖托盘图标。
-pub(super) fn find_system_tray_left_edge(taskbar: HWND, taskbar_rect: ScreenRect) -> Option<i32> {
+/// 查找系统托盘矩形，用于统一计算播放器锚点并排除托盘内的可访问性按钮。
+pub(super) fn find_system_tray_rect(taskbar: HWND, taskbar_rect: ScreenRect) -> Option<ScreenRect> {
     // SAFETY: 调用方已验证 `taskbar`，类名也是以空字符结尾的有效字符串。
     let tray = unsafe {
         FindWindowExW(
@@ -70,7 +74,7 @@ pub(super) fn find_system_tray_left_edge(taskbar: HWND, taskbar_rect: ScreenRect
         && tray_rect.right <= taskbar_rect.right
         && tray_rect.top < taskbar_rect.bottom
         && tray_rect.bottom > taskbar_rect.top)
-        .then_some(tray_rect.left)
+        .then_some(tray_rect)
 }
 
 /// 查询系统任务栏是否启用了自动隐藏。
@@ -112,24 +116,24 @@ pub(super) fn is_taskbar_covered_by_fullscreen_window(
         && rect.bottom >= taskbar.bottom
 }
 
-/// 将播放器窗口设置为任务栏的所有者窗口，并调整扩展样式。
+/// 将播放器窗口设置为任务栏的拥有窗口，并调整扩展样式。
 pub(super) fn attach_bar_to_taskbar(bar: HWND, taskbar: HWND) {
     let mut ex_style = extended_window_style(bar);
     ex_style |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
     ex_style &= !WS_EX_APPWINDOW;
 
-    // SAFETY: 两个句柄均属于有效的顶层窗口。设置 GWLP_HWNDPARENT 建立所有者关系，
-    // 而非父子窗口关系；修改时保留其他扩展样式位。
+    // SAFETY: 两个句柄均属于有效的顶层窗口。GWLP_HWNDPARENT 在这里设置 owner，
+    // 不会把播放器跨进程改成任务栏的子窗口；扩展样式修改时保留其他位。
     unsafe {
         SetWindowLongPtrW(bar, GWL_EXSTYLE, ex_style.0 as isize);
         SetWindowLongPtrW(bar, GWLP_HWNDPARENT, taskbar.0 as isize);
     }
 }
 
-/// 验证播放器窗口的所有者关系和关键扩展样式。
+/// 验证播放器窗口的 owner 和关键扩展样式。
 pub(super) fn is_bar_attached_to_taskbar(bar: HWND, taskbar: HWND) -> bool {
     let ex_style = extended_window_style(bar);
-    // SAFETY: 从已验证窗口读取所有者句柄不会转移句柄所有权。
+    // SAFETY: 从已验证窗口读取 owner 句柄不会转移句柄所有权。
     let owner_matches = unsafe { GetWindowLongPtrW(bar, GWLP_HWNDPARENT) } == taskbar.0 as isize;
 
     owner_matches
@@ -143,7 +147,7 @@ pub(super) fn is_bar_topmost(bar: HWND) -> bool {
     extended_window_style(bar).contains(WS_EX_TOPMOST)
 }
 
-/// 将播放器移动到指定矩形并显示。
+/// 将播放器移动到指定矩形；窗口显示状态由同步循环单独管理。
 pub(super) fn place_bar(bar: HWND, rect: ScreenRect) -> bool {
     // SAFETY: 同步循环已验证 `bar`，坐标使用 Win32 所需的物理像素。
     unsafe {
@@ -154,14 +158,62 @@ pub(super) fn place_bar(bar: HWND, rect: ScreenRect) -> bool {
             rect.top,
             rect.width(),
             rect.height(),
-            SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW,
+            SWP_NOACTIVATE | SWP_NOOWNERZORDER,
         )
         .is_ok()
     }
 }
 
-/// 恢复播放器的置顶顺序，并保留已确认的位置与尺寸。
+/// 在移动已裁剪窗口前撤销旧区域，避免 WebView 子表面沿用旧的可绘制范围。
+pub(super) fn clear_bar_clip_before_move(bar: HWND) -> bool {
+    // SAFETY: 空 region 恢复完整窗口区域；此处不立即重绘，新的位置和 region 会紧接着提交。
+    (unsafe { SetWindowRgn(bar, None, false) }) != 0
+}
+
+/// 将屏幕坐标下的可见矩形转换为窗口局部区域，窗口本身与 WebView 始终保留完整尺寸。
+pub(super) fn clip_bar(bar: HWND, window_rect: ScreenRect, visible_rect: ScreenRect) -> bool {
+    let width = window_rect.width().max(0);
+    let height = window_rect.height().max(0);
+    let left = (visible_rect.left - window_rect.left).clamp(0, width);
+    let right = (visible_rect.right - window_rect.left).clamp(left, width);
+
+    if left == 0 && right == width {
+        // SAFETY: 传入空区域会移除窗口原有 region，恢复完整窗口绘制范围。
+        return unsafe { SetWindowRgn(bar, None, true) } != 0;
+    }
+
+    // SAFETY: 坐标已经限制在窗口客户区内；成功后 region 所有权转移给系统。
+    let region = unsafe { CreateRectRgn(left, 0, right, height) };
+    if region.is_invalid() {
+        return false;
+    }
+
+    // SAFETY: `bar` 是同步循环验证过的窗口；失败时所有权仍属于调用方并在下方释放。
+    if unsafe { SetWindowRgn(bar, Some(region), true) } != 0 {
+        true
+    } else {
+        // SAFETY: SetWindowRgn 失败，region 所有权未转移，必须由调用方释放。
+        let _ = unsafe { DeleteObject(HGDIOBJ(region.0)) };
+        false
+    }
+}
+
+/// 使窗口及其 WebView 子窗口立即重绘新暴露的区域。
+pub(super) fn redraw_bar(bar: HWND) {
+    // SAFETY: `bar` 是借用的有效窗口句柄；不传矩形和 region 表示刷新整个窗口树。
+    let _ = unsafe {
+        RedrawWindow(
+            Some(bar),
+            None,
+            None,
+            RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW,
+        )
+    };
+}
+
+/// 恢复播放器的任务栏层级，并保留已确认的位置与尺寸。
 pub(super) fn show_bar(bar: HWND) {
+    // SAFETY: `bar` 是借用的有效窗口句柄，调用不激活窗口也不改动 owner 顺序。
     let _ = unsafe {
         SetWindowPos(
             bar,

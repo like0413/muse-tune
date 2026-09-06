@@ -42,8 +42,8 @@ onMounted(loadAutostartState)
 
 <template>
   <div class="flex w-full flex-col gap-3">
-    <Item variant="outline">
-      <ItemMedia variant="icon" class="icon-tone-sky-500">
+    <Item>
+      <ItemMedia class="icon-tone-sky-500">
         <Languages />
       </ItemMedia>
       <ItemContent>
@@ -59,8 +59,8 @@ onMounted(loadAutostartState)
         </Tabs>
       </ItemActions>
     </Item>
-    <Item variant="outline" class="w-full">
-      <ItemMedia variant="icon" class="icon-tone-violet-500">
+    <Item>
+      <ItemMedia class="icon-tone-violet-500">
         <MoonStar />
       </ItemMedia>
       <ItemContent>
@@ -77,8 +77,8 @@ onMounted(loadAutostartState)
         </Tabs>
       </ItemActions>
     </Item>
-    <Item variant="outline" class="w-full">
-      <ItemMedia variant="icon" class="icon-tone-emerald-500">
+    <Item>
+      <ItemMedia class="icon-tone-emerald-500">
         <Rocket />
       </ItemMedia>
       <ItemContent>

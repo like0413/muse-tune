@@ -6,8 +6,8 @@ use windows::Win32::{
     UI::WindowsAndMessaging::GetWindowRect,
 };
 
-const BAR_WIDTH_DIP: i32 = 360;
 const BASE_DPI: u32 = 96;
+const RIGHT_CLIP_CLEARANCE_DIP: i32 = 8;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum TaskbarSide {
@@ -65,6 +65,14 @@ impl ScreenRect {
     pub(super) fn height(self) -> i32 {
         self.bottom - self.top
     }
+
+    /// 判断两个矩形是否存在正面积交集。
+    pub(super) fn intersects(self, other: Self) -> bool {
+        self.left < other.right
+            && self.right > other.left
+            && self.top < other.bottom
+            && self.bottom > other.top
+    }
 }
 
 /// 读取窗口在屏幕坐标系中的矩形。
@@ -105,9 +113,10 @@ pub(super) fn calculate_bar_rect(
     anchor_right: i32,
     dpi: u32,
     side: TaskbarSide,
+    content_width_dip: i32,
 ) -> ScreenRect {
     let dpi = if dpi == 0 { BASE_DPI } else { dpi };
-    let width = scale_dip(BAR_WIDTH_DIP, dpi).min(taskbar.width());
+    let width = scale_dip(content_width_dip.max(1), dpi).min(taskbar.width());
     let (left, right) = match side {
         TaskbarSide::Left => (taskbar.left, taskbar.left + width),
         TaskbarSide::Right => (anchor_right - width, anchor_right),
@@ -118,6 +127,47 @@ pub(super) fn calculate_bar_rect(
         top: taskbar.top,
         right,
         bottom: taskbar.bottom,
+    }
+}
+
+/// 计算播放器的硬裁剪区域，从停靠侧相反的一端避开实际任务栏元素。
+pub(super) fn hard_clip_bar_rect(
+    bar: ScreenRect,
+    elements: &[ScreenRect],
+    side: TaskbarSide,
+    dpi: u32,
+) -> ScreenRect {
+    match side {
+        TaskbarSide::Left => ScreenRect {
+            right: elements
+                .iter()
+                .filter(|element| bar.intersects(**element))
+                .map(|element| element.left)
+                .min()
+                .unwrap_or(bar.right)
+                .clamp(bar.left, bar.right),
+            ..bar
+        },
+        TaskbarSide::Right => {
+            let clearance = scale_dip(RIGHT_CLIP_CLEARANCE_DIP, dpi);
+            ScreenRect {
+                left: elements
+                    .iter()
+                    .filter_map(|element| {
+                        // 右侧 UIA 边界缺少左侧已有的视觉留白，将碰撞区向 bar 扩展 8 DIP。
+                        let expanded_right = element.right.saturating_add(clearance);
+                        bar.intersects(ScreenRect {
+                            right: expanded_right,
+                            ..*element
+                        })
+                        .then_some(expanded_right)
+                    })
+                    .max()
+                    .unwrap_or(bar.left)
+                    .clamp(bar.left, bar.right),
+                ..bar
+            }
+        }
     }
 }
 

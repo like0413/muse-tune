@@ -2249,6 +2249,7 @@ dependencies = [
  "tauri-plugin-store",
  "tauri-plugin-updater",
  "windows",
+ "windows-core 0.61.2",
 ]
 
 [[package]]

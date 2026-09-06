@@ -15,6 +15,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::settings::open_settings_window,
+            commands::taskbar::set_taskbar_overlap_priority,
             commands::taskbar::set_taskbar_placement
         ])
         .setup(|app| {

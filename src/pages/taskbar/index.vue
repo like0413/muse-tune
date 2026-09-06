@@ -2,69 +2,52 @@
 import { Pause, Play, SkipBack, SkipForward } from '@lucide/vue'
 import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { Effect, getCurrentWindow } from '@tauri-apps/api/window'
 import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
 
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import {
+  applyTaskbarOverlapPriority,
   applyTaskbarPlacement,
-  getTaskbarMaterial,
+  getTaskbarBackgroundTransparency,
+  getTaskbarOverlapPriority,
   getTaskbarPlacement,
-  listenTaskbarMaterialChange,
-  type TaskbarMaterial,
+  listenTaskbarBackgroundTransparencyChange,
 } from '@/lib/settings'
-import { cn } from '@/lib/utils'
 
 const isPlaying = shallowRef(true)
-const material = shallowRef<TaskbarMaterial>('normal')
+const backgroundTransparency = shallowRef(0)
 const progress = 42
-let unlistenMaterialChange: UnlistenFn | undefined
-let effectQueue = Promise.resolve()
+let unlistenBackgroundTransparencyChange: UnlistenFn | undefined
 
-const MATERIAL_CLASSES: Record<TaskbarMaterial, string> = {
-  normal: 'bg-taskbar-background text-taskbar-foreground',
-  transparent: 'bg-transparent',
-  acrylic: 'bg-background/55',
-}
+/** 仅改变页面背景 Alpha，避免文字和控件随窗口一起变淡。 */
+const backgroundStyle = computed(() => ({
+  backgroundColor: `color-mix(in srgb, var(--taskbar-background) ${100 - backgroundTransparency.value}%, transparent)`,
+}))
 
-const materialClass = computed(() => MATERIAL_CLASSES[material.value])
-
-/** 按顺序应用系统窗口效果，避免快速切换时旧请求覆盖新选择。 */
-function applyMaterial(nextMaterial: TaskbarMaterial) {
-  material.value = nextMaterial
-  effectQueue = effectQueue
-    .then(async () => {
-      const window = getCurrentWindow()
-
-      if (nextMaterial === 'acrylic') {
-        await window.setEffects({ effects: [Effect.Acrylic] })
-        return
-      }
-
-      await window.clearEffects()
-    })
-    .catch((error) => {
-      console.error('应用任务栏窗口材质失败', error)
-    })
-}
-
-/** 恢复设置并订阅设置窗口的实时变更。 */
-async function initializeMaterial() {
+/** 恢复背景透明度并订阅设置窗口的实时预览。 */
+async function initializeBackgroundTransparency() {
   try {
-    unlistenMaterialChange = await listenTaskbarMaterialChange(applyMaterial)
-    applyMaterial(await getTaskbarMaterial())
+    unlistenBackgroundTransparencyChange = await listenTaskbarBackgroundTransparencyChange(
+      (transparency) => {
+        backgroundTransparency.value = transparency
+      },
+    )
+    backgroundTransparency.value = await getTaskbarBackgroundTransparency()
   } catch (error) {
-    console.error('初始化任务栏窗口材质失败', error)
+    console.error('初始化任务栏背景透明度失败', error)
   }
 }
 
 /** 恢复播放器位置并同步到原生定位线程。 */
 async function initializePlacement() {
   try {
-    await applyTaskbarPlacement(await getTaskbarPlacement())
+    await Promise.all([
+      applyTaskbarPlacement(await getTaskbarPlacement()),
+      applyTaskbarOverlapPriority(await getTaskbarOverlapPriority()),
+    ])
   } catch (error) {
-    console.error('初始化播放器位置失败', error)
+    console.error('初始化任务栏播放器布局失败', error)
   }
 }
 
@@ -82,20 +65,17 @@ async function openSettings() {
   }
 }
 
-onMounted(initializeMaterial)
+onMounted(initializeBackgroundTransparency)
 onMounted(initializePlacement)
-onUnmounted(() => unlistenMaterialChange?.())
+onUnmounted(() => {
+  unlistenBackgroundTransparencyChange?.()
+})
 </script>
 
 <template>
   <main
-    :class="
-      cn(
-        'text-foreground flex size-full items-center gap-2 overflow-hidden px-2 py-1 shadow-sm select-none',
-        materialClass,
-      )
-    "
-    :data-material="material"
+    class="text-taskbar-foreground flex size-full items-center gap-2 overflow-hidden px-2 py-1 shadow-sm select-none"
+    :style="backgroundStyle"
     aria-label="Muse Tune 任务栏播放器"
     @contextmenu.prevent="openSettings"
   >

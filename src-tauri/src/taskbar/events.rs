@@ -27,10 +27,12 @@ static WINDOW_STATE_CHANGED: AtomicBool = AtomicBool::new(false);
 static TASKBAR_LAYOUT_CHANGED: AtomicBool = AtomicBool::new(false);
 static MONITOR_THREAD_ID: AtomicU32 = AtomicU32::new(0);
 
-/// 标记布局失效，并通过线程消息立即唤醒任务栏监控循环。
+/// 标记布局失效；仅在首次挂起时发送消息，合并事件风暴中的重复唤醒。
 pub(super) fn request_layout_update() {
     TASKBAR_LAYOUT_CHANGED.store(true, Ordering::Release);
-    WINDOW_STATE_CHANGED.store(true, Ordering::Release);
+    if WINDOW_STATE_CHANGED.swap(true, Ordering::AcqRel) {
+        return;
+    }
 
     let thread_id = MONITOR_THREAD_ID.load(Ordering::Acquire);
     if thread_id != 0 {
@@ -92,7 +94,7 @@ pub(super) fn wait_for_taskbar_change(timeout: Duration) -> TaskbarChange {
     // 检查窗口是否存活，以及在 API 或钩子失效后加快恢复，不参与 bar 动画。
     let deadline = Instant::now() + timeout;
     loop {
-        if WINDOW_STATE_CHANGED.swap(false, Ordering::Relaxed) {
+        if WINDOW_STATE_CHANGED.swap(false, Ordering::Acquire) {
             return take_pending_taskbar_change();
         }
 
@@ -110,7 +112,7 @@ pub(super) fn wait_for_taskbar_change(timeout: Duration) -> TaskbarChange {
             unsafe { DispatchMessageW(&message) };
         }
 
-        if WINDOW_STATE_CHANGED.swap(false, Ordering::Relaxed) {
+        if WINDOW_STATE_CHANGED.swap(false, Ordering::Acquire) {
             return take_pending_taskbar_change();
         }
         if Instant::now() >= deadline {
@@ -192,7 +194,7 @@ unsafe extern "system" fn handle_win_event(
 
 /// 优先返回更具体的任务栏布局变化信号。
 fn take_pending_taskbar_change() -> TaskbarChange {
-    if TASKBAR_LAYOUT_CHANGED.swap(false, Ordering::Relaxed) {
+    if TASKBAR_LAYOUT_CHANGED.swap(false, Ordering::Acquire) {
         TaskbarChange::Layout
     } else {
         TaskbarChange::WindowState
