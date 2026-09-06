@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { emitTo, listen } from '@tauri-apps/api/event'
+import { emit, listen } from '@tauri-apps/api/event'
 import { LazyStore } from '@tauri-apps/plugin-store'
 import { clamp } from 'es-toolkit'
 
@@ -8,13 +8,22 @@ export const TASKBAR_PLACEMENTS = ['auto', 'left', 'right'] as const
 export const TASKBAR_OVERLAP_PRIORITIES = ['bar', 'taskbar'] as const
 export const TASKBAR_TRANSPARENCY_MIN = 0
 export const TASKBAR_TRANSPARENCY_MAX = 100
+export const ALL_TASKBAR_DISPLAYS = 'all'
 
 export type TaskbarPlacement = (typeof TASKBAR_PLACEMENTS)[number]
 export type TaskbarOverlapPriority = (typeof TASKBAR_OVERLAP_PRIORITIES)[number]
+export interface TaskbarDisplay {
+  id: string
+  label: string
+  width: number
+  height: number
+  isPrimary: boolean
+}
 
 const SETTINGS_STORE_PATH = 'settings.json'
 const LEGACY_TASKBAR_MATERIAL_KEY = 'taskbar.material'
 const TASKBAR_BACKGROUND_TRANSPARENCY_KEY = 'taskbar.backgroundTransparency'
+const TASKBAR_DISPLAY_TARGET_KEY = 'taskbar.displayTarget'
 const TASKBAR_PLACEMENT_KEY = 'taskbar.placement'
 const TASKBAR_OVERLAP_PRIORITY_KEY = 'taskbar.overlapPriority'
 const TASKBAR_BACKGROUND_TRANSPARENCY_CHANGED_EVENT =
@@ -64,6 +73,19 @@ export async function getTaskbarBackgroundTransparency(): Promise<number> {
   return migrated
 }
 
+/** 读取目标显示器，缺失时默认在全部任务栏显示。 */
+export async function getTaskbarDisplayTarget(): Promise<string> {
+  const target = await settingsStore.get<unknown>(TASKBAR_DISPLAY_TARGET_KEY)
+  return typeof target === 'string' && target.length > 0 && target.trim() === target
+    ? target
+    : ALL_TASKBAR_DISPLAYS
+}
+
+/** 枚举当前由 Windows 创建了任务栏的显示器。 */
+export async function listTaskbarDisplays(): Promise<TaskbarDisplay[]> {
+  return invoke<TaskbarDisplay[]>('list_taskbar_displays')
+}
+
 /** 读取播放器位置，缺失或损坏时回退到自动模式。 */
 export async function getTaskbarPlacement(): Promise<TaskbarPlacement> {
   const placement = await settingsStore.get<unknown>(TASKBAR_PLACEMENT_KEY)
@@ -80,7 +102,7 @@ export async function getTaskbarOverlapPriority(): Promise<TaskbarOverlapPriorit
 export async function previewTaskbarBackgroundTransparency(transparency: number): Promise<void> {
   const normalized = normalizeTaskbarBackgroundTransparency(transparency)
   if (normalized !== undefined) {
-    await emitTo('taskbar', TASKBAR_BACKGROUND_TRANSPARENCY_CHANGED_EVENT, normalized)
+    await emit(TASKBAR_BACKGROUND_TRANSPARENCY_CHANGED_EVENT, normalized)
   }
 }
 
@@ -92,7 +114,18 @@ export async function setTaskbarBackgroundTransparency(transparency: number): Pr
   }
 
   await settingsStore.set(TASKBAR_BACKGROUND_TRANSPARENCY_KEY, normalized)
-  await emitTo('taskbar', TASKBAR_BACKGROUND_TRANSPARENCY_CHANGED_EVENT, normalized)
+  await emit(TASKBAR_BACKGROUND_TRANSPARENCY_CHANGED_EVENT, normalized)
+}
+
+/** 立即切换目标显示器，并在成功后持久化选择。 */
+export async function setTaskbarDisplayTarget(target: string): Promise<void> {
+  await applyTaskbarDisplayTarget(target)
+  await settingsStore.set(TASKBAR_DISPLAY_TARGET_KEY, target)
+}
+
+/** 将目标显示器同步到原生多任务栏窗口管理线程。 */
+export async function applyTaskbarDisplayTarget(target: string): Promise<void> {
+  await invoke('set_taskbar_display_target', { target })
 }
 
 /** 立即应用播放器位置，并在成功后持久化选择。 */

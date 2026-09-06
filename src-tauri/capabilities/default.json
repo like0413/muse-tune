@@ -3,10 +3,9 @@
   "identifier": "default",
   "description": "Permissions for the Muse Tune taskbar and settings windows",
   "platforms": ["windows"],
-  "windows": ["taskbar", "settings"],
+  "windows": ["taskbar", "taskbar-*", "settings"],
   "permissions": [
     "core:default",
-    "core:window:allow-set-effects",
     "store:default",
     "log:default",
     "updater:default",

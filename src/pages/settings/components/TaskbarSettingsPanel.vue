@@ -14,6 +14,8 @@ import {
 import { Slider } from '@/components/ui/slider'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
+  applyTaskbarOverlapPriority,
+  applyTaskbarPlacement,
   getTaskbarBackgroundTransparency,
   getTaskbarOverlapPriority,
   getTaskbarPlacement,
@@ -30,6 +32,8 @@ import {
   type TaskbarPlacement,
 } from '@/lib/settings'
 
+import TaskbarDisplaySetting from './TaskbarDisplaySetting.vue'
+
 const placementOptions = [
   { value: 'left', label: '左侧' },
   { value: 'auto', label: '自动' },
@@ -37,18 +41,24 @@ const placementOptions = [
 ] as const satisfies ReadonlyArray<{ value: TaskbarPlacement; label: string }>
 
 const overlapPriorityOptions = [
-  { value: 'bar', label: '播放器优先' },
-  { value: 'taskbar', label: '任务栏元素优先' },
+  { value: 'bar', label: 'MuseBar 优先' },
+  { value: 'taskbar', label: '任务栏优先' },
 ] as const satisfies ReadonlyArray<{ value: TaskbarOverlapPriority; label: string }>
 
 const selectedBackgroundTransparency = shallowRef(0)
+const committedBackgroundTransparency = shallowRef(0)
+const backgroundTransparencySaving = shallowRef(false)
 const selectedPlacement = shallowRef<TaskbarPlacement>('auto')
+const placementSaving = shallowRef(false)
 const selectedOverlapPriority = shallowRef<TaskbarOverlapPriority>('bar')
+const overlapPrioritySaving = shallowRef(false)
 
 /** 恢复已保存的背景透明度。 */
 async function loadBackgroundTransparency() {
   try {
-    selectedBackgroundTransparency.value = await getTaskbarBackgroundTransparency()
+    const transparency = await getTaskbarBackgroundTransparency()
+    selectedBackgroundTransparency.value = transparency
+    committedBackgroundTransparency.value = transparency
   } catch (error) {
     console.error('读取任务栏背景透明度失败', error)
   }
@@ -91,6 +101,10 @@ const previewTransparency = useThrottleFn(
 
 /** 更新 Slider 状态并实时预览，不写入持久化存储。 */
 function updateBackgroundTransparency(values: number[] | undefined) {
+  if (backgroundTransparencySaving.value) {
+    return
+  }
+
   const transparency = getTransparencyValue(values)
   if (transparency === undefined) {
     return
@@ -102,49 +116,86 @@ function updateBackgroundTransparency(values: number[] | undefined) {
 
 /** 在交互结束时持久化最终透明度。 */
 async function commitBackgroundTransparency(values: number[]) {
+  if (backgroundTransparencySaving.value) {
+    return
+  }
+
   const transparency = getTransparencyValue(values)
   if (transparency === undefined) {
     return
   }
 
+  backgroundTransparencySaving.value = true
+  previewTransparency(transparency)
   try {
     await setTaskbarBackgroundTransparency(transparency)
+    committedBackgroundTransparency.value = transparency
   } catch (error) {
     console.error('保存任务栏背景透明度失败', error)
+    const committedTransparency = committedBackgroundTransparency.value
+    selectedBackgroundTransparency.value = committedTransparency
+    previewTransparency(committedTransparency)
+    try {
+      await previewTaskbarBackgroundTransparency(committedTransparency)
+    } catch (rollbackError) {
+      console.error('恢复之前的背景透明度失败', rollbackError)
+    }
+  } finally {
+    backgroundTransparencySaving.value = false
   }
 }
 
 /** 保存选择并让任务栏播放器立即重新定位。 */
 async function selectPlacement(value: unknown) {
-  if (!isTaskbarPlacement(value) || value === selectedPlacement.value) {
+  if (placementSaving.value || !isTaskbarPlacement(value) || value === selectedPlacement.value) {
     return
   }
 
   const previousPlacement = selectedPlacement.value
   selectedPlacement.value = value
+  placementSaving.value = true
 
   try {
     await setTaskbarPlacement(value)
   } catch (error) {
     selectedPlacement.value = previousPlacement
     console.error('切换播放器位置失败', error)
+    try {
+      await applyTaskbarPlacement(previousPlacement)
+    } catch (rollbackError) {
+      console.error('恢复之前的播放器位置失败', rollbackError)
+    }
+  } finally {
+    placementSaving.value = false
   }
 }
 
 /** 保存选择并让任务栏播放器立即切换元素遮挡策略。 */
 async function selectOverlapPriority(value: unknown) {
-  if (!isTaskbarOverlapPriority(value) || value === selectedOverlapPriority.value) {
+  if (
+    overlapPrioritySaving.value ||
+    !isTaskbarOverlapPriority(value) ||
+    value === selectedOverlapPriority.value
+  ) {
     return
   }
 
   const previousPriority = selectedOverlapPriority.value
   selectedOverlapPriority.value = value
+  overlapPrioritySaving.value = true
 
   try {
     await setTaskbarOverlapPriority(value)
   } catch (error) {
     selectedOverlapPriority.value = previousPriority
     console.error('切换遮挡优先级失败', error)
+    try {
+      await applyTaskbarOverlapPriority(previousPriority)
+    } catch (rollbackError) {
+      console.error('恢复之前的遮挡优先级失败', rollbackError)
+    }
+  } finally {
+    overlapPrioritySaving.value = false
   }
 }
 
@@ -169,6 +220,7 @@ onMounted(loadOverlapPriority)
           :min="TASKBAR_TRANSPARENCY_MIN"
           :max="TASKBAR_TRANSPARENCY_MAX"
           :step="1"
+          :disabled="backgroundTransparencySaving"
           aria-label="背景透明度"
           @update:model-value="updateBackgroundTransparency"
           @value-commit="commitBackgroundTransparency"
@@ -179,13 +231,15 @@ onMounted(loadOverlapPriority)
       </ItemActions>
     </Item>
 
+    <TaskbarDisplaySetting />
+
     <Item>
       <ItemMedia class="icon-tone-violet-500">
         <PanelTop />
       </ItemMedia>
       <ItemContent>
         <ItemTitle>播放器位置</ItemTitle>
-        <ItemDescription>自动模式会避开 Windows 任务栏按钮所在一侧</ItemDescription>
+        <ItemDescription>自动模式会根据任务栏设置自动切换位置</ItemDescription>
       </ItemContent>
       <ItemActions>
         <Tabs :model-value="selectedPlacement" @update:model-value="selectPlacement">
@@ -194,6 +248,7 @@ onMounted(loadOverlapPriority)
               v-for="option in placementOptions"
               :key="option.value"
               :value="option.value"
+              :disabled="placementSaving"
             >
               {{ option.label }}
             </TabsTrigger>
@@ -207,8 +262,8 @@ onMounted(loadOverlapPriority)
         <Layers2 />
       </ItemMedia>
       <ItemContent>
-        <ItemTitle>元素显示顺序</ItemTitle>
-        <ItemDescription>空间不足时，播放器与任务栏元素谁显示在上方</ItemDescription>
+        <ItemTitle>遮挡优先级</ItemTitle>
+        <ItemDescription>空间不足时，MuseBar与任务栏元素谁显示在上方</ItemDescription>
       </ItemContent>
       <ItemActions>
         <Tabs :model-value="selectedOverlapPriority" @update:model-value="selectOverlapPriority">
@@ -217,6 +272,7 @@ onMounted(loadOverlapPriority)
               v-for="option in overlapPriorityOptions"
               :key="option.value"
               :value="option.value"
+              :disabled="overlapPrioritySaving"
             >
               {{ option.label }}
             </TabsTrigger>

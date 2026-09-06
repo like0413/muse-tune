@@ -12,12 +12,11 @@ use windows::{
             HiDpi::GetDpiForWindow,
             Shell::{ABM_GETSTATE, ABS_AUTOHIDE, APPBARDATA, SHAppBarMessage},
             WindowsAndMessaging::{
-                FindWindowExW, FindWindowW, GA_ROOT, GWL_EXSTYLE, GWLP_HWNDPARENT, GetAncestor,
-                GetClassNameW, GetForegroundWindow, GetWindowLongPtrW, HWND_TOPMOST, IsWindow,
-                IsWindowVisible, SW_HIDE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER,
-                SWP_NOSIZE, SWP_SHOWWINDOW, SetWindowLongPtrW, SetWindowPos, ShowWindow,
-                WINDOW_EX_STYLE, WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-                WS_EX_TOPMOST,
+                FindWindowExW, GA_ROOT, GWL_EXSTYLE, GWLP_HWNDPARENT, GetAncestor, GetClassNameW,
+                GetForegroundWindow, GetWindowLongPtrW, HWND_TOPMOST, IsWindow, IsWindowVisible,
+                SW_HIDE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_SHOWWINDOW,
+                SetWindowLongPtrW, SetWindowPos, ShowWindow, WINDOW_EX_STYLE, WS_EX_APPWINDOW,
+                WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
             },
         },
     },
@@ -48,12 +47,6 @@ pub(super) fn taskbar_buttons_center_aligned() -> bool {
     }
 
     alignment != 0
-}
-
-/// 查找主任务栏窗口。
-pub(super) fn find_primary_taskbar() -> Option<HWND> {
-    // SAFETY: 类名是有效且以空字符结尾的 UTF-16 字符串。
-    unsafe { FindWindowW(PCWSTR(windows::core::w!("Shell_TrayWnd").as_ptr()), None).ok() }
 }
 
 /// 查找系统托盘矩形，用于统一计算播放器锚点并排除托盘内的可访问性按钮。

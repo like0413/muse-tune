@@ -7,6 +7,7 @@ use windows::{
             CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx,
             CoUninitialize, SAFEARRAY,
         },
+        System::Threading::GetCurrentThreadId,
         System::Variant::VARIANT,
         UI::Accessibility::{
             AutomationElementMode_None, CUIAutomation, IUIAutomation, IUIAutomationCacheRequest,
@@ -27,6 +28,7 @@ use super::{events::request_layout_update, geometry::ScreenRect};
 #[implement(IUIAutomationEventHandler, IUIAutomationStructureChangedEventHandler)]
 struct TaskbarLayoutEventHandler {
     provider_process_id: i32,
+    monitor_thread_id: u32,
 }
 
 impl TaskbarLayoutEventHandler_Impl {
@@ -37,7 +39,7 @@ impl TaskbarLayoutEventHandler_Impl {
     ) -> windows::core::Result<()> {
         let sender = sender.ok()?;
         if unsafe { sender.CachedProcessId()? } == self.provider_process_id {
-            request_layout_update();
+            request_layout_update(self.monitor_thread_id);
         }
         Ok(())
     }
@@ -202,8 +204,11 @@ fn subscribe_taskbar_events(
     root: &IUIAutomationElement,
     provider_process_id: i32,
 ) -> windows::core::Result<TaskbarEventSubscription> {
+    // SAFETY: 订阅始终由所属任务栏的同步线程创建。
+    let monitor_thread_id = unsafe { GetCurrentThreadId() };
     let layout_handler: IUIAutomationEventHandler = TaskbarLayoutEventHandler {
         provider_process_id,
+        monitor_thread_id,
     }
     .into();
     let structure_handler = layout_handler.cast::<IUIAutomationStructureChangedEventHandler>()?;

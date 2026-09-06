@@ -1,7 +1,10 @@
 //! 协调任务栏状态、窗口所有权与播放器布局。
 
 use std::{
-    sync::atomic::{AtomicU8, Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU8, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -17,8 +20,8 @@ use super::{
     },
     layout::{BarLayout, LayoutStabilizer},
     platform::{
-        attach_bar_to_taskbar, clear_bar_clip_before_move, clip_bar, find_primary_taskbar,
-        find_system_tray_rect, hide_bar, is_bar_attached_to_taskbar, is_bar_topmost,
+        attach_bar_to_taskbar, clear_bar_clip_before_move, clip_bar, find_system_tray_rect,
+        hide_bar, is_bar_attached_to_taskbar, is_bar_topmost,
         is_taskbar_covered_by_fullscreen_window, is_window_alive, is_window_visible, place_bar,
         redraw_bar, show_bar, taskbar_auto_hide_enabled, taskbar_buttons_center_aligned,
         window_dpi,
@@ -34,13 +37,13 @@ static TASKBAR_OVERLAP_PRIORITY: AtomicU8 = AtomicU8::new(TaskbarOverlapPriority
 /// 跨线程更新定位偏好，并通过线程消息唤醒同步循环。
 pub(super) fn set_placement(placement: TaskbarPlacement) {
     TASKBAR_PLACEMENT.store(placement as u8, Ordering::Release);
-    super::events::request_layout_update();
+    super::events::request_all_layout_updates();
 }
 
 /// 跨线程更新元素遮挡优先级，并通过线程消息唤醒同步循环。
 pub(super) fn set_overlap_priority(priority: TaskbarOverlapPriority) {
     TASKBAR_OVERLAP_PRIORITY.store(priority as u8, Ordering::Release);
-    super::events::request_layout_update();
+    super::events::request_all_layout_updates();
 }
 
 /// 读取当前遮挡优先级。
@@ -59,8 +62,14 @@ fn resolve_taskbar_side() -> TaskbarSide {
 }
 
 /// 在窗口存活期间同步任务栏所有权、可见性、位置与硬裁剪方向。
-pub(super) fn run(window_handle: isize, content_width_dip: i32) {
-    let hooks = WinEventHooks::install();
+pub(super) fn run(
+    window_handle: isize,
+    taskbar_handle: isize,
+    content_width_dip: i32,
+    stop: Arc<AtomicBool>,
+) {
+    let taskbar = HWND(taskbar_handle as *mut _);
+    let hooks = WinEventHooks::install(taskbar);
     let hook_fallback_needed = hooks.fallback_needed();
     let mut taskbar_elements: Option<TaskbarElements> = None;
     let mut stabilizer = LayoutStabilizer::new();
@@ -77,7 +86,7 @@ pub(super) fn run(window_handle: isize, content_width_dip: i32) {
         stabilizer.invalidate(Instant::now());
     }
 
-    while is_window_alive(bar) {
+    while !stop.load(Ordering::Acquire) && is_window_alive(bar) {
         let now = Instant::now();
         let priority = overlap_priority();
         if priority != active_priority {
@@ -94,16 +103,9 @@ pub(super) fn run(window_handle: isize, content_width_dip: i32) {
         }
 
         let mut retry_needed = false;
-        let Some(taskbar) = find_primary_taskbar() else {
-            reset_for_missing_taskbar(
-                bar,
-                &mut current_taskbar,
-                &mut applied_layout,
-                &mut stabilizer,
-            );
-            let _ = wait_for_taskbar_change(RECOVERY_RETRY_DELAY);
-            continue;
-        };
+        if !is_window_alive(taskbar) {
+            break;
+        }
 
         let Some(taskbar_rect) = window_rect(taskbar) else {
             reset_for_missing_taskbar(

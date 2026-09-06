@@ -7,11 +7,7 @@ import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import {
-  applyTaskbarOverlapPriority,
-  applyTaskbarPlacement,
   getTaskbarBackgroundTransparency,
-  getTaskbarOverlapPriority,
-  getTaskbarPlacement,
   listenTaskbarBackgroundTransparencyChange,
 } from '@/lib/settings'
 
@@ -39,18 +35,6 @@ async function initializeBackgroundTransparency() {
   }
 }
 
-/** 恢复播放器位置并同步到原生定位线程。 */
-async function initializePlacement() {
-  try {
-    await Promise.all([
-      applyTaskbarPlacement(await getTaskbarPlacement()),
-      applyTaskbarOverlapPriority(await getTaskbarOverlapPriority()),
-    ])
-  } catch (error) {
-    console.error('初始化任务栏播放器布局失败', error)
-  }
-}
-
 /** 切换当前播放状态。 */
 function togglePlayback() {
   isPlaying.value = !isPlaying.value
@@ -66,7 +50,6 @@ async function openSettings() {
 }
 
 onMounted(initializeBackgroundTransparency)
-onMounted(initializePlacement)
 onUnmounted(() => {
   unlistenBackgroundTransparencyChange?.()
 })

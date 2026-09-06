@@ -3,7 +3,14 @@ mod taskbar;
 
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = commands::settings::open_settings_window(app).await {
+                    log::error!("再次启动应用时打开设置窗口失败: {error}");
+                }
+            });
+        }))
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(
@@ -15,6 +22,8 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::settings::open_settings_window,
+            commands::taskbar::list_taskbar_displays,
+            commands::taskbar::set_taskbar_display_target,
             commands::taskbar::set_taskbar_overlap_priority,
             commands::taskbar::set_taskbar_placement
         ])
