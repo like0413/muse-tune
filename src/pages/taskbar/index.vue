@@ -53,7 +53,7 @@ const bottomProgressStyle = computed(() => ({
 const verticalProgressStyle = computed(() => ({
   width: `${progress.value}%`,
   background:
-    'linear-gradient(to left, color-mix(in srgb, var(--primary) 18%, transparent), transparent)',
+    'linear-gradient(to left, color-mix(in srgb, var(--primary) 32%, transparent) 0%, color-mix(in srgb, var(--primary) 12%, transparent) 50%, color-mix(in srgb, var(--primary) 12%, transparent) 100%)',
 }))
 
 /** 恢复背景透明度并订阅设置窗口的实时预览。 */

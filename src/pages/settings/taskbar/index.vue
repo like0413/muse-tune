@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import BackgroundTransparencySetting from './BackgroundTransparencySetting.vue'
 import BarWidthSetting from './BarWidthSetting.vue'
+import ControlsSetting from './ControlsSetting.vue'
+import CoverSetting from './CoverSetting.vue'
 import DisplaySetting from './DisplaySetting.vue'
 import ElementOrderSetting from './ElementOrderSetting.vue'
 import OverlapPrioritySetting from './OverlapPrioritySetting.vue'
@@ -14,6 +16,8 @@ import ProgressStyleSetting from './ProgressStyleSetting.vue'
     <BarWidthSetting />
     <ProgressStyleSetting />
     <ElementOrderSetting />
+    <CoverSetting />
+    <ControlsSetting />
     <DisplaySetting />
     <PlacementSetting />
     <OverlapPrioritySetting />

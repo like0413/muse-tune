@@ -100,7 +100,7 @@ function selectSection(section: SettingsSection) {
       </header>
       <Separator />
 
-      <div class="flex-1 overflow-y-auto p-4">
+      <div class="settings-scrollbar flex-1 overflow-y-auto p-4">
         <KeepAlive>
           <component :is="activePanel" class="w-full" />
         </KeepAlive>
