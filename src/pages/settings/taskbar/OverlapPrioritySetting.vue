@@ -17,7 +17,7 @@ import {
   isTaskbarOverlapPriority,
   setTaskbarOverlapPriority,
   type TaskbarOverlapPriority,
-} from '@/lib/settings'
+} from '@/features/settings/overlap-priority'
 
 const overlapPriorityOptions = [
   { value: 'bar', label: 'MuseBar 优先' },

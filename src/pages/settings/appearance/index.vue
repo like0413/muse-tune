@@ -1,7 +1,5 @@
-<script setup lang="ts">
-import ThemeSetting from './ThemeSetting.vue'
-</script>
+<script setup lang="ts"></script>
 
 <template>
-  <ThemeSetting />
+  <div class="flex w-full flex-col gap-3"></div>
 </template>

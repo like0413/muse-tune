@@ -25,7 +25,7 @@ import {
   listTaskbarDisplays,
   setTaskbarDisplayTarget,
   type TaskbarDisplay,
-} from '@/lib/settings'
+} from '@/features/settings/display'
 
 const taskbarDisplays = shallowRef<TaskbarDisplay[]>([])
 const selectedDisplayTarget = shallowRef(ALL_TASKBAR_DISPLAYS)

@@ -17,7 +17,7 @@ import {
   isTaskbarPlacement,
   setTaskbarPlacement,
   type TaskbarPlacement,
-} from '@/lib/settings'
+} from '@/features/settings/placement'
 
 const placementOptions = [
   { value: 'left', label: '左侧' },

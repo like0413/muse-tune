@@ -19,7 +19,7 @@ import {
   setTaskbarBackgroundTransparency,
   TASKBAR_TRANSPARENCY_MAX,
   TASKBAR_TRANSPARENCY_MIN,
-} from '@/lib/settings'
+} from '@/features/settings/background-transparency'
 
 const selectedBackgroundTransparency = shallowRef(0)
 const committedBackgroundTransparency = shallowRef(0)

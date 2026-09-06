@@ -9,7 +9,7 @@ import { Progress } from '@/components/ui/progress'
 import {
   getTaskbarBackgroundTransparency,
   listenTaskbarBackgroundTransparencyChange,
-} from '@/lib/settings'
+} from '@/features/settings/background-transparency'
 
 const isPlaying = shallowRef(true)
 const backgroundTransparency = shallowRef(0)
