@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    CollapsibleItem: typeof import('./src/components/settings/CollapsibleItem.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     TaskbarPlayer: typeof import('./src/components/taskbar/TaskbarPlayer.vue')['default']

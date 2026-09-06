@@ -2,6 +2,7 @@
 import BackgroundTransparencySetting from './BackgroundTransparencySetting.vue'
 import BarWidthSetting from './BarWidthSetting.vue'
 import DisplaySetting from './DisplaySetting.vue'
+import ElementOrderSetting from './ElementOrderSetting.vue'
 import OverlapPrioritySetting from './OverlapPrioritySetting.vue'
 import PlacementSetting from './PlacementSetting.vue'
 import ProgressStyleSetting from './ProgressStyleSetting.vue'
@@ -12,6 +13,7 @@ import ProgressStyleSetting from './ProgressStyleSetting.vue'
     <BackgroundTransparencySetting />
     <BarWidthSetting />
     <ProgressStyleSetting />
+    <ElementOrderSetting />
     <DisplaySetting />
     <PlacementSetting />
     <OverlapPrioritySetting />
