@@ -8,6 +8,7 @@ import ElementOrderSetting from './ElementOrderSetting.vue'
 import OverlapPrioritySetting from './OverlapPrioritySetting.vue'
 import PlacementSetting from './PlacementSetting.vue'
 import ProgressStyleSetting from './ProgressStyleSetting.vue'
+import TrackInfoSetting from './track-info/TrackInfoSetting.vue'
 </script>
 
 <template>
@@ -16,6 +17,7 @@ import ProgressStyleSetting from './ProgressStyleSetting.vue'
     <BarWidthSetting />
     <ProgressStyleSetting />
     <ElementOrderSetting />
+    <TrackInfoSetting />
     <CoverSetting />
     <ControlsSetting />
     <DisplaySetting />

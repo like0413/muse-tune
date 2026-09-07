@@ -6,21 +6,12 @@ import { nextTick, onMounted, shallowRef, useTemplateRef } from 'vue'
 
 import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
-import { Separator } from '@/components/ui/separator'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   DEFAULT_TASKBAR_ELEMENT_ORDER,
   getTaskbarElementOrder,
   setTaskbarElementOrder,
   type TaskbarElement,
 } from '@/features/settings/element-order'
-import {
-  DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT,
-  getTaskbarTrackInfoAlignment,
-  isTaskbarTrackInfoAlignment,
-  setTaskbarTrackInfoAlignment,
-  type TaskbarTrackInfoAlignment,
-} from '@/features/settings/track-info'
 
 const elementOptions = {
   cover: { label: '封面', icon: Disc3 },
@@ -28,21 +19,9 @@ const elementOptions = {
   controls: { label: '控制按钮组', icon: Radio },
 } as const
 
-const alignmentOptions = [
-  { value: 'left', label: '左对齐' },
-  { value: 'right', label: '右对齐' },
-] as const
-
 const selectedOrder = shallowRef<TaskbarElement[]>([...DEFAULT_TASKBAR_ELEMENT_ORDER])
 const committedOrder = shallowRef<TaskbarElement[]>([...DEFAULT_TASKBAR_ELEMENT_ORDER])
 const orderSaving = shallowRef(false)
-const selectedAlignment = shallowRef<TaskbarTrackInfoAlignment>(
-  DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT,
-)
-const committedAlignment = shallowRef<TaskbarTrackInfoAlignment>(
-  DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT,
-)
-const alignmentSaving = shallowRef(false)
 const sortableContainer = useTemplateRef<HTMLElement>('sortableContainer')
 
 const { option } = useSortable(sortableContainer, selectedOrder, {
@@ -64,17 +43,6 @@ async function loadElementOrder() {
     committedOrder.value = [...order]
   } catch (error) {
     console.error('读取任务栏区块顺序失败', error)
-  }
-}
-
-/** 恢复已保存的歌曲信息对齐方式。 */
-async function loadTrackInfoAlignment() {
-  try {
-    const alignment = await getTaskbarTrackInfoAlignment()
-    selectedAlignment.value = alignment
-    committedAlignment.value = alignment
-  } catch (error) {
-    console.error('读取歌曲信息对齐方式失败', error)
   }
 }
 
@@ -108,31 +76,7 @@ async function saveElementOrder(order: TaskbarElement[]) {
   }
 }
 
-/** 保存歌曲信息对齐方式，失败时恢复最近一次成功值。 */
-async function selectTrackInfoAlignment(value: string | number) {
-  if (
-    alignmentSaving.value ||
-    !isTaskbarTrackInfoAlignment(value) ||
-    value === selectedAlignment.value
-  ) {
-    return
-  }
-
-  selectedAlignment.value = value
-  alignmentSaving.value = true
-  try {
-    await setTaskbarTrackInfoAlignment(value)
-    committedAlignment.value = value
-  } catch (error) {
-    selectedAlignment.value = committedAlignment.value
-    console.error('保存歌曲信息对齐方式失败', error)
-  } finally {
-    alignmentSaving.value = false
-  }
-}
-
 onMounted(loadElementOrder)
-onMounted(loadTrackInfoAlignment)
 </script>
 
 <template>
@@ -172,27 +116,6 @@ onMounted(loadTrackInfoAlignment)
             <GripVertical class="size-4" aria-hidden="true" />
           </button>
         </div>
-      </div>
-
-      <Separator class="my-3" />
-
-      <div class="flex items-center justify-between gap-4">
-        <div class="grid gap-0.5">
-          <span class="text-sm font-medium">歌曲信息对齐方式</span>
-          <span class="text-muted-foreground text-xs">调整歌名和歌手在可用区域内的对齐方向</span>
-        </div>
-        <Tabs :model-value="selectedAlignment" @update:model-value="selectTrackInfoAlignment">
-          <TabsList aria-label="歌曲信息对齐方式">
-            <TabsTrigger
-              v-for="option in alignmentOptions"
-              :key="option.value"
-              :value="option.value"
-              :disabled="alignmentSaving"
-            >
-              {{ option.label }}
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
       </div>
     </template>
   </CollapsibleItem>

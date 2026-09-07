@@ -222,7 +222,11 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
             }
         }
 
-        if !is_bar_attached_to_taskbar(bar, taskbar) || !is_bar_topmost(bar) {
+        // 首次稳定布局提交前窗口仍是隐藏且非置顶状态，此时不能重置采样状态。
+        let topmost_was_applied = applied_layout.is_some();
+        if !is_bar_attached_to_taskbar(bar, taskbar)
+            || (topmost_was_applied && !is_bar_topmost(bar))
+        {
             current_taskbar = HWND::default();
             retry_needed = true;
         }
