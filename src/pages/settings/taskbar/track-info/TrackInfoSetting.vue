@@ -15,7 +15,7 @@ import {
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   applyTaskbarTrackInfoScrolling,
   DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT,
@@ -125,7 +125,7 @@ async function updateScrolling(patch: Partial<TaskbarTrackInfoScrolling>, restor
   }
 }
 
-/** 接收单选组的外部值并更新滚动方式。 */
+/** 接收选项卡的外部值并更新滚动方式。 */
 function selectScrollMode(value: unknown) {
   if (isTaskbarTrackInfoScrollMode(value)) void updateScrolling({ mode: value })
 }
@@ -184,22 +184,18 @@ onMounted(loadTrackInfoSettings)
             <FieldTitle>歌曲信息对齐方式</FieldTitle>
             <FieldDescription>调整歌名和歌手在可用区域内的对齐方向</FieldDescription>
           </FieldContent>
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            :model-value="selectedAlignment"
-            :disabled="alignmentSaving"
-            aria-label="歌曲信息对齐方式"
-            @update:model-value="selectAlignment"
-          >
-            <ToggleGroupItem
-              v-for="option in alignmentOptions"
-              :key="option.value"
-              :value="option.value"
-            >
-              {{ option.label }}
-            </ToggleGroupItem>
-          </ToggleGroup>
+          <Tabs :model-value="selectedAlignment" @update:model-value="selectAlignment">
+            <TabsList aria-label="歌曲信息对齐方式">
+              <TabsTrigger
+                v-for="option in alignmentOptions"
+                :key="option.value"
+                :value="option.value"
+                :disabled="alignmentSaving"
+              >
+                {{ option.label }}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </Field>
 
         <Field orientation="horizontal">
@@ -248,22 +244,18 @@ onMounted(loadTrackInfoSettings)
             <FieldTitle>滚动方式</FieldTitle>
             <FieldDescription>设置歌名到达滚动边界后的行为</FieldDescription>
           </FieldContent>
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            :model-value="selectedScrolling.mode"
-            :disabled="!selectedScrolling.enabled || scrollingSaving"
-            aria-label="歌名滚动方式"
-            @update:model-value="selectScrollMode"
-          >
-            <ToggleGroupItem
-              v-for="option in scrollModeOptions"
-              :key="option.value"
-              :value="option.value"
-            >
-              {{ option.label }}
-            </ToggleGroupItem>
-          </ToggleGroup>
+          <Tabs :model-value="selectedScrolling.mode" @update:model-value="selectScrollMode">
+            <TabsList aria-label="歌名滚动方式">
+              <TabsTrigger
+                v-for="option in scrollModeOptions"
+                :key="option.value"
+                :value="option.value"
+                :disabled="!selectedScrolling.enabled || scrollingSaving"
+              >
+                {{ option.label }}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </Field>
       </FieldGroup>
     </template>

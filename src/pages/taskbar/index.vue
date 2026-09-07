@@ -77,11 +77,10 @@ const progressBarPositionClass = computed(() =>
   progressPosition.value === 'top' ? 'top-0' : 'bottom-0',
 )
 
-/** 计算竖线位置及其左侧逐渐减弱的播放进度背景。 */
+/** 计算竖线位置，并让已播放区域从起点透明渐变到当前位置的实色主题色。 */
 const verticalProgressStyle = computed(() => ({
   width: `${progress.value}%`,
-  background:
-    'linear-gradient(to left, color-mix(in srgb, var(--taskbar-progress-color) 32%, transparent) 0%, color-mix(in srgb, var(--taskbar-progress-color) 12%, transparent) 50%, color-mix(in srgb, var(--taskbar-progress-color) 12%, transparent) 100%)',
+  background: 'linear-gradient(to right, transparent 0%, var(--taskbar-progress-color) 100%)',
 }))
 
 /** 仅向控制区传递请求状态，其余区块共享同一份只读媒体快照。 */

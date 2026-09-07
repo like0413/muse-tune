@@ -11,7 +11,7 @@ import {
   FieldTitle,
 } from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   DEFAULT_TASKBAR_THEME_COLOR,
   getTaskbarThemeColor,
@@ -123,22 +123,18 @@ onMounted(loadThemeColor)
             <FieldTitle>颜色来源</FieldTitle>
             <FieldDescription>封面主色会随当前歌曲切换，系统色跟随 Windows</FieldDescription>
           </FieldContent>
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            :model-value="selectedTheme.source"
-            :disabled="themeSaving"
-            aria-label="Bar 主题色来源"
-            @update:model-value="selectThemeSource"
-          >
-            <ToggleGroupItem
-              v-for="option in themeSourceOptions"
-              :key="option.value"
-              :value="option.value"
-            >
-              {{ option.label }}
-            </ToggleGroupItem>
-          </ToggleGroup>
+          <Tabs :model-value="selectedTheme.source" @update:model-value="selectThemeSource">
+            <TabsList aria-label="Bar 主题色来源">
+              <TabsTrigger
+                v-for="option in themeSourceOptions"
+                :key="option.value"
+                :value="option.value"
+                :disabled="themeSaving"
+              >
+                {{ option.label }}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </Field>
 
         <CustomThemeColorFields

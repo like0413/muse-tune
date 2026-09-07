@@ -99,7 +99,7 @@ onMounted(loadWidth)
       <Ruler />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>bar 宽度</ItemTitle>
+      <ItemTitle>Bar 宽度</ItemTitle>
       <ItemDescription>设置未被任务栏元素裁剪时的完整宽度</ItemDescription>
     </ItemContent>
     <ItemActions class="w-56">
@@ -109,7 +109,7 @@ onMounted(loadWidth)
         :max="TASKBAR_WIDTH_MAX"
         :step="1"
         :disabled="widthSaving"
-        aria-label="bar 宽度"
+        aria-label="Bar 宽度"
         @update:model-value="updateWidth"
         @value-commit="commitWidth"
       />
