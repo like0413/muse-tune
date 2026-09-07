@@ -14,9 +14,9 @@ import {
 } from '@/features/settings/element-order'
 
 const elementOptions = {
-  cover: { label: '封面', icon: Disc3 },
-  'track-info': { label: '歌曲信息', icon: ListMusic },
-  controls: { label: '控制按钮组', icon: Radio },
+  cover: { label: '封面', icon: Disc3, widthClass: 'w-28 flex-none' },
+  'track-info': { label: '歌曲信息', icon: ListMusic, widthClass: 'min-w-32 flex-1' },
+  controls: { label: '控制按钮组', icon: Radio, widthClass: 'w-40 flex-none' },
 } as const
 
 const selectedOrder = shallowRef<TaskbarElement[]>([...DEFAULT_TASKBAR_ELEMENT_ORDER])
@@ -92,13 +92,14 @@ onMounted(loadElementOrder)
     <template #content>
       <div
         ref="sortableContainer"
-        class="bg-muted/50 grid grid-cols-3 gap-2 rounded-lg p-2"
+        class="bg-muted/50 flex gap-2 rounded-lg p-2"
         aria-label="任务栏元素排列"
       >
         <div
           v-for="element in selectedOrder"
           :key="element"
           class="bg-background flex min-w-0 items-center gap-2 rounded-md border p-3 shadow-xs"
+          :class="elementOptions[element].widthClass"
         >
           <component
             :is="elementOptions[element].icon"

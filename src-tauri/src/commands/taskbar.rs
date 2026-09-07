@@ -32,3 +32,10 @@ pub fn set_taskbar_width(width: i32) -> Result<(), String> {
     taskbar::set_content_width(width);
     Ok(())
 }
+
+/// 根据媒体状态更新 bar 内容可见性，并立即唤醒同步线程。
+#[tauri::command]
+pub fn set_taskbar_content_visibility(visible: bool) -> Result<(), String> {
+    taskbar::set_content_visibility(visible);
+    Ok(())
+}

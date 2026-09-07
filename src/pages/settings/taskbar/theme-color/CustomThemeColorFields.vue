@@ -22,13 +22,20 @@ const emit = defineEmits<{
 }>()
 
 const presetColors = [
-  '#1677ff',
-  '#7c3aed',
-  '#db2777',
-  '#e11d48',
-  '#ea580c',
-  '#16a34a',
-  '#0891b2',
+  '#ef4444',
+  '#f97316',
+  '#f59e0b',
+  '#eab308',
+  '#84cc16',
+  '#22c55e',
+  '#10b981',
+  '#14b8a6',
+  '#06b6d4',
+  '#0ea5e9',
+  '#3b82f6',
+  '#6366f1',
+  '#8b5cf6',
+  '#ec4899',
 ] as const
 
 /** 从原生颜色输入事件中读取颜色值。 */
@@ -43,12 +50,12 @@ function selectNativeColor(event: Event) {
       <FieldTitle>候选颜色</FieldTitle>
       <FieldDescription>选择常用颜色，点击后立即应用</FieldDescription>
     </FieldContent>
-    <div class="flex w-56 flex-nowrap justify-end gap-2" aria-label="候选主题色">
+    <div class="flex w-56 flex-nowrap justify-end gap-1" aria-label="候选主题色">
       <button
         v-for="color in presetColors"
         :key="color"
         type="button"
-        class="ring-offset-background size-5 shrink-0 rounded-full border shadow-xs transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        class="ring-offset-background size-4 shrink-0 rounded-full border transition-transform hover:scale-125 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none"
         :class="selectedColor === color ? 'ring-ring ring-2 ring-offset-2' : ''"
         :style="{ backgroundColor: color }"
         :disabled="disabled"

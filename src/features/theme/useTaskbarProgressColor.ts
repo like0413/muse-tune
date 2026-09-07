@@ -26,14 +26,11 @@ export function useTaskbarProgressColor(thumbnailDataUrl: ComputedRef<string | n
   let unlistenSetting: UnlistenFn | undefined
   let unlistenSystemColor: UnlistenFn | undefined
 
-  /** 异步提取封面主色；请求编号防止切歌时旧结果覆盖新封面。 */
+  /** 异步提取封面主色；新颜色产出前保留上一个有效结果，避免切歌闪色。 */
   async function extractCoverColor() {
     const thumbnail = thumbnailDataUrl.value
     const requestId = ++extractionRequestId
-    if (setting.value.source !== 'cover' || !thumbnail) {
-      coverColor.value = null
-      return
-    }
+    if (setting.value.source !== 'cover' || !thumbnail) return
 
     try {
       colorExtractor ??= new FastAverageColor()
@@ -42,10 +39,11 @@ export function useTaskbarProgressColor(thumbnailDataUrl: ComputedRef<string | n
         mode: 'speed',
         silent: true,
       })
-      if (requestId === extractionRequestId && !result.error) coverColor.value = result.hex
+      if (requestId === extractionRequestId && !result.error) {
+        coverColor.value = result.hex
+      }
     } catch (error) {
       if (requestId === extractionRequestId) {
-        coverColor.value = null
         console.error('提取封面主色失败', error)
       }
     }

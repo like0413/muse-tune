@@ -30,8 +30,10 @@ pub fn run() {
             commands::media::get_current_media_session,
             commands::media::set_media_session_selection_policy,
             commands::system::get_system_accent_color,
+            commands::system::get_system_foreground_color,
             commands::taskbar::list_taskbar_displays,
             commands::taskbar::set_taskbar_display_target,
+            commands::taskbar::set_taskbar_content_visibility,
             commands::taskbar::set_taskbar_overlap_priority,
             commands::taskbar::set_taskbar_placement,
             commands::taskbar::set_taskbar_width

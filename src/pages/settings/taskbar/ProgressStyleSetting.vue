@@ -2,37 +2,77 @@
 import { Activity } from '@lucide/vue'
 import { onMounted, shallowRef } from 'vue'
 
+import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemMedia,
-  ItemTitle,
-} from '@/components/ui/item'
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldTitle,
+} from '@/components/ui/field'
+import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
+  DEFAULT_TASKBAR_PROGRESS_POSITION,
   DEFAULT_TASKBAR_PROGRESS_STYLE,
+  getTaskbarProgressPosition,
   getTaskbarProgressStyle,
+  isTaskbarProgressPosition,
   isTaskbarProgressStyle,
+  setTaskbarProgressPosition,
   setTaskbarProgressStyle,
+  type TaskbarProgressPosition,
   type TaskbarProgressStyle,
 } from '@/features/settings/progress-style'
 
 const progressStyleOptions = [
-  { value: 'bottom', label: '底部横条' },
+  { value: 'bottom', label: '条形进度' },
   { value: 'vertical-gradient', label: '竖线渐变' },
 ] as const satisfies ReadonlyArray<{ value: TaskbarProgressStyle; label: string }>
+const progressPositionOptions = [
+  { value: 'top', label: '顶部' },
+  { value: 'bottom', label: '底部' },
+] as const satisfies ReadonlyArray<{ value: TaskbarProgressPosition; label: string }>
 
 const selectedProgressStyle = shallowRef<TaskbarProgressStyle>(DEFAULT_TASKBAR_PROGRESS_STYLE)
+const selectedProgressPosition = shallowRef<TaskbarProgressPosition>(
+  DEFAULT_TASKBAR_PROGRESS_POSITION,
+)
 const progressStyleSaving = shallowRef(false)
+const progressPositionSaving = shallowRef(false)
 
 /** 恢复已保存的播放进度样式。 */
 async function loadProgressStyle() {
   try {
-    selectedProgressStyle.value = await getTaskbarProgressStyle()
+    ;[selectedProgressStyle.value, selectedProgressPosition.value] = await Promise.all([
+      getTaskbarProgressStyle(),
+      getTaskbarProgressPosition(),
+    ])
   } catch (error) {
     console.error('读取播放进度样式失败', error)
+  }
+}
+
+/** 保存横条进度位置，失败时恢复原值。 */
+async function selectProgressPosition(value: unknown) {
+  if (
+    progressPositionSaving.value ||
+    !isTaskbarProgressPosition(value) ||
+    value === selectedProgressPosition.value
+  ) {
+    return
+  }
+
+  const previousPosition = selectedProgressPosition.value
+  selectedProgressPosition.value = value
+  progressPositionSaving.value = true
+  try {
+    await setTaskbarProgressPosition(value)
+  } catch (error) {
+    selectedProgressPosition.value = previousPosition
+    console.error('保存横条进度位置失败', error)
+  } finally {
+    progressPositionSaving.value = false
   }
 }
 
@@ -69,7 +109,7 @@ onMounted(loadProgressStyle)
 </script>
 
 <template>
-  <Item>
+  <CollapsibleItem>
     <ItemMedia class="icon-tone-rose-500">
       <Activity />
     </ItemMedia>
@@ -77,19 +117,49 @@ onMounted(loadProgressStyle)
       <ItemTitle>播放进度样式</ItemTitle>
       <ItemDescription>选择播放进度在任务栏播放器中的呈现方式</ItemDescription>
     </ItemContent>
-    <ItemActions>
-      <Tabs :model-value="selectedProgressStyle" @update:model-value="selectProgressStyle">
-        <TabsList aria-label="播放进度样式">
-          <TabsTrigger
-            v-for="option in progressStyleOptions"
-            :key="option.value"
-            :value="option.value"
-            :disabled="progressStyleSaving"
+    <template #content>
+      <FieldGroup>
+        <Field orientation="horizontal">
+          <FieldContent>
+            <FieldTitle>进度样式</FieldTitle>
+            <FieldDescription>选择横条或竖向渐变效果</FieldDescription>
+          </FieldContent>
+          <Tabs :model-value="selectedProgressStyle" @update:model-value="selectProgressStyle">
+            <TabsList aria-label="播放进度样式">
+              <TabsTrigger
+                v-for="option in progressStyleOptions"
+                :key="option.value"
+                :value="option.value"
+                :disabled="progressStyleSaving"
+              >
+                {{ option.label }}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </Field>
+
+        <Field orientation="horizontal" :data-disabled="selectedProgressStyle !== 'bottom'">
+          <FieldContent>
+            <FieldTitle>横条位置</FieldTitle>
+            <FieldDescription>将条形进度放在 bar 的顶部或底部</FieldDescription>
+          </FieldContent>
+          <Tabs
+            :model-value="selectedProgressPosition"
+            @update:model-value="selectProgressPosition"
           >
-            {{ option.label }}
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-    </ItemActions>
-  </Item>
+            <TabsList aria-label="横条进度位置">
+              <TabsTrigger
+                v-for="option in progressPositionOptions"
+                :key="option.value"
+                :value="option.value"
+                :disabled="progressPositionSaving || selectedProgressStyle !== 'bottom'"
+              >
+                {{ option.label }}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </Field>
+      </FieldGroup>
+    </template>
+  </CollapsibleItem>
 </template>

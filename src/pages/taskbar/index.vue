@@ -17,11 +17,17 @@ import {
   type TaskbarElement,
 } from '@/features/settings/element-order'
 import {
+  DEFAULT_TASKBAR_PROGRESS_POSITION,
   DEFAULT_TASKBAR_PROGRESS_STYLE,
+  getTaskbarProgressPosition,
   getTaskbarProgressStyle,
+  listenTaskbarProgressPositionChange,
   listenTaskbarProgressStyleChange,
+  type TaskbarProgressPosition,
   type TaskbarProgressStyle,
 } from '@/features/settings/progress-style'
+import { useTaskbarAutoHide } from '@/features/taskbar/useTaskbarAutoHide'
+import { useTaskbarForegroundColor } from '@/features/theme/useTaskbarForegroundColor'
 import { useTaskbarProgressColor } from '@/features/theme/useTaskbarProgressColor'
 
 import CoverElement from './components/CoverElement.vue'
@@ -36,20 +42,25 @@ const taskbarElementComponents: Record<TaskbarElement, Component> = {
 
 const { session: mediaSession, controlPending, control } = useMediaSession()
 useMediaSessionSelectionPolicy()
+useTaskbarAutoHide(mediaSession)
 const thumbnailDataUrl = computed(() => mediaSession.value?.metadata.thumbnailDataUrl ?? null)
 const { progressColor } = useTaskbarProgressColor(thumbnailDataUrl)
 
 const backgroundTransparency = shallowRef(0)
+const { foregroundColor } = useTaskbarForegroundColor(backgroundTransparency)
 const progressStyle = shallowRef<TaskbarProgressStyle>(DEFAULT_TASKBAR_PROGRESS_STYLE)
+const progressPosition = shallowRef<TaskbarProgressPosition>(DEFAULT_TASKBAR_PROGRESS_POSITION)
 const elementOrder = shallowRef<TaskbarElement[]>([...DEFAULT_TASKBAR_ELEMENT_ORDER])
 const progress = shallowRef(42)
 let unlistenBackgroundTransparencyChange: UnlistenFn | undefined
 let unlistenProgressStyleChange: UnlistenFn | undefined
+let unlistenProgressPositionChange: UnlistenFn | undefined
 let unlistenElementOrderChange: UnlistenFn | undefined
 
-/** 仅改变页面背景 Alpha，避免文字和控件随窗口一起变淡。 */
+/** 仅改变页面背景 Alpha，高透明时由前景色策略保证内容对比度。 */
 const backgroundStyle = computed(() => ({
   backgroundColor: `color-mix(in srgb, var(--taskbar-background) ${100 - backgroundTransparency.value}%, transparent)`,
+  color: foregroundColor.value,
 }))
 
 /** 仅把解析后的主题色暴露给进度条，避免影响全局 primary 色。 */
@@ -57,10 +68,14 @@ const progressColorStyle = computed(() => ({
   '--taskbar-progress-color': progressColor.value,
 }))
 
-/** 计算底部横条已经播放部分的宽度。 */
-const bottomProgressStyle = computed(() => ({
+/** 计算条形进度已经播放部分的宽度。 */
+const barProgressStyle = computed(() => ({
   width: `${progress.value}%`,
 }))
+
+const progressBarPositionClass = computed(() =>
+  progressPosition.value === 'top' ? 'top-0' : 'bottom-0',
+)
 
 /** 计算竖线位置及其左侧逐渐减弱的播放进度背景。 */
 const verticalProgressStyle = computed(() => ({
@@ -100,7 +115,13 @@ async function initializeProgressStyle() {
     unlistenProgressStyleChange = await listenTaskbarProgressStyleChange((style) => {
       progressStyle.value = style
     })
-    progressStyle.value = await getTaskbarProgressStyle()
+    unlistenProgressPositionChange = await listenTaskbarProgressPositionChange((position) => {
+      progressPosition.value = position
+    })
+    ;[progressStyle.value, progressPosition.value] = await Promise.all([
+      getTaskbarProgressStyle(),
+      getTaskbarProgressPosition(),
+    ])
   } catch (error) {
     console.error('初始化播放进度样式失败', error)
   }
@@ -133,6 +154,7 @@ onMounted(initializeElementOrder)
 onUnmounted(() => {
   unlistenBackgroundTransparencyChange?.()
   unlistenProgressStyleChange?.()
+  unlistenProgressPositionChange?.()
   unlistenElementOrderChange?.()
 })
 </script>
@@ -148,11 +170,12 @@ onUnmounted(() => {
       :is="taskbarElementComponents[element]"
       v-for="element in elementOrder"
       :key="element"
+      class="relative z-10"
       v-bind="taskbarElementProps[element]"
     />
 
     <div
-      class="pointer-events-none absolute inset-0"
+      class="pointer-events-none absolute inset-0 z-0"
       role="progressbar"
       aria-label="播放进度"
       aria-valuemin="0"
@@ -161,8 +184,9 @@ onUnmounted(() => {
     >
       <div
         v-if="progressStyle === 'bottom'"
-        class="absolute bottom-0 left-0 h-0.5 bg-(--taskbar-progress-color)"
-        :style="bottomProgressStyle"
+        class="absolute left-0 h-0.5 bg-(--taskbar-progress-color)"
+        :class="progressBarPositionClass"
+        :style="barProgressStyle"
       />
       <div v-else class="absolute inset-y-0 left-0" :style="verticalProgressStyle">
         <div class="absolute inset-y-0 right-0 w-px bg-(--taskbar-progress-color)" />

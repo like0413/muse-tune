@@ -11,7 +11,7 @@ use std::{
 use windows::Win32::Foundation::HWND;
 
 use super::{
-    TaskbarOverlapPriority,
+    TaskbarOverlapPriority, content_visible,
     elements::TaskbarElements,
     events::{TaskbarChange, WinEventHooks, wait_for_taskbar_change},
     geometry::{
@@ -172,7 +172,8 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
         let taskbar_hidden =
             !is_window_visible(taskbar) || taskbar_rect.width() <= 0 || taskbar_rect.height() <= 2;
 
-        if hidden_for_fullscreen || taskbar_hidden || auto_hide_transitioning {
+        if !content_visible() || hidden_for_fullscreen || taskbar_hidden || auto_hide_transitioning
+        {
             hide_bar(bar);
         } else {
             let should_measure = match active_priority {

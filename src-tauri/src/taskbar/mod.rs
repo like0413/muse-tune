@@ -32,6 +32,7 @@ const DISPLAY_TARGET_KEY: &str = "taskbar.displayTarget";
 const WIDTH_KEY: &str = "taskbar.width";
 const PLACEMENT_KEY: &str = "taskbar.placement";
 const OVERLAP_PRIORITY_KEY: &str = "taskbar.overlapPriority";
+static TASKBAR_CONTENT_VISIBLE: AtomicBool = AtomicBool::new(true);
 
 struct DisplayTargetState {
     value: String,
@@ -88,6 +89,18 @@ pub fn set_overlap_priority(priority: TaskbarOverlapPriority) {
 /// 更新 bar 基准宽度，并通知监控线程立即重新计算位置与裁剪区域。
 pub fn set_content_width(width: i32) {
     sync::set_content_width(width);
+}
+
+/// 更新 bar 内容可见性；值变化时立即唤醒全部同步线程。
+pub fn set_content_visibility(visible: bool) {
+    if TASKBAR_CONTENT_VISIBLE.swap(visible, Ordering::AcqRel) != visible {
+        events::request_all_layout_updates();
+    }
+}
+
+/// 读取媒体状态计算出的 bar 内容可见性。
+pub(super) fn content_visible() -> bool {
+    TASKBAR_CONTENT_VISIBLE.load(Ordering::Acquire)
 }
 
 /// 返回当前拥有 Windows 任务栏的显示器。

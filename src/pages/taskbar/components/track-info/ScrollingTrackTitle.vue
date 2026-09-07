@@ -5,8 +5,6 @@ import { computed, useTemplateRef } from 'vue'
 
 import type { TaskbarTrackInfoScrolling } from '@/features/settings/track-info'
 
-const LOOP_GAP_PX = 24
-
 const props = defineProps<{
   text: string
   scrolling: TaskbarTrackInfoScrolling
@@ -26,10 +24,12 @@ const shouldScroll = computed(
   () => props.scrolling.enabled && !prefersReducedMotion.value && overflowDistance.value > 0,
 )
 
-/** 无缝循环需要跨过副本间距，其余方式只移动实际溢出距离。 */
+/** 循环滚动跨过一个视口宽度，前一份离开时副本恰好进入。 */
 const animationDistance = computed(() =>
-  props.scrolling.mode === 'loop' ? titleWidth.value + LOOP_GAP_PX : overflowDistance.value,
+  props.scrolling.mode === 'loop' ? titleWidth.value + viewportWidth.value : overflowDistance.value,
 )
+
+const loopSpacerStyle = computed(() => ({ width: `${viewportWidth.value}px` }))
 
 /** 将像素每秒换算为单程动画时长。 */
 const animationDuration = computed(() => animationDistance.value / props.scrolling.speed)
@@ -71,7 +71,8 @@ const animationTransition = computed(() => ({
       aria-hidden="true"
     >
       <span class="whitespace-nowrap">{{ text }}</span>
-      <span v-if="scrolling.mode === 'loop'" class="ml-6 whitespace-nowrap" aria-hidden="true">
+      <span v-if="scrolling.mode === 'loop'" class="shrink-0" :style="loopSpacerStyle" />
+      <span v-if="scrolling.mode === 'loop'" class="whitespace-nowrap" aria-hidden="true">
         {{ text }}
       </span>
     </motion.div>

@@ -14,8 +14,8 @@ const presentation = computed(() => getMediaPlayerPresentation(props.player))
 
 <template>
   <span
-    class="absolute -right-0.5 -bottom-0.5 z-10 grid size-3.5 place-items-center overflow-hidden rounded-lg text-[8px] leading-none font-bold shadow-sm ring-1 ring-black/30 dark:ring-white/30"
-    :class="iconDataUrl ? 'bg-white' : presentation.fallbackClass"
+    class="absolute right-0 bottom-0 z-10 grid size-2.5 place-items-center overflow-hidden rounded-sm text-[6px] leading-none font-bold"
+    :class="iconDataUrl ? '' : presentation.fallbackClass"
     :title="presentation.label"
     aria-hidden="true"
   >

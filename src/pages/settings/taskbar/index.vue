@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import BackgroundTransparencySetting from './BackgroundTransparencySetting.vue'
+import BarVisibilitySetting from './BarVisibilitySetting.vue'
 import BarWidthSetting from './BarWidthSetting.vue'
 import ControlsSetting from './ControlsSetting.vue'
 import CoverSetting from './CoverSetting.vue'
@@ -16,6 +17,7 @@ import TrackInfoSetting from './track-info/TrackInfoSetting.vue'
 <template>
   <div class="flex w-full flex-col gap-3">
     <BackgroundTransparencySetting />
+    <BarVisibilitySetting />
     <BarWidthSetting />
     <ProgressStyleSetting />
     <ThemeColorSetting />

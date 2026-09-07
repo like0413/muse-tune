@@ -44,43 +44,54 @@ onUnmounted(() => unlistenVisibilityChange?.())
 </script>
 
 <template>
-  <div v-if="visibility.visible" class="flex shrink-0 gap-1" aria-label="播放控制">
+  <div v-if="visibility.visible" class="flex shrink-0" aria-label="播放控制">
     <Button
       v-if="visibility.previous"
-      variant="secondary"
+      variant="ghost"
       size="icon-sm"
+      class="taskbar-control"
       type="button"
       title="上一曲"
       aria-label="上一曲"
       :disabled="pending || !session?.playback.controls.canSkipPrevious"
       @click="emit('control', 'skip_previous')"
     >
-      <SkipBack data-icon="inline-start" />
+      <SkipBack class="fill-current" data-icon="inline-start" />
     </Button>
     <Button
       v-if="visibility.playPause"
-      variant="secondary"
+      variant="ghost"
       size="icon-sm"
+      class="taskbar-control"
       type="button"
       title="播放或暂停"
       aria-label="播放或暂停"
       :disabled="pending || !canTogglePlayback"
       @click="emit('control', 'toggle_play_pause')"
     >
-      <Pause v-if="isPlaying" data-icon="inline-start" />
-      <Play v-else data-icon="inline-start" />
+      <Pause v-if="isPlaying" class="fill-current" data-icon="inline-start" />
+      <Play v-else class="fill-current" data-icon="inline-start" />
     </Button>
     <Button
       v-if="visibility.next"
-      variant="secondary"
+      variant="ghost"
       size="icon-sm"
+      class="taskbar-control"
       type="button"
       title="下一曲"
       aria-label="下一曲"
       :disabled="pending || !session?.playback.controls.canSkipNext"
       @click="emit('control', 'skip_next')"
     >
-      <SkipForward data-icon="inline-start" />
+      <SkipForward class="fill-current" data-icon="inline-start" />
     </Button>
   </div>
 </template>
+
+<style scoped>
+/* Hover 背景以当前实际前景色生成，透明 bar 也能保持对比度。 */
+.taskbar-control:hover {
+  color: inherit;
+  background-color: color-mix(in srgb, currentColor 20%, transparent);
+}
+</style>
