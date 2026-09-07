@@ -5,9 +5,11 @@ import ControlsSetting from './ControlsSetting.vue'
 import CoverSetting from './CoverSetting.vue'
 import DisplaySetting from './DisplaySetting.vue'
 import ElementOrderSetting from './ElementOrderSetting.vue'
+import MediaSessionSetting from './media-session/MediaSessionSetting.vue'
 import OverlapPrioritySetting from './OverlapPrioritySetting.vue'
 import PlacementSetting from './PlacementSetting.vue'
 import ProgressStyleSetting from './ProgressStyleSetting.vue'
+import ThemeColorSetting from './ThemeColorSetting.vue'
 import TrackInfoSetting from './track-info/TrackInfoSetting.vue'
 </script>
 
@@ -16,7 +18,9 @@ import TrackInfoSetting from './track-info/TrackInfoSetting.vue'
     <BackgroundTransparencySetting />
     <BarWidthSetting />
     <ProgressStyleSetting />
+    <ThemeColorSetting />
     <ElementOrderSetting />
+    <MediaSessionSetting />
     <TrackInfoSetting />
     <CoverSetting />
     <ControlsSetting />

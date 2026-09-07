@@ -55,6 +55,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "es-toolkit": "^1.52.0",
+    "fast-average-color": "^9.5.2",
     "motion-v": "^2.4.0",
     "pinia": "^4.0.2",
     "reka-ui": "^2.10.4",

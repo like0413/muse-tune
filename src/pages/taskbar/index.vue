@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
 import type { Component } from 'vue'
+import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
 
+import { useMediaSession } from '@/features/media/useMediaSession'
+import { useMediaSessionSelectionPolicy } from '@/features/media/useMediaSessionSelectionPolicy'
 import {
   getTaskbarBackgroundTransparency,
   listenTaskbarBackgroundTransparencyChange,
@@ -20,6 +22,7 @@ import {
   listenTaskbarProgressStyleChange,
   type TaskbarProgressStyle,
 } from '@/features/settings/progress-style'
+import { useTaskbarProgressColor } from '@/features/theme/useTaskbarProgressColor'
 
 import CoverElement from './components/CoverElement.vue'
 import PlaybackControlsElement from './components/PlaybackControlsElement.vue'
@@ -30,6 +33,11 @@ const taskbarElementComponents: Record<TaskbarElement, Component> = {
   'track-info': TrackInfoElement,
   controls: PlaybackControlsElement,
 }
+
+const { session: mediaSession, controlPending, control } = useMediaSession()
+useMediaSessionSelectionPolicy()
+const thumbnailDataUrl = computed(() => mediaSession.value?.metadata.thumbnailDataUrl ?? null)
+const { progressColor } = useTaskbarProgressColor(thumbnailDataUrl)
 
 const backgroundTransparency = shallowRef(0)
 const progressStyle = shallowRef<TaskbarProgressStyle>(DEFAULT_TASKBAR_PROGRESS_STYLE)
@@ -44,6 +52,11 @@ const backgroundStyle = computed(() => ({
   backgroundColor: `color-mix(in srgb, var(--taskbar-background) ${100 - backgroundTransparency.value}%, transparent)`,
 }))
 
+/** 仅把解析后的主题色暴露给进度条，避免影响全局 primary 色。 */
+const progressColorStyle = computed(() => ({
+  '--taskbar-progress-color': progressColor.value,
+}))
+
 /** 计算底部横条已经播放部分的宽度。 */
 const bottomProgressStyle = computed(() => ({
   width: `${progress.value}%`,
@@ -53,7 +66,18 @@ const bottomProgressStyle = computed(() => ({
 const verticalProgressStyle = computed(() => ({
   width: `${progress.value}%`,
   background:
-    'linear-gradient(to left, color-mix(in srgb, var(--primary) 32%, transparent) 0%, color-mix(in srgb, var(--primary) 12%, transparent) 50%, color-mix(in srgb, var(--primary) 12%, transparent) 100%)',
+    'linear-gradient(to left, color-mix(in srgb, var(--taskbar-progress-color) 32%, transparent) 0%, color-mix(in srgb, var(--taskbar-progress-color) 12%, transparent) 50%, color-mix(in srgb, var(--taskbar-progress-color) 12%, transparent) 100%)',
+}))
+
+/** 仅向控制区传递请求状态，其余区块共享同一份只读媒体快照。 */
+const taskbarElementProps = computed<Record<TaskbarElement, Record<string, unknown>>>(() => ({
+  cover: { session: mediaSession.value },
+  'track-info': { session: mediaSession.value },
+  controls: {
+    session: mediaSession.value,
+    pending: controlPending.value,
+    onControl: control,
+  },
 }))
 
 /** 恢复背景透明度并订阅设置窗口的实时预览。 */
@@ -116,7 +140,7 @@ onUnmounted(() => {
 <template>
   <main
     class="text-taskbar-foreground relative flex size-full items-center gap-2 overflow-hidden px-2 py-1 shadow-sm select-none"
-    :style="backgroundStyle"
+    :style="[backgroundStyle, progressColorStyle]"
     aria-label="Muse Tune 任务栏播放器"
     @contextmenu.prevent="openSettings"
   >
@@ -124,6 +148,7 @@ onUnmounted(() => {
       :is="taskbarElementComponents[element]"
       v-for="element in elementOrder"
       :key="element"
+      v-bind="taskbarElementProps[element]"
     />
 
     <div
@@ -136,11 +161,11 @@ onUnmounted(() => {
     >
       <div
         v-if="progressStyle === 'bottom'"
-        class="bg-primary absolute bottom-0 left-0 h-0.5"
+        class="absolute bottom-0 left-0 h-0.5 bg-(--taskbar-progress-color)"
         :style="bottomProgressStyle"
       />
       <div v-else class="absolute inset-y-0 left-0" :style="verticalProgressStyle">
-        <div class="bg-primary absolute inset-y-0 right-0 w-px" />
+        <div class="absolute inset-y-0 right-0 w-px bg-(--taskbar-progress-color)" />
       </div>
     </div>
   </main>

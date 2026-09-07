@@ -4,6 +4,14 @@ import { onMounted, shallowRef } from 'vue'
 
 import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldTitle,
+} from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -78,34 +86,41 @@ onMounted(loadVisibility)
     </ItemContent>
 
     <template #content>
-      <div class="grid gap-4">
-        <div class="flex items-center justify-between gap-4">
-          <Label for="taskbar-controls-visible">显示控制按钮组</Label>
+      <FieldGroup>
+        <Field orientation="horizontal">
+          <FieldContent>
+            <FieldLabel for="taskbar-controls-visible">显示控制按钮组</FieldLabel>
+          </FieldContent>
           <Switch
             id="taskbar-controls-visible"
             :model-value="selectedVisibility.visible"
             :disabled="visibilitySaving"
             @update:model-value="updateVisibility({ visible: $event })"
           />
-        </div>
+        </Field>
 
-        <div class="grid grid-cols-3 gap-2">
-          <Label
-            v-for="option in buttonOptions"
-            :key="option.key"
-            :for="`taskbar-control-${option.key}`"
-            class="bg-muted/50 flex items-center gap-2 rounded-md border p-3"
-          >
-            <Checkbox
-              :id="`taskbar-control-${option.key}`"
-              :model-value="selectedVisibility[option.key]"
-              :disabled="visibilitySaving || !selectedVisibility.visible"
-              @update:model-value="updateButton(option.key, $event)"
-            />
-            <span class="truncate text-sm">{{ option.label }}</span>
-          </Label>
-        </div>
-      </div>
+        <Field :data-disabled="!selectedVisibility.visible">
+          <FieldContent>
+            <FieldTitle>显示的按钮</FieldTitle>
+          </FieldContent>
+          <div class="grid grid-cols-3 gap-2">
+            <Label
+              v-for="option in buttonOptions"
+              :key="option.key"
+              :for="`taskbar-control-${option.key}`"
+              class="bg-muted/50 flex items-center gap-2 rounded-md border p-3"
+            >
+              <Checkbox
+                :id="`taskbar-control-${option.key}`"
+                :model-value="selectedVisibility[option.key]"
+                :disabled="visibilitySaving || !selectedVisibility.visible"
+                @update:model-value="updateButton(option.key, $event)"
+              />
+              <span class="truncate text-sm">{{ option.label }}</span>
+            </Label>
+          </div>
+        </Field>
+      </FieldGroup>
     </template>
   </CollapsibleItem>
 </template>

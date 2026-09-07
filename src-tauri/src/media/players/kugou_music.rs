@@ -1,0 +1,21 @@
+use super::PlayerAdapter;
+use crate::media::MediaPlayer;
+
+pub(super) static KUGOU_MUSIC: KugouMusicAdapter = KugouMusicAdapter;
+
+/// 酷狗音乐桌面客户端适配器。
+pub(super) struct KugouMusicAdapter;
+
+impl PlayerAdapter for KugouMusicAdapter {
+    fn player(&self) -> MediaPlayer {
+        MediaPlayer::KugouMusic
+    }
+
+    fn matches(&self, source_app_id: &str) -> bool {
+        source_app_id.contains("kugou") || source_app_id.contains("kgmusic")
+    }
+
+    fn executable_names(&self) -> &'static [&'static str] {
+        &["kugou.exe", "kgmusic.exe"]
+    }
+}

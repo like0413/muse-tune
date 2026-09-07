@@ -1,5 +1,9 @@
 mod commands;
+mod media;
+mod system;
 mod taskbar;
+
+use tauri::Manager;
 
 pub fn run() {
     tauri::Builder::default()
@@ -22,6 +26,10 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::settings::open_settings_window,
+            commands::media::control_media_session,
+            commands::media::get_current_media_session,
+            commands::media::set_media_session_selection_policy,
+            commands::system::get_system_accent_color,
             commands::taskbar::list_taskbar_displays,
             commands::taskbar::set_taskbar_display_target,
             commands::taskbar::set_taskbar_overlap_priority,
@@ -29,6 +37,10 @@ pub fn run() {
             commands::taskbar::set_taskbar_width
         ])
         .setup(|app| {
+            let media_service = media::initialize(app.handle().clone())?;
+            app.manage(media_service);
+            let system_theme_service = system::initialize(app.handle().clone())?;
+            app.manage(system_theme_service);
             taskbar::initialize(app)?;
 
             Ok(())

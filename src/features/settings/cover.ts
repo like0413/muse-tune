@@ -13,12 +13,14 @@ export interface TaskbarCoverAppearance {
   visible: boolean
   shape: TaskbarCoverShape
   rotateWhenPlaying: boolean
+  showPlayerSource: boolean
 }
 
 export const DEFAULT_TASKBAR_COVER_APPEARANCE: TaskbarCoverAppearance = {
   visible: true,
   shape: 'rounded',
   rotateWhenPlaying: false,
+  showPlayerSource: true,
 }
 
 /** 判断封面形状是否受支持。 */
@@ -42,6 +44,10 @@ export function normalizeTaskbarCoverAppearance(value: unknown): TaskbarCoverApp
       typeof record.rotateWhenPlaying === 'boolean'
         ? record.rotateWhenPlaying
         : DEFAULT_TASKBAR_COVER_APPEARANCE.rotateWhenPlaying,
+    showPlayerSource:
+      typeof record.showPlayerSource === 'boolean'
+        ? record.showPlayerSource
+        : DEFAULT_TASKBAR_COVER_APPEARANCE.showPlayerSource,
   }
 }
 

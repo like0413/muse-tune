@@ -3,8 +3,15 @@ import { Image } from '@lucide/vue'
 import { onMounted, shallowRef } from 'vue'
 
 import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldTitle,
+} from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
-import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -77,19 +84,25 @@ onMounted(loadAppearance)
     </ItemContent>
 
     <template #content>
-      <div class="grid gap-4">
-        <div class="flex items-center justify-between gap-4">
-          <Label for="taskbar-cover-visible">显示封面</Label>
+      <FieldGroup>
+        <Field orientation="horizontal">
+          <FieldContent>
+            <FieldLabel for="taskbar-cover-visible">显示封面</FieldLabel>
+            <FieldDescription>控制任务栏播放器中的封面区域</FieldDescription>
+          </FieldContent>
           <Switch
             id="taskbar-cover-visible"
             :model-value="selectedAppearance.visible"
             :disabled="appearanceSaving"
             @update:model-value="updateAppearance({ visible: $event })"
           />
-        </div>
+        </Field>
 
-        <div class="flex items-center justify-between gap-4">
-          <span class="text-sm font-medium">封面形状</span>
+        <Field orientation="horizontal" :data-disabled="!selectedAppearance.visible">
+          <FieldContent>
+            <FieldTitle>封面形状</FieldTitle>
+            <FieldDescription>选择方形、圆角或圆形封面</FieldDescription>
+          </FieldContent>
           <Tabs :model-value="selectedAppearance.shape" @update:model-value="selectShape">
             <TabsList aria-label="封面形状">
               <TabsTrigger
@@ -102,24 +115,38 @@ onMounted(loadAppearance)
               </TabsTrigger>
             </TabsList>
           </Tabs>
-        </div>
+        </Field>
 
-        <div
+        <Field
           v-if="selectedAppearance.shape === 'circle'"
-          class="flex items-center justify-between gap-4"
+          orientation="horizontal"
+          :data-disabled="!selectedAppearance.visible"
         >
-          <div class="grid gap-0.5">
-            <Label for="taskbar-cover-rotate">播放时旋转</Label>
-            <p class="text-muted-foreground text-xs">媒体播放状态接入后自动启停</p>
-          </div>
+          <FieldContent>
+            <FieldLabel for="taskbar-cover-rotate">播放时旋转</FieldLabel>
+            <FieldDescription>播放时持续旋转，暂停后停在当前位置</FieldDescription>
+          </FieldContent>
           <Switch
             id="taskbar-cover-rotate"
             :model-value="selectedAppearance.rotateWhenPlaying"
             :disabled="appearanceSaving || !selectedAppearance.visible"
             @update:model-value="updateAppearance({ rotateWhenPlaying: $event })"
           />
-        </div>
-      </div>
+        </Field>
+
+        <Field orientation="horizontal" :data-disabled="!selectedAppearance.visible">
+          <FieldContent>
+            <FieldLabel for="taskbar-cover-player-source">显示播放器来源</FieldLabel>
+            <FieldDescription>在封面右下角显示当前播放器的小图标</FieldDescription>
+          </FieldContent>
+          <Switch
+            id="taskbar-cover-player-source"
+            :model-value="selectedAppearance.showPlayerSource"
+            :disabled="appearanceSaving || !selectedAppearance.visible"
+            @update:model-value="updateAppearance({ showPlayerSource: $event })"
+          />
+        </Field>
+      </FieldGroup>
     </template>
   </CollapsibleItem>
 </template>
