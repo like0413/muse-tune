@@ -27,8 +27,8 @@ import {
   TASKBAR_SPECTRUM_BAR_COUNT_MIN,
   TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MAX,
   TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MIN,
-  TASKBAR_SPECTRUM_MAX_WIDTH_MAX,
-  TASKBAR_SPECTRUM_MAX_WIDTH_MIN,
+  TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MAX,
+  TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MIN,
   type TaskbarAudioSpectrumSettings,
 } from '@/features/settings/audio-spectrum'
 
@@ -95,9 +95,9 @@ function updateBarCount(values: number[] | undefined) {
   updateSliderPreview('barCount', values?.[0])
 }
 
-/** 更新频谱最大宽度草稿并实时预览。 */
-function updateMaxWidth(values: number[] | undefined) {
-  updateSliderPreview('maxWidth', values?.[0])
+/** 更新频谱相对 bar 宽度的百分比并实时预览。 */
+function updateWidthPercentage(values: number[] | undefined) {
+  updateSliderPreview('widthPercentage', values?.[0])
 }
 
 /** 更新频谱水平位置草稿并实时预览。 */
@@ -107,7 +107,7 @@ function updateHorizontalPosition(values: number[] | undefined) {
 
 /** 规范单个滑块值并广播完整配置。 */
 function updateSliderPreview(
-  key: 'barCount' | 'maxWidth' | 'horizontalPosition',
+  key: 'barCount' | 'widthPercentage' | 'horizontalPosition',
   value: number | undefined,
 ) {
   if (settingsSaving.value || value === undefined) return
@@ -176,22 +176,22 @@ onMounted(loadSettings)
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
           <FieldContent>
-            <FieldTitle>最大宽度</FieldTitle>
-            <FieldDescription>频谱在 bar 内不超过此宽度</FieldDescription>
+            <FieldTitle>频谱宽度</FieldTitle>
+            <FieldDescription>频谱占 bar 总宽度的比例</FieldDescription>
           </FieldContent>
           <div class="flex w-56 items-center gap-3">
             <Slider
-              :model-value="[selectedSettings.maxWidth]"
-              :min="TASKBAR_SPECTRUM_MAX_WIDTH_MIN"
-              :max="TASKBAR_SPECTRUM_MAX_WIDTH_MAX"
+              :model-value="[selectedSettings.widthPercentage]"
+              :min="TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MIN"
+              :max="TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MAX"
               :step="1"
               :disabled="settingsSaving || !selectedSettings.visible"
-              aria-label="频谱最大宽度"
-              @update:model-value="updateMaxWidth"
+              aria-label="频谱宽度百分比"
+              @update:model-value="updateWidthPercentage"
               @value-commit="commitSlider"
             />
             <output class="text-muted-foreground w-14 text-right text-xs tabular-nums">
-              {{ selectedSettings.maxWidth }}px
+              {{ selectedSettings.widthPercentage }}%
             </output>
           </div>
         </Field>

@@ -30,8 +30,7 @@ let contrastColor = ''
 
 /** 频谱只设置低频变化的布局属性，音频帧不会触发 Vue 模板更新。 */
 const canvasStyle = computed<CSSProperties>(() => ({
-  width: '100%',
-  maxWidth: `${settings.value.maxWidth}px`,
+  width: `${settings.value.widthPercentage}%`,
   left: `${settings.value.horizontalPosition}%`,
   transform: `translateX(-${settings.value.horizontalPosition}%)`,
   color: `color-mix(in srgb, ${props.themeColor} 68%, ${props.foregroundColor} 32%)`,
@@ -167,7 +166,7 @@ watch(
 watch(
   () => [
     settings.value.visible,
-    settings.value.maxWidth,
+    settings.value.widthPercentage,
     settings.value.barCount,
     settings.value.alignment,
     settings.value.horizontalPosition,

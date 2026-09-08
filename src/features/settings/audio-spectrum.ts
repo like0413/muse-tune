@@ -2,6 +2,7 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
 import { clamp } from 'es-toolkit'
 
+import { getTaskbarWidth, TASKBAR_WIDTH_MAX } from './bar-width'
 import { settingsStore } from './store'
 
 const TASKBAR_AUDIO_SPECTRUM_KEY = 'taskbar.audioSpectrum'
@@ -9,8 +10,8 @@ const TASKBAR_AUDIO_SPECTRUM_CHANGED_EVENT = 'settings://taskbar-audio-spectrum-
 
 export const TASKBAR_SPECTRUM_BAR_COUNT_MIN = 8
 export const TASKBAR_SPECTRUM_BAR_COUNT_MAX = 48
-export const TASKBAR_SPECTRUM_MAX_WIDTH_MIN = 80
-export const TASKBAR_SPECTRUM_MAX_WIDTH_MAX = 360
+export const TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MIN = 20
+export const TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MAX = 100
 export const TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MIN = 0
 export const TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MAX = 100
 
@@ -21,7 +22,7 @@ export type TaskbarSpectrumAlignment = (typeof TASKBAR_SPECTRUM_ALIGNMENTS)[numb
 export interface TaskbarAudioSpectrumSettings {
   visible: boolean
   barCount: number
-  maxWidth: number
+  widthPercentage: number
   alignment: TaskbarSpectrumAlignment
   horizontalPosition: number
 }
@@ -29,7 +30,7 @@ export interface TaskbarAudioSpectrumSettings {
 export const DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS: TaskbarAudioSpectrumSettings = {
   visible: true,
   barCount: 24,
-  maxWidth: 260,
+  widthPercentage: 72,
   alignment: 'bottom',
   horizontalPosition: 50,
 }
@@ -45,10 +46,12 @@ export function isTaskbarSpectrumAlignment(value: unknown): value is TaskbarSpec
 /** 将外部值规范为完整、安全的频谱配置。 */
 export function normalizeTaskbarAudioSpectrumSettings(
   value: unknown,
+  legacyBarWidth = TASKBAR_WIDTH_MAX,
 ): TaskbarAudioSpectrumSettings {
   const candidate = typeof value === 'object' && value !== null ? value : {}
   const record = candidate as Partial<Record<keyof TaskbarAudioSpectrumSettings, unknown>> & {
     horizontalAlignment?: unknown
+    maxWidth?: unknown
   }
   return {
     visible:
@@ -61,11 +64,11 @@ export function normalizeTaskbarAudioSpectrumSettings(
       TASKBAR_SPECTRUM_BAR_COUNT_MAX,
       DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS.barCount,
     ),
-    maxWidth: normalizeInteger(
-      record.maxWidth,
-      TASKBAR_SPECTRUM_MAX_WIDTH_MIN,
-      TASKBAR_SPECTRUM_MAX_WIDTH_MAX,
-      DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS.maxWidth,
+    widthPercentage: normalizeInteger(
+      record.widthPercentage ?? legacyWidthPercentage(record.maxWidth, legacyBarWidth),
+      TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MIN,
+      TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MAX,
+      DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS.widthPercentage,
     ),
     alignment: isTaskbarSpectrumAlignment(record.alignment)
       ? record.alignment
@@ -79,6 +82,12 @@ export function normalizeTaskbarAudioSpectrumSettings(
   }
 }
 
+/** 将上一版像素最大宽度按当时的 bar 宽度迁移为等效百分比。 */
+function legacyWidthPercentage(value: unknown, barWidth: number): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  return (value / barWidth) * 100
+}
+
 /** 把上一版三档水平对齐设置迁移为连续位置。 */
 function legacyHorizontalPosition(value: unknown): number {
   if (value === 'left') return TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MIN
@@ -88,9 +97,11 @@ function legacyHorizontalPosition(value: unknown): number {
 
 /** 读取频谱配置，缺失或损坏字段分别回退默认值。 */
 export async function getTaskbarAudioSpectrumSettings(): Promise<TaskbarAudioSpectrumSettings> {
-  return normalizeTaskbarAudioSpectrumSettings(
-    await settingsStore.get<unknown>(TASKBAR_AUDIO_SPECTRUM_KEY),
-  )
+  const [storedSettings, barWidth] = await Promise.all([
+    settingsStore.get<unknown>(TASKBAR_AUDIO_SPECTRUM_KEY),
+    getTaskbarWidth(),
+  ])
+  return normalizeTaskbarAudioSpectrumSettings(storedSettings, barWidth)
 }
 
 /** 仅广播频谱配置，用于设置窗口拖动时的轻量实时预览。 */
