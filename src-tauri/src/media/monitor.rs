@@ -25,6 +25,7 @@ use super::{
     players::identify,
     selector::{SelectionCandidate, select_session},
     source_icon::read_source_icon_data_url,
+    spectrum::AudioSpectrumController,
     thumbnail::read_thumbnail_data_url,
     volume::ApplicationVolumeController,
 };
@@ -48,6 +49,7 @@ pub(super) enum WorkerMessage {
     GetVolume(mpsc::SyncSender<Option<MediaVolumeSnapshot>>),
     SetVolume(f32, mpsc::SyncSender<Result<MediaVolumeSnapshot, String>>),
     ToggleMute(mpsc::SyncSender<Result<MediaVolumeSnapshot, String>>),
+    SpectrumEnabled(bool, mpsc::SyncSender<Result<(), String>>),
     VolumeChanged(u64),
     VolumeSessionsChanged(u64),
     Shutdown,
@@ -149,6 +151,18 @@ impl MediaService {
             .recv_timeout(WORKER_RESPONSE_TIMEOUT)
             .map_err(|_| "媒体会话未返回静音切换结果".to_owned())?
     }
+
+    /// 启用或停止当前播放器的真实音频频谱采集。
+    pub fn set_spectrum_enabled(&self, enabled: bool) -> Result<(), String> {
+        let (result_sender, result_receiver) = mpsc::sync_channel(1);
+        self.inner
+            .sender
+            .send(WorkerMessage::SpectrumEnabled(enabled, result_sender))
+            .map_err(|_| "媒体会话监控线程不可用".to_owned())?;
+        result_receiver
+            .recv_timeout(WORKER_RESPONSE_TIMEOUT)
+            .map_err(|_| "媒体会话未返回频谱开关结果".to_owned())?
+    }
 }
 
 impl Drop for MediaServiceInner {
@@ -190,9 +204,10 @@ struct SessionEntry {
 }
 
 /// 把当前媒体目标及其应用音量绑定保持为同一份运行时状态。
-struct SelectedMedia {
+struct SelectedMedia<R: Runtime> {
     id: Option<u64>,
     volume: ApplicationVolumeController,
+    spectrum: AudioSpectrumController<R>,
 }
 
 /// 单次时间线刷新结果，用于区分轻量位置更新与会话质量变化。
@@ -245,6 +260,7 @@ fn run_worker<R: Runtime>(
     let mut selected = SelectedMedia {
         id: None,
         volume: ApplicationVolumeController::new(sender.clone()),
+        spectrum: AudioSpectrumController::new(app.clone()),
     };
     synchronize_sessions(
         &manager.manager,
@@ -394,14 +410,20 @@ fn run_worker<R: Runtime>(
                 }
                 let _ = result_sender.send(result);
             }
+            WorkerMessage::SpectrumEnabled(enabled, result_sender) => {
+                let result = selected.spectrum.set_enabled(enabled);
+                let _ = result_sender.send(result);
+            }
             WorkerMessage::VolumeChanged(target_id) => {
                 if selected.id == Some(target_id) {
+                    selected.spectrum.bind(selected.volume.capture_process_id());
                     publish_volume(&app, selected.volume.snapshot());
                 }
             }
             WorkerMessage::VolumeSessionsChanged(target_id) => {
                 if selected.id == Some(target_id) {
                     rebind_selected_volume(&mut selected.volume, &sessions, target_id);
+                    selected.spectrum.bind(selected.volume.capture_process_id());
                     publish_volume(&app, selected.volume.snapshot());
                 }
             }
@@ -689,7 +711,7 @@ fn reconcile_selection_and_volume<R: Runtime>(
     snapshot: &RwLock<Option<MediaSessionSnapshot>>,
     manager: &GlobalSystemMediaTransportControlsSessionManager,
     entries: &[SessionEntry],
-    selected: &mut SelectedMedia,
+    selected: &mut SelectedMedia<R>,
     policy: &MediaSessionSelectionPolicy,
     force_publish: bool,
 ) {
@@ -703,6 +725,7 @@ fn reconcile_selection_and_volume<R: Runtime>(
         force_publish,
     ) {
         bind_selected_volume(&mut selected.volume, entries, selected.id);
+        selected.spectrum.bind(selected.volume.capture_process_id());
         publish_volume(app, selected.volume.snapshot());
     }
 }

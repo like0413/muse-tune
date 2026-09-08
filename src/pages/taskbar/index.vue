@@ -31,6 +31,7 @@ import { useTaskbarAutoHide } from '@/features/taskbar/useTaskbarAutoHide'
 import { useTaskbarForegroundColor } from '@/features/theme/useTaskbarForegroundColor'
 import { useTaskbarProgressColor } from '@/features/theme/useTaskbarProgressColor'
 
+import AudioSpectrumElement from './components/AudioSpectrumElement.vue'
 import CoverElement from './components/CoverElement.vue'
 import PlaybackControlsElement from './components/PlaybackControlsElement.vue'
 import TrackInfoElement from './components/TrackInfoElement.vue'
@@ -168,6 +169,13 @@ onUnmounted(() => {
     aria-label="Muse Tune 任务栏播放器"
     @contextmenu.prevent="openSettings"
   >
+    <AudioSpectrumElement
+      :theme-color="progressColor"
+      :foreground-color="foregroundColor"
+      :progress="progress"
+      :overlaps-progress-gradient="progressStyle === 'vertical-gradient'"
+    />
+
     <component
       :is="taskbarElementComponents[element]"
       v-for="element in elementOrder"
@@ -178,7 +186,7 @@ onUnmounted(() => {
 
     <div
       v-if="timeline"
-      class="pointer-events-none absolute inset-0 z-0"
+      class="pointer-events-none absolute inset-0"
       role="progressbar"
       aria-label="播放进度"
       aria-valuemin="0"
@@ -187,11 +195,11 @@ onUnmounted(() => {
     >
       <div
         v-if="progressStyle === 'bottom'"
-        class="absolute left-0 h-0.5 bg-(--taskbar-progress-color)"
+        class="absolute left-0 z-0 h-0.5 bg-(--taskbar-progress-color)"
         :class="progressBarPositionClass"
         :style="barProgressStyle"
       />
-      <div v-else class="absolute inset-y-0 left-0" :style="verticalProgressStyle">
+      <div v-else class="absolute inset-y-0 left-0 z-0" :style="verticalProgressStyle">
         <div class="absolute inset-y-0 right-0 w-px bg-(--taskbar-progress-color)" />
       </div>
     </div>

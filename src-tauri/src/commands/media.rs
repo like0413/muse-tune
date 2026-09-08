@@ -71,3 +71,15 @@ pub async fn toggle_current_media_mute(
         .await
         .map_err(|error| format!("等待应用静音切换结果失败: {error}"))?
 }
+
+/// 启用或停止当前播放器的按进程音频频谱采集。
+#[tauri::command]
+pub async fn set_media_spectrum_enabled(
+    enabled: bool,
+    service: State<'_, MediaService>,
+) -> Result<(), String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || service.set_spectrum_enabled(enabled))
+        .await
+        .map_err(|error| format!("等待频谱开关结果失败: {error}"))?
+}

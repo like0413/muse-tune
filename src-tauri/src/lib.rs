@@ -30,6 +30,7 @@ pub fn run() {
             commands::media::get_current_media_volume,
             commands::media::get_current_media_session,
             commands::media::set_current_media_volume,
+            commands::media::set_media_spectrum_enabled,
             commands::media::set_media_session_selection_policy,
             commands::media::toggle_current_media_mute,
             commands::system::get_system_accent_color,

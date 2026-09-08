@@ -161,7 +161,12 @@ impl ApplicationVolumeController {
                     continue;
                 };
                 if process_ids.contains(&process_id) {
-                    match VolumeSessionRegistration::new(control, self.sender.clone(), target_id) {
+                    match VolumeSessionRegistration::new(
+                        control,
+                        process_id,
+                        self.sender.clone(),
+                        target_id,
+                    ) {
                         Ok(registration) => self.session_registrations.push(registration),
                         Err(error) => log::warn!("订阅播放器音量会话失败: {error}"),
                     }
@@ -169,6 +174,15 @@ impl ApplicationVolumeController {
             }
         }
         Ok(())
+    }
+
+    /// 返回活动音频会话对应的进程，供按进程回环捕获复用同一目标。
+    pub(super) fn capture_process_id(&self) -> Option<u32> {
+        self.session_registrations
+            .iter()
+            .find(|registration| registration.is_active())
+            .or_else(|| self.session_registrations.first())
+            .map(|registration| registration.process_id)
     }
 }
 
@@ -191,6 +205,7 @@ impl Drop for DeviceRegistration {
 /// 保持单个应用音频会话及其事件回调存活。
 struct VolumeSessionRegistration {
     control: IAudioSessionControl,
+    process_id: u32,
     volume: ISimpleAudioVolume,
     events: IAudioSessionEvents,
 }
@@ -199,6 +214,7 @@ impl VolumeSessionRegistration {
     /// 为匹配到的音频会话订阅音量、状态与断开事件。
     fn new(
         control: IAudioSessionControl,
+        process_id: u32,
         sender: Sender<WorkerMessage>,
         target_id: u64,
     ) -> windows::core::Result<Self> {
@@ -208,6 +224,7 @@ impl VolumeSessionRegistration {
         unsafe { control.RegisterAudioSessionNotification(&events) }?;
         Ok(Self {
             control,
+            process_id,
             volume,
             events,
         })

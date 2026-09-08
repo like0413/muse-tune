@@ -1,0 +1,300 @@
+//! 使用 Windows 按进程回环捕获生成当前播放器的真实音频频谱。
+
+use std::{
+    collections::VecDeque,
+    ops::Range,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread::{self, JoinHandle},
+    time::{Duration, Instant},
+};
+
+use rustfft::{FftPlanner, num_complex::Complex};
+use tauri::{AppHandle, Emitter, Runtime};
+use wasapi::{AudioClient, Direction, SampleType, StreamMode, WaveFormat, initialize_mta};
+
+pub(super) const MEDIA_SPECTRUM_CHANGED_EVENT: &str = "media://spectrum-changed";
+
+const SAMPLE_RATE: u32 = 48_000;
+const CHANNEL_COUNT: usize = 2;
+const BYTES_PER_SAMPLE: usize = size_of::<f32>();
+const FFT_SIZE: usize = 2_048;
+const OUTPUT_BAND_COUNT: usize = 64;
+const MIN_FREQUENCY_HZ: f32 = 45.0;
+const MAX_FREQUENCY_HZ: f32 = 16_000.0;
+const FRAME_INTERVAL: Duration = Duration::from_millis(33);
+const STOP_CHECK_INTERVAL_MS: u32 = 100;
+const NOISE_FLOOR_DB: f32 = -72.0;
+const PEAK_DB: f32 = -8.0;
+
+/// 管理频谱开关、当前捕获进程以及唯一的捕获线程。
+pub(super) struct AudioSpectrumController<R: Runtime> {
+    app: AppHandle<R>,
+    enabled: bool,
+    process_id: Option<u32>,
+    worker: Option<SpectrumWorker>,
+}
+
+impl<R: Runtime> AudioSpectrumController<R> {
+    /// 创建默认关闭、尚未绑定播放器的频谱控制器。
+    pub(super) fn new(app: AppHandle<R>) -> Self {
+        Self {
+            app,
+            enabled: false,
+            process_id: None,
+            worker: None,
+        }
+    }
+
+    /// 切换频谱采集；关闭时立即释放 WASAPI 流并清空画面。
+    pub(super) fn set_enabled(&mut self, enabled: bool) -> Result<(), String> {
+        if self.enabled == enabled {
+            return Ok(());
+        }
+        self.enabled = enabled;
+        self.restart()
+    }
+
+    /// 绑定当前实际发声进程；播放器未创建音频会话时保持空闲。
+    pub(super) fn bind(&mut self, process_id: Option<u32>) {
+        if self.process_id == process_id {
+            return;
+        }
+        self.process_id = process_id;
+        if let Err(error) = self.restart() {
+            log::warn!("切换播放器频谱捕获目标失败: {error}");
+        }
+    }
+
+    /// 停止旧目标并在需要时启动新目标，保证同时只有一个捕获流。
+    fn restart(&mut self) -> Result<(), String> {
+        self.worker.take();
+        emit_spectrum(&self.app, &zero_frame());
+
+        let Some(process_id) = self.process_id.filter(|_| self.enabled) else {
+            return Ok(());
+        };
+        self.worker = Some(SpectrumWorker::spawn(self.app.clone(), process_id)?);
+        Ok(())
+    }
+}
+
+/// 捕获线程句柄；释放时通过原子信号结束事件等待并回收线程。
+struct SpectrumWorker {
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl SpectrumWorker {
+    /// 为单个播放器进程创建按事件驱动的回环捕获线程。
+    fn spawn<R: Runtime>(app: AppHandle<R>, process_id: u32) -> Result<Self, String> {
+        let stop = Arc::new(AtomicBool::new(false));
+        let worker_stop = Arc::clone(&stop);
+        let thread = thread::Builder::new()
+            .name("media-spectrum-capture".to_owned())
+            .spawn(move || {
+                if let Err(error) = capture_spectrum(&app, process_id, &worker_stop) {
+                    log::warn!("捕获播放器音频频谱失败: {error}");
+                    emit_spectrum(&app, &zero_frame());
+                }
+            })
+            .map_err(|error| error.to_string())?;
+        Ok(Self {
+            stop,
+            thread: Some(thread),
+        })
+    }
+}
+
+impl Drop for SpectrumWorker {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        if let Some(thread) = self.thread.take()
+            && thread.join().is_err()
+        {
+            log::warn!("播放器频谱捕获线程异常退出");
+        }
+    }
+}
+
+/// 初始化按进程 WASAPI 流，并在音频事件到达时生成频谱帧。
+fn capture_spectrum<R: Runtime>(
+    app: &AppHandle<R>,
+    process_id: u32,
+    stop: &AtomicBool,
+) -> Result<(), String> {
+    initialize_mta().ok().map_err(|error| error.to_string())?;
+
+    let format = WaveFormat::new(
+        32,
+        32,
+        &SampleType::Float,
+        SAMPLE_RATE as usize,
+        CHANNEL_COUNT,
+        None,
+    );
+    let mut audio_client = AudioClient::new_application_loopback_client(process_id, true)
+        .map_err(|error| error.to_string())?;
+    audio_client
+        .initialize_client(
+            &format,
+            &Direction::Capture,
+            &StreamMode::EventsShared {
+                autoconvert: true,
+                buffer_duration_hns: 0,
+            },
+        )
+        .map_err(|error| error.to_string())?;
+    let audio_event = audio_client
+        .set_get_eventhandle()
+        .map_err(|error| error.to_string())?;
+    let capture_client = audio_client
+        .get_audiocaptureclient()
+        .map_err(|error| error.to_string())?;
+    audio_client
+        .start_stream()
+        .map_err(|error| error.to_string())?;
+
+    let mut samples = VecDeque::with_capacity(FFT_SIZE);
+    let mut packet = Vec::new();
+    let mut analyzer = SpectrumAnalyzer::new();
+    let mut last_frame_at = Instant::now() - FRAME_INTERVAL;
+
+    while !stop.load(Ordering::Acquire) {
+        while let Some(frame_count) = capture_client
+            .get_next_packet_size()
+            .map_err(|error| error.to_string())?
+            .filter(|count| *count > 0)
+        {
+            let packet_size = frame_count as usize * CHANNEL_COUNT * BYTES_PER_SAMPLE;
+            packet.resize(packet_size, 0);
+            let (read_frames, info) = capture_client
+                .read_from_device(&mut packet)
+                .map_err(|error| error.to_string())?;
+            append_mono_samples(
+                &mut samples,
+                &packet[..read_frames as usize * CHANNEL_COUNT * BYTES_PER_SAMPLE],
+                info.flags.silent,
+            );
+        }
+
+        if samples.len() == FFT_SIZE && last_frame_at.elapsed() >= FRAME_INTERVAL {
+            emit_spectrum(app, analyzer.analyze(&samples));
+            last_frame_at = Instant::now();
+        }
+
+        // WASAPI 音频到达事件驱动采集；短超时只用于响应线程停止，不查询媒体状态。
+        let _ = audio_event.wait_for_event(STOP_CHECK_INTERVAL_MS);
+    }
+
+    let _ = audio_client.stop_stream();
+    Ok(())
+}
+
+/// 将交错双声道 float32 数据折叠为单声道，并仅保留最新 FFT 窗口。
+fn append_mono_samples(samples: &mut VecDeque<f32>, packet: &[u8], silent: bool) {
+    let (frames, _) = packet.as_chunks::<{ CHANNEL_COUNT * BYTES_PER_SAMPLE }>();
+    for frame in frames {
+        let sample = if silent {
+            0.0
+        } else {
+            let left = f32::from_ne_bytes(frame[..4].try_into().unwrap_or_default());
+            let right = f32::from_ne_bytes(frame[4..8].try_into().unwrap_or_default());
+            (left + right) * 0.5
+        };
+        if samples.len() == FFT_SIZE {
+            samples.pop_front();
+        }
+        samples.push_back(sample);
+    }
+}
+
+/// 复用 FFT 计划和工作缓冲区，避免每帧重新分配昂贵对象。
+struct SpectrumAnalyzer {
+    fft: Arc<dyn rustfft::Fft<f32>>,
+    window: Vec<f32>,
+    buffer: Vec<Complex<f32>>,
+    band_ranges: Vec<Range<usize>>,
+    smoothed: Vec<f32>,
+}
+
+impl SpectrumAnalyzer {
+    /// 创建 Hann 窗与固定大小 FFT 计划。
+    fn new() -> Self {
+        let mut planner = FftPlanner::new();
+        let fft = planner.plan_fft_forward(FFT_SIZE);
+        let window = (0..FFT_SIZE)
+            .map(|index| {
+                0.5 - 0.5
+                    * (2.0 * std::f32::consts::PI * index as f32 / (FFT_SIZE - 1) as f32).cos()
+            })
+            .collect();
+        let frequency_ratio = MAX_FREQUENCY_HZ / MIN_FREQUENCY_HZ;
+        let band_ranges = (0..OUTPUT_BAND_COUNT)
+            .map(|band| {
+                let low =
+                    MIN_FREQUENCY_HZ * frequency_ratio.powf(band as f32 / OUTPUT_BAND_COUNT as f32);
+                let high = MIN_FREQUENCY_HZ
+                    * frequency_ratio.powf((band + 1) as f32 / OUTPUT_BAND_COUNT as f32);
+                let first_bin = frequency_to_bin(low);
+                first_bin..frequency_to_bin(high).max(first_bin + 1).min(FFT_SIZE / 2)
+            })
+            .collect();
+        Self {
+            fft,
+            window,
+            buffer: vec![Complex::default(); FFT_SIZE],
+            band_ranges,
+            smoothed: zero_frame(),
+        }
+    }
+
+    /// 计算对数频带，并用更快的上升、更缓的回落减少视觉抖动。
+    fn analyze(&mut self, samples: &VecDeque<f32>) -> &[f32] {
+        for ((output, sample), window) in self.buffer.iter_mut().zip(samples).zip(&self.window) {
+            *output = Complex::new(sample * window, 0.0);
+        }
+        self.fft.process(&mut self.buffer);
+
+        for (band, range) in self.band_ranges.iter().enumerate() {
+            let magnitude = self.buffer[range.clone()]
+                .iter()
+                .map(|value| value.norm())
+                .fold(0.0_f32, f32::max)
+                / (FFT_SIZE as f32 * 0.5);
+            let decibels = 20.0 * magnitude.max(1.0e-6).log10();
+            let normalized = ((decibels - NOISE_FLOOR_DB) / (PEAK_DB - NOISE_FLOOR_DB))
+                .clamp(0.0, 1.0)
+                .sqrt();
+            let smoothing = if normalized > self.smoothed[band] {
+                0.68
+            } else {
+                0.2
+            };
+            self.smoothed[band] += (normalized - self.smoothed[band]) * smoothing;
+        }
+        &self.smoothed
+    }
+}
+
+/// 将频率映射到 FFT 下标，并跳过没有视觉意义的直流分量。
+fn frequency_to_bin(frequency: f32) -> usize {
+    ((frequency * FFT_SIZE as f32 / SAMPLE_RATE as f32).floor() as usize).max(1)
+}
+
+/// 创建固定长度的静默帧。
+fn zero_frame() -> Vec<f32> {
+    vec![0.0; OUTPUT_BAND_COUNT]
+}
+
+/// 将紧凑频谱帧定向发送到任务栏 WebView。
+fn emit_spectrum<R: Runtime>(app: &AppHandle<R>, frame: &[f32]) {
+    let payload = std::array::from_fn::<_, OUTPUT_BAND_COUNT, _>(|index| {
+        (frame[index].clamp(0.0, 1.0) * u8::MAX as f32).round() as u8
+    });
+    if let Err(error) = app.emit_to("taskbar", MEDIA_SPECTRUM_CHANGED_EVENT, payload.as_slice()) {
+        log::warn!("向任务栏广播播放器频谱失败: {error}");
+    }
+}

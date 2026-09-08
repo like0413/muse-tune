@@ -6,6 +6,7 @@ mod players;
 mod process;
 mod selector;
 mod source_icon;
+mod spectrum;
 mod thumbnail;
 mod volume;
 
