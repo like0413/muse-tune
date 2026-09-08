@@ -12,7 +12,8 @@ impl PlayerAdapter for SodaMusicAdapter {
     }
 
     fn matches(&self, source_app_id: &str) -> bool {
-        source_app_id.contains("sodamusic")
+        source_app_id.contains("汽水音乐")
+            || source_app_id.contains("sodamusic")
             || source_app_id.contains("soda.music")
             || source_app_id.contains("qishui")
     }

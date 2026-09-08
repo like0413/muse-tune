@@ -7,7 +7,9 @@ mod selector;
 mod source_icon;
 mod thumbnail;
 
-pub use model::{MediaControlAction, MediaSessionSelectionPolicy, MediaSessionSnapshot};
+pub use model::{
+    MediaControlAction, MediaSessionSelectionPolicy, MediaSessionSnapshot, MediaTimeline,
+};
 pub use monitor::MediaService;
 
 /// 启动媒体会话服务。

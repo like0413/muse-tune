@@ -13,14 +13,14 @@ use windows::{
     Media::Control::{
         CurrentSessionChangedEventArgs, GlobalSystemMediaTransportControlsSession,
         GlobalSystemMediaTransportControlsSessionManager, MediaPropertiesChangedEventArgs,
-        PlaybackInfoChangedEventArgs, SessionsChangedEventArgs,
+        PlaybackInfoChangedEventArgs, SessionsChangedEventArgs, TimelinePropertiesChangedEventArgs,
     },
     Win32::System::WinRT::{RO_INIT_MULTITHREADED, RoInitialize, RoUninitialize},
 };
 
 use super::{
     MediaControlAction, MediaMetadata, MediaPlayback, MediaPlaybackControls, MediaPlayer,
-    MediaSessionSelectionPolicy, MediaSessionSnapshot,
+    MediaSessionSelectionPolicy, MediaSessionSnapshot, MediaTimeline,
     model::MediaPlaybackStatus,
     players::identify,
     selector::{SelectionCandidate, select_session},
@@ -29,12 +29,15 @@ use super::{
 };
 
 pub(super) const MEDIA_SESSION_CHANGED_EVENT: &str = "media://session-changed";
+pub(super) const MEDIA_TIMELINE_CHANGED_EVENT: &str = "media://timeline-changed";
 const WORKER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
+const TICKS_PER_MILLISECOND: i64 = 10_000;
 
 enum WorkerMessage {
     ManagerChanged,
     MediaPropertiesChanged(u64),
     PlaybackInfoChanged(u64),
+    TimelinePropertiesChanged(u64),
     SelectionPolicyChanged(
         MediaSessionSelectionPolicy,
         mpsc::SyncSender<Result<(), String>>,
@@ -132,6 +135,7 @@ struct SessionRegistration {
     session: GlobalSystemMediaTransportControlsSession,
     media_properties_changed_token: i64,
     playback_info_changed_token: i64,
+    timeline_properties_changed_token: Option<i64>,
 }
 
 /// 单个 GSMTC 会话的事件注册、快照与最近播放序号。
@@ -150,6 +154,9 @@ impl Drop for SessionRegistration {
         let _ = self
             .session
             .RemovePlaybackInfoChanged(self.playback_info_changed_token);
+        if let Some(token) = self.timeline_properties_changed_token {
+            let _ = self.session.RemoveTimelinePropertiesChanged(token);
+        }
     }
 }
 
@@ -222,14 +229,19 @@ fn run_worker<R: Runtime>(
                 );
             }
             WorkerMessage::MediaPropertiesChanged(session_id) => {
-                if refresh_metadata(&mut sessions, session_id) && selected_id == Some(session_id) {
+                let metadata_changed = refresh_metadata(&mut sessions, session_id);
+                if metadata_changed {
+                    refresh_timeline(&mut sessions, session_id);
+                }
+                if metadata_changed && selected_id == Some(session_id) {
                     publish_selected_snapshot(&app, &snapshot, &sessions, selected_id);
                 }
             }
             WorkerMessage::PlaybackInfoChanged(session_id) => {
-                let refreshed =
+                let playback_changed =
                     refresh_playback(&mut sessions, session_id, &mut next_activity_order);
-                if refreshed {
+                let timeline_changed = refresh_timeline(&mut sessions, session_id);
+                if playback_changed {
                     let selected_was_refreshed = selected_id == Some(session_id);
                     reconcile_selection(
                         &app,
@@ -240,6 +252,13 @@ fn run_worker<R: Runtime>(
                         &selection_policy,
                         selected_was_refreshed,
                     );
+                } else if timeline_changed && selected_id == Some(session_id) {
+                    publish_selected_timeline(&app, &snapshot, &sessions, selected_id);
+                }
+            }
+            WorkerMessage::TimelinePropertiesChanged(session_id) => {
+                if refresh_timeline(&mut sessions, session_id) && selected_id == Some(session_id) {
+                    publish_selected_timeline(&app, &snapshot, &sessions, selected_id);
                 }
             }
             WorkerMessage::SelectionPolicyChanged(policy, result_sender) => {
@@ -403,11 +422,22 @@ fn bind_session(
             return None;
         }
     };
+    let timeline_sender = sender.clone();
+    let timeline_properties_changed_token = session
+        .TimelinePropertiesChanged(&TypedEventHandler::<
+            GlobalSystemMediaTransportControlsSession,
+            TimelinePropertiesChangedEventArgs,
+        >::new(move |_, _| {
+            let _ = timeline_sender.send(WorkerMessage::TimelinePropertiesChanged(session_id));
+            Ok(())
+        }))
+        .ok();
 
     Some(SessionRegistration {
         session,
         media_properties_changed_token,
         playback_info_changed_token,
+        timeline_properties_changed_token,
     })
 }
 
@@ -460,6 +490,22 @@ fn refresh_playback_entry(entry: &mut SessionEntry, next_activity_order: &mut u6
     true
 }
 
+/// 刷新指定会话的时间线，重复的等值事件不会触发前端更新。
+fn refresh_timeline(entries: &mut [SessionEntry], session_id: u64) -> bool {
+    let Some(entry) = entries.iter_mut().find(|entry| entry.id == session_id) else {
+        return false;
+    };
+    let timeline = read_timeline(&entry.registration.session).unwrap_or_else(|error| {
+        log::warn!("刷新媒体时间线失败: {error}");
+        None
+    });
+    if entry.snapshot.timeline == timeline {
+        return false;
+    }
+    entry.snapshot.timeline = timeline;
+    true
+}
+
 /// 按当前策略重新选择会话，仅在目标或已显示内容变化时广播。
 fn reconcile_selection<R: Runtime>(
     app: &AppHandle<R>,
@@ -504,6 +550,27 @@ fn publish_selected_snapshot<R: Runtime>(
         .find(|entry| Some(entry.id) == selected_id)
         .map(|entry| entry.snapshot.clone());
     publish_snapshot(app, snapshot, next);
+}
+
+/// 仅发布轻量时间线，避免播放器定期更新时间时重复序列化封面。
+fn publish_selected_timeline<R: Runtime>(
+    app: &AppHandle<R>,
+    snapshot: &RwLock<Option<MediaSessionSnapshot>>,
+    entries: &[SessionEntry],
+    selected_id: Option<u64>,
+) {
+    let next = entries
+        .iter()
+        .find(|entry| Some(entry.id) == selected_id)
+        .and_then(|entry| entry.snapshot.timeline.clone());
+    if let Ok(mut current) = snapshot.write()
+        && let Some(current) = current.as_mut()
+    {
+        current.timeline.clone_from(&next);
+    }
+    if let Err(error) = app.emit(MEDIA_TIMELINE_CHANGED_EVENT, &next) {
+        log::warn!("向任务栏广播媒体时间线失败: {error}");
+    }
 }
 
 /// 去重固定优先级并补齐四个已接入播放器，抵御损坏的持久化配置。
@@ -553,6 +620,7 @@ fn read_snapshot(
         player: identified.player,
         metadata,
         playback: read_playback(session).unwrap_or_default(),
+        timeline: read_timeline(session).unwrap_or_default(),
     })
 }
 
@@ -606,6 +674,54 @@ fn read_playback(
             can_skip_previous: controls.IsPreviousEnabled().unwrap_or_default(),
         },
     })
+}
+
+/// 读取并校验 GSMTC 时间线；无有效起止区间时不向前端伪造进度。
+fn read_timeline(
+    session: &GlobalSystemMediaTransportControlsSession,
+) -> windows::core::Result<Option<MediaTimeline>> {
+    let timeline = session.GetTimelineProperties()?;
+    let start_time_ms = timeline.StartTime()?.Duration / TICKS_PER_MILLISECOND;
+    let end_time_ms = timeline.EndTime()?.Duration / TICKS_PER_MILLISECOND;
+    if end_time_ms <= start_time_ms {
+        return Ok(None);
+    }
+
+    let playback = session.GetPlaybackInfo().ok();
+    let controls = playback.as_ref().and_then(|value| value.Controls().ok());
+    let min_seek_time_ms = timeline
+        .MinSeekTime()?
+        .Duration
+        .div_euclid(TICKS_PER_MILLISECOND)
+        .clamp(start_time_ms, end_time_ms);
+    let max_seek_time_ms = timeline
+        .MaxSeekTime()?
+        .Duration
+        .div_euclid(TICKS_PER_MILLISECOND)
+        .clamp(min_seek_time_ms, end_time_ms);
+    let position_ms = timeline
+        .Position()?
+        .Duration
+        .div_euclid(TICKS_PER_MILLISECOND)
+        .clamp(start_time_ms, end_time_ms);
+    let playback_rate = playback
+        .and_then(|value| value.PlaybackRate().ok())
+        .and_then(|value| value.Value().ok())
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .unwrap_or(1.0);
+
+    Ok(Some(MediaTimeline {
+        start_time_ms,
+        end_time_ms,
+        position_ms,
+        min_seek_time_ms,
+        max_seek_time_ms,
+        playback_rate,
+        can_seek: controls
+            .and_then(|value| value.IsPlaybackPositionEnabled().ok())
+            .unwrap_or_default()
+            && max_seek_time_ms > min_seek_time_ms,
+    }))
 }
 
 /// 原子替换缓存并把相同值广播给所有任务栏窗口。

@@ -8,6 +8,20 @@ pub struct MediaSessionSnapshot {
     pub player: MediaPlayer,
     pub metadata: MediaMetadata,
     pub playback: MediaPlayback,
+    pub timeline: Option<MediaTimeline>,
+}
+
+/// 播放器通过 GSMTC 发布的标准时间线；所有时长统一为毫秒。
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaTimeline {
+    pub start_time_ms: i64,
+    pub end_time_ms: i64,
+    pub position_ms: i64,
+    pub min_seek_time_ms: i64,
+    pub max_seek_time_ms: i64,
+    pub playback_rate: f64,
+    pub can_seek: bool,
 }
 
 /// 已接入播放器及无法识别的通用 SMTC 会话。

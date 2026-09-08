@@ -2,35 +2,46 @@ import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
 
-import type { MediaControlAction, MediaSessionSnapshot } from './types'
+import type { MediaControlAction, MediaSessionSnapshot, MediaTimeline } from './types'
 
 const MEDIA_SESSION_CHANGED_EVENT = 'media://session-changed'
+const MEDIA_TIMELINE_CHANGED_EVENT = 'media://timeline-changed'
 
 /** 同步 Windows 当前媒体会话，并提供串行基础播放控制。 */
 export function useMediaSession() {
   const session = shallowRef<MediaSessionSnapshot | null>(null)
+  const timeline = shallowRef<MediaTimeline | null>(null)
   const controlPending = shallowRef(false)
   let receivedEvent = false
   let disposed = false
-  let unlisten: UnlistenFn | undefined
+  let unlistenSession: UnlistenFn | undefined
+  let unlistenTimeline: UnlistenFn | undefined
 
   /** 先建立事件监听，再读取缓存，避免页面加载期间漏掉会话切换。 */
   async function initialize() {
     try {
-      const stopListener = await listen<MediaSessionSnapshot | null>(
-        MEDIA_SESSION_CHANGED_EVENT,
-        ({ payload }) => {
+      const [stopSessionListener, stopTimelineListener] = await Promise.all([
+        listen<MediaSessionSnapshot | null>(MEDIA_SESSION_CHANGED_EVENT, ({ payload }) => {
           receivedEvent = true
           session.value = payload
-        },
-      )
+          timeline.value = payload?.timeline ?? null
+        }),
+        listen<MediaTimeline | null>(MEDIA_TIMELINE_CHANGED_EVENT, ({ payload }) => {
+          timeline.value = payload
+        }),
+      ])
       if (disposed) {
-        stopListener()
+        stopSessionListener()
+        stopTimelineListener()
         return
       }
-      unlisten = stopListener
+      unlistenSession = stopSessionListener
+      unlistenTimeline = stopTimelineListener
       const initial = await invoke<MediaSessionSnapshot | null>('get_current_media_session')
-      if (!disposed && !receivedEvent) session.value = initial
+      if (!disposed && !receivedEvent) {
+        session.value = initial
+        timeline.value = initial?.timeline ?? null
+      }
     } catch (error) {
       console.error('初始化 Windows 媒体会话失败', error)
     }
@@ -53,11 +64,13 @@ export function useMediaSession() {
   onMounted(initialize)
   onUnmounted(() => {
     disposed = true
-    unlisten?.()
+    unlistenSession?.()
+    unlistenTimeline?.()
   })
 
   return {
     session: readonly(session),
+    timeline: readonly(timeline),
     controlPending: readonly(controlPending),
     control,
   }

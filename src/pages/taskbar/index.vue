@@ -4,6 +4,7 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import type { Component } from 'vue'
 import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
 
+import { useMediaProgress } from '@/features/media/useMediaProgress'
 import { useMediaSession } from '@/features/media/useMediaSession'
 import { useMediaSessionSelectionPolicy } from '@/features/media/useMediaSessionSelectionPolicy'
 import {
@@ -40,7 +41,9 @@ const taskbarElementComponents: Record<TaskbarElement, Component> = {
   controls: PlaybackControlsElement,
 }
 
-const { session: mediaSession, controlPending, control } = useMediaSession()
+const { session: mediaSession, timeline, controlPending, control } = useMediaSession()
+const playbackStatus = computed(() => mediaSession.value?.playback.status ?? 'unknown')
+const { progress } = useMediaProgress(timeline, playbackStatus)
 useMediaSessionSelectionPolicy()
 useTaskbarAutoHide(mediaSession)
 const thumbnailDataUrl = computed(() => mediaSession.value?.metadata.thumbnailDataUrl ?? null)
@@ -51,7 +54,6 @@ const { foregroundColor } = useTaskbarForegroundColor(backgroundTransparency)
 const progressStyle = shallowRef<TaskbarProgressStyle>(DEFAULT_TASKBAR_PROGRESS_STYLE)
 const progressPosition = shallowRef<TaskbarProgressPosition>(DEFAULT_TASKBAR_PROGRESS_POSITION)
 const elementOrder = shallowRef<TaskbarElement[]>([...DEFAULT_TASKBAR_ELEMENT_ORDER])
-const progress = shallowRef(42)
 let unlistenBackgroundTransparencyChange: UnlistenFn | undefined
 let unlistenProgressStyleChange: UnlistenFn | undefined
 let unlistenProgressPositionChange: UnlistenFn | undefined
@@ -174,6 +176,7 @@ onUnmounted(() => {
     />
 
     <div
+      v-if="timeline"
       class="pointer-events-none absolute inset-0 z-0"
       role="progressbar"
       aria-label="播放进度"

@@ -46,9 +46,20 @@ export interface MediaPlayback {
   controls: MediaPlaybackControls
 }
 
+export interface MediaTimeline {
+  startTimeMs: number
+  endTimeMs: number
+  positionMs: number
+  minSeekTimeMs: number
+  maxSeekTimeMs: number
+  playbackRate: number
+  canSeek: boolean
+}
+
 export interface MediaSessionSnapshot {
   sourceIconDataUrl: string | null
   player: MediaPlayer
   metadata: MediaMetadata
   playback: MediaPlayback
+  timeline: MediaTimeline | null
 }

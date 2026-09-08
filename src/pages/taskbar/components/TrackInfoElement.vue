@@ -73,6 +73,6 @@ onUnmounted(() => {
     :class="alignment === 'right' ? 'items-end text-right' : 'items-start text-left'"
   >
     <ScrollingTrackTitle class="text-sm font-medium" :text="title" :scrolling="scrolling" />
-    <span class="text-muted-foreground max-w-full truncate text-xs">{{ artist }}</span>
+    <span class="text-foreground/80 max-w-full truncate text-xs">{{ artist }}</span>
   </div>
 </template>
