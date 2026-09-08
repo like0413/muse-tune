@@ -55,6 +55,8 @@ pub enum MediaSessionSelectionStrategy {
 pub struct MediaSessionSelectionPolicy {
     pub strategy: MediaSessionSelectionStrategy,
     pub player_priority: Vec<MediaPlayer>,
+    #[serde(default)]
+    pub only_supported_players: bool,
 }
 
 impl Default for MediaSessionSelectionPolicy {
@@ -67,6 +69,7 @@ impl Default for MediaSessionSelectionPolicy {
                 MediaPlayer::SodaMusic,
                 MediaPlayer::KugouMusic,
             ],
+            only_supported_players: false,
         }
     }
 }

@@ -120,10 +120,23 @@ pub fn set_display_target(target: String) -> Result<(), String> {
         .map_err(|_| "目标显示器状态不可用".to_owned())?;
     if state.value != target {
         state.value = target;
-        state.revision = state.revision.wrapping_add(1);
-        changed.notify_one();
+        mark_display_state_changed(&mut state, changed);
     }
     Ok(())
+}
+
+/// 接收任务栏 WinEvent，立即要求窗口管理线程重新枚举显示器。
+pub(super) fn request_display_refresh() {
+    let (state, changed) = &*DISPLAY_TARGET;
+    if let Ok(mut state) = state.lock() {
+        mark_display_state_changed(&mut state, changed);
+    }
+}
+
+/// 增加显示器状态版本并唤醒唯一的窗口管理线程。
+fn mark_display_state_changed(state: &mut DisplayTargetState, changed: &Condvar) {
+    state.revision = state.revision.wrapping_add(1);
+    changed.notify_one();
 }
 
 /// 启动独立监控线程，持续维护任务栏与播放器窗口的所有者关系。
@@ -277,7 +290,7 @@ fn maintain_bar_windows<R: Runtime>(app: AppHandle<R>) {
             );
         }
 
-        wait_for_display_change(observed_revision);
+        wait_for_display_change(observed_revision, !bars.is_empty());
     }
 }
 
@@ -289,19 +302,27 @@ fn display_target_snapshot() -> (String, u64) {
     )
 }
 
-/// 等待设置事件，并用低频超时兜底显示器热插拔与 Explorer 重建。
-fn wait_for_display_change(observed_revision: u64) {
+/// 优先等待设置或 WinEvent；没有可用事件源时才低频轮询恢复任务栏。
+fn wait_for_display_change(observed_revision: u64, has_managed_bar: bool) {
     let Ok(state) = DISPLAY_TARGET.0.lock() else {
         thread::sleep(RECOVERY_RETRY_DELAY);
         return;
     };
-    if DISPLAY_TARGET
-        .1
-        .wait_timeout_while(state, DISPLAY_TOPOLOGY_CHECK_INTERVAL, |state| {
-            state.revision == observed_revision
-        })
-        .is_err()
-    {
+    let event_driven = has_managed_bar && events::topology_events_available();
+    let wait_failed = if event_driven {
+        DISPLAY_TARGET
+            .1
+            .wait_while(state, |state| state.revision == observed_revision)
+            .is_err()
+    } else {
+        DISPLAY_TARGET
+            .1
+            .wait_timeout_while(state, DISPLAY_TOPOLOGY_CHECK_INTERVAL, |state| {
+                state.revision == observed_revision
+            })
+            .is_err()
+    };
+    if wait_failed {
         thread::sleep(RECOVERY_RETRY_DELAY);
     }
 }

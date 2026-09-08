@@ -201,6 +201,7 @@ fn run_worker<R: Runtime>(
         &mut next_session_id,
         &mut next_activity_order,
         false,
+        selection_policy.only_supported_players,
     );
     reconcile_selection(
         &app,
@@ -222,6 +223,7 @@ fn run_worker<R: Runtime>(
                     &mut next_session_id,
                     &mut next_activity_order,
                     true,
+                    selection_policy.only_supported_players,
                 );
                 let selected_was_refreshed =
                     refresh_all_playback(&mut sessions, &mut next_activity_order, selected_id);
@@ -237,7 +239,11 @@ fn run_worker<R: Runtime>(
             }
             WorkerMessage::MediaPropertiesChanged(session_id) => {
                 let metadata_changed = refresh_metadata(&mut sessions, session_id);
-                let timeline_refresh = if metadata_changed { refresh_timeline(&mut sessions, session_id) } else { Default::default() };
+                let timeline_refresh = if metadata_changed {
+                    refresh_timeline(&mut sessions, session_id)
+                } else {
+                    Default::default()
+                };
                 if metadata_changed || timeline_refresh.availability_changed {
                     let selected_was_refreshed = selected_id == Some(session_id);
                     reconcile_selection(
@@ -289,6 +295,15 @@ fn run_worker<R: Runtime>(
             }
             WorkerMessage::SelectionPolicyChanged(policy, result_sender) => {
                 selection_policy = normalize_selection_policy(policy);
+                synchronize_sessions(
+                    &manager.manager,
+                    &sender,
+                    &mut sessions,
+                    &mut next_session_id,
+                    &mut next_activity_order,
+                    false,
+                    selection_policy.only_supported_players,
+                );
                 reconcile_selection(
                     &app,
                     &snapshot,
@@ -362,6 +377,7 @@ fn synchronize_sessions(
     next_session_id: &mut u64,
     next_activity_order: &mut u64,
     new_playing_session_is_active: bool,
+    only_supported_players: bool,
 ) {
     let Ok(view) = manager.GetSessions() else {
         return;
@@ -370,13 +386,19 @@ fn synchronize_sessions(
         .filter_map(|index| view.GetAt(index).ok())
         .collect::<Vec<_>>();
 
-    entries.retain(|entry| sessions.contains(&entry.registration.session));
+    entries.retain(|entry| {
+        sessions.contains(&entry.registration.session)
+            && (!only_supported_players || entry.snapshot.player != MediaPlayer::Other)
+    });
 
     for session in sessions {
         if entries
             .iter()
             .any(|entry| entry.registration.session == session)
         {
+            continue;
+        }
+        if only_supported_players && !is_supported_session(&session) {
             continue;
         }
 
@@ -404,6 +426,14 @@ fn synchronize_sessions(
             activity_order,
         });
     }
+}
+
+/// 在建立事件订阅前判断会话是否属于四个已接入播放器。
+fn is_supported_session(session: &GlobalSystemMediaTransportControlsSession) -> bool {
+    session
+        .SourceAppUserModelId()
+        .map(|source_app_id| identify(&source_app_id.to_string()).player != MediaPlayer::Other)
+        .unwrap_or(false)
 }
 
 /// 管理器变化时补读所有轻量播放状态，兼容漏发单会话事件的播放器。

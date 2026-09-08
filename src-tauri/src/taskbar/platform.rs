@@ -10,7 +10,10 @@ use windows::{
         System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW},
         UI::{
             HiDpi::GetDpiForWindow,
-            Shell::{ABM_GETSTATE, ABS_AUTOHIDE, APPBARDATA, SHAppBarMessage},
+            Shell::{
+                ABM_GETSTATE, ABS_AUTOHIDE, APPBARDATA, QUNS_BUSY, QUNS_RUNNING_D3D_FULL_SCREEN,
+                SHAppBarMessage, SHQueryUserNotificationState,
+            },
             WindowsAndMessaging::{
                 FindWindowExW, GA_ROOT, GWL_EXSTYLE, GWLP_HWNDPARENT, GetAncestor, GetClassNameW,
                 GetForegroundWindow, GetWindowLongPtrW, HWND_TOPMOST, IsWindow, IsWindowVisible,
@@ -23,7 +26,7 @@ use windows::{
     core::PCWSTR,
 };
 
-use super::geometry::{ScreenRect, window_rect};
+use super::geometry::{ScreenRect, monitor_rect, window_rect};
 
 /// 读取 Windows 11 任务栏按钮对齐方式；读取失败时使用系统默认的居中布局。
 pub(super) fn taskbar_buttons_center_aligned() -> bool {
@@ -78,6 +81,23 @@ pub(super) fn taskbar_auto_hide_enabled() -> bool {
     };
     // SAFETY: `data` 已填写 Win32 要求的结构体大小，并在调用期间保持有效。
     unsafe { SHAppBarMessage(ABM_GETSTATE, &mut data) as u32 & ABS_AUTOHIDE != 0 }
+}
+
+/// 判断 Shell 是否在当前任务栏所在显示器检测到全屏应用或演示模式。
+pub(super) fn shell_reports_fullscreen_activity(taskbar: HWND) -> bool {
+    // SAFETY: API 不接收参数，只返回当前用户的 Shell 通知状态。
+    let fullscreen_activity = matches!(
+        unsafe { SHQueryUserNotificationState() },
+        Ok(QUNS_RUNNING_D3D_FULL_SCREEN | QUNS_BUSY)
+    );
+    if !fullscreen_activity {
+        return false;
+    }
+
+    // Shell 状态是全局的；用前台窗口所在显示器约束结果，避免一块屏幕的游戏隐藏全部 bar。
+    // SAFETY: 返回的句柄仅用于查询显示器，不接管其所有权。
+    let foreground = unsafe { GetForegroundWindow() };
+    !foreground.0.is_null() && monitor_rect(foreground) == monitor_rect(taskbar)
 }
 
 /// 判断任务栏是否被当前前台全屏窗口覆盖。
@@ -205,9 +225,9 @@ pub(super) fn redraw_bar(bar: HWND) {
 }
 
 /// 恢复播放器的任务栏层级，并保留已确认的位置与尺寸。
-pub(super) fn show_bar(bar: HWND) {
+pub(super) fn show_bar(bar: HWND) -> bool {
     // SAFETY: `bar` 是借用的有效窗口句柄，调用不激活窗口也不改动 owner 顺序。
-    let _ = unsafe {
+    unsafe {
         SetWindowPos(
             bar,
             Some(HWND_TOPMOST),
@@ -217,7 +237,8 @@ pub(super) fn show_bar(bar: HWND) {
             0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW,
         )
-    };
+        .is_ok()
+    }
 }
 
 /// 在任务栏暂不可用或被全屏覆盖时隐藏播放器。
@@ -244,6 +265,14 @@ pub(super) fn is_window_visible(window: HWND) -> bool {
 pub(super) fn window_dpi(window: HWND) -> u32 {
     // SAFETY: 调用只读取借用窗口句柄的 DPI。
     unsafe { GetDpiForWindow(window) }
+}
+
+/// 判断窗口是否为 Windows 主任务栏或副任务栏。
+pub(super) fn is_taskbar_window(window: HWND) -> bool {
+    matches!(
+        window_class_name(window).as_deref(),
+        Some("Shell_TrayWnd" | "Shell_SecondaryTrayWnd")
+    )
 }
 
 /// 判断窗口是否为不应计作全屏应用的 Shell 表面。

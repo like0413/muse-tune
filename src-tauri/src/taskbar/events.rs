@@ -5,7 +5,7 @@ use std::{
     collections::HashMap,
     sync::{
         Arc, LazyLock, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU32, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -33,6 +33,7 @@ thread_local! {
 }
 static MONITOR_THREADS: LazyLock<Mutex<HashMap<u32, Arc<AtomicBool>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+static TOPOLOGY_EVENT_HOOKS: AtomicU32 = AtomicU32::new(0);
 
 /// 在当前同步线程上合并布局失效状态。
 fn mark_layout_update() {
@@ -89,6 +90,7 @@ pub(super) struct WinEventHooks {
     foreground: Option<HWINEVENTHOOK>,
     structure: Option<HWINEVENTHOOK>,
     location: Option<HWINEVENTHOOK>,
+    topology_events: bool,
 }
 
 impl WinEventHooks {
@@ -104,13 +106,20 @@ impl WinEventHooks {
             threads.insert(thread_id, Arc::new(AtomicBool::new(false)));
         }
 
+        let foreground = install_win_event_hook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND);
+        let structure = install_win_event_hook(EVENT_OBJECT_CREATE, EVENT_OBJECT_REORDER);
+        let location =
+            install_win_event_hook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE);
+        let topology_events = structure.is_some() && location.is_some();
+        if topology_events {
+            TOPOLOGY_EVENT_HOOKS.fetch_add(1, Ordering::AcqRel);
+        }
+
         Self {
-            foreground: install_win_event_hook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND),
-            structure: install_win_event_hook(EVENT_OBJECT_CREATE, EVENT_OBJECT_REORDER),
-            location: install_win_event_hook(
-                EVENT_OBJECT_LOCATIONCHANGE,
-                EVENT_OBJECT_LOCATIONCHANGE,
-            ),
+            foreground,
+            structure,
+            location,
+            topology_events,
         }
     }
 
@@ -130,13 +139,21 @@ impl Drop for WinEventHooks {
         uninstall_win_event_hook(self.foreground.take());
         uninstall_win_event_hook(self.structure.take());
         uninstall_win_event_hook(self.location.take());
+        if self.topology_events {
+            TOPOLOGY_EVENT_HOOKS.fetch_sub(1, Ordering::AcqRel);
+        }
     }
 }
 
-/// 等待窗口状态、任务栏布局变化或健康检查超时。
+/// 判断至少一个任务栏同步线程是否能通过 WinEvent 感知显示器拓扑变化。
+pub(super) fn topology_events_available() -> bool {
+    TOPOLOGY_EVENT_HOOKS.load(Ordering::Acquire) > 0
+}
+
+/// 等待窗口状态、任务栏布局变化或调用方指定的必要截止时间。
 pub(super) fn wait_for_taskbar_change(timeout: Duration) -> TaskbarChange {
     // 进程外 WinEvent 会投递到安装钩子的线程。消息感知等待可立即响应事件；超时仅用于
-    // 检查窗口是否存活，以及在 API 或钩子失效后加快恢复，不参与 bar 动画。
+    // Shell 全屏查询、有限布局稳定采样和事件订阅失败后的恢复，不参与 bar 动画。
     let deadline = Instant::now() + timeout;
     loop {
         if WINDOW_STATE_CHANGED.replace(false) {
@@ -201,7 +218,7 @@ unsafe extern "system" fn handle_win_event(
     event: u32,
     window: HWND,
     object_id: i32,
-    _child_id: i32,
+    child_id: i32,
     _event_thread: u32,
     _event_time: u32,
 ) {
@@ -214,8 +231,13 @@ unsafe extern "system" fn handle_win_event(
     }
 
     // SAFETY: 此调用只读取 WinEvent 回调提供的借用句柄。
-    let root = unsafe { GetAncestor(window, GA_ROOT) };
-    let is_taskbar_event = WATCHED_TASKBAR.get() == root;
+    let watched_taskbar = WATCHED_TASKBAR.get();
+    let root = if window == watched_taskbar {
+        watched_taskbar
+    } else {
+        unsafe { GetAncestor(window, GA_ROOT) }
+    };
+    let is_taskbar_event = watched_taskbar == root;
     let taskbar_location_changed =
         is_taskbar_event && event == EVENT_OBJECT_LOCATIONCHANGE && object_id == OBJID_WINDOW.0;
     let taskbar_structure_changed = is_taskbar_event
@@ -227,6 +249,11 @@ unsafe extern "system" fn handle_win_event(
                 | EVENT_OBJECT_HIDE
                 | EVENT_OBJECT_REORDER
         );
+    let taskbar_created = event == EVENT_OBJECT_CREATE
+        && object_id == OBJID_WINDOW.0
+        && child_id == 0
+        && window == root
+        && super::platform::is_taskbar_window(window);
     // SAFETY: 返回的前台窗口句柄仅按值比较，不接管其所有权。
     let foreground_geometry_changed = event == EVENT_OBJECT_LOCATIONCHANGE
         && window == root
@@ -237,6 +264,19 @@ unsafe extern "system" fn handle_win_event(
     }
     if taskbar_location_changed || taskbar_structure_changed {
         TASKBAR_LAYOUT_CHANGED.set(true);
+    }
+    if taskbar_created
+        || (is_taskbar_event
+            && matches!(
+                event,
+                EVENT_OBJECT_CREATE
+                    | EVENT_OBJECT_DESTROY
+                    | EVENT_OBJECT_SHOW
+                    | EVENT_OBJECT_HIDE
+                    | EVENT_OBJECT_LOCATIONCHANGE
+            ))
+    {
+        super::request_display_refresh();
     }
 }
 

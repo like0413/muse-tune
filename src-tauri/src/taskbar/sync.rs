@@ -23,19 +23,49 @@ use super::{
         attach_bar_to_taskbar, clear_bar_clip_before_move, clip_bar, find_system_tray_rect,
         hide_bar, is_bar_attached_to_taskbar, is_bar_topmost,
         is_taskbar_covered_by_fullscreen_window, is_window_alive, is_window_visible, place_bar,
-        redraw_bar, show_bar, taskbar_auto_hide_enabled, taskbar_buttons_center_aligned,
-        window_dpi,
+        redraw_bar, shell_reports_fullscreen_activity, show_bar, taskbar_auto_hide_enabled,
+        taskbar_buttons_center_aligned, window_dpi,
     },
 };
 
 const RECOVERY_RETRY_DELAY: Duration = Duration::from_millis(400);
-const WINDOW_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(1);
+const FULLSCREEN_STATE_CHECK_INTERVAL: Duration = Duration::from_millis(250);
 const UIA_FALLBACK_QUERY_INTERVAL: Duration = Duration::from_secs(1);
 const MIN_CONTENT_WIDTH_DIP: i32 = 200;
 const MAX_CONTENT_WIDTH_DIP: i32 = 360;
 static TASKBAR_PLACEMENT: AtomicU8 = AtomicU8::new(TaskbarPlacement::Auto as u8);
 static TASKBAR_OVERLAP_PRIORITY: AtomicU8 = AtomicU8::new(TaskbarOverlapPriority::Bar as u8);
 static TASKBAR_CONTENT_WIDTH_DIP: AtomicI32 = AtomicI32::new(MAX_CONTENT_WIDTH_DIP);
+
+/// 隔离 Shell 未提供事件的全屏状态查询，状态未变化时不唤醒完整同步流程。
+struct FullscreenStateMonitor {
+    active: bool,
+    next_check_at: Instant,
+}
+
+impl FullscreenStateMonitor {
+    /// 读取初始状态，并安排下一次必要查询。
+    fn new(taskbar: HWND, now: Instant) -> Self {
+        Self {
+            active: shell_reports_fullscreen_activity(taskbar),
+            next_check_at: now + FULLSCREEN_STATE_CHECK_INTERVAL,
+        }
+    }
+
+    /// 到期时只读取一次 Shell 状态，并报告状态是否发生变化。
+    fn refresh_if_due(&mut self, taskbar: HWND, now: Instant) -> bool {
+        if now < self.next_check_at {
+            return false;
+        }
+        self.next_check_at = now + FULLSCREEN_STATE_CHECK_INTERVAL;
+        let active = shell_reports_fullscreen_activity(taskbar);
+        if active == self.active {
+            return false;
+        }
+        self.active = active;
+        true
+    }
+}
 
 /// 跨线程更新定位偏好，并通过线程消息唤醒同步循环。
 pub(super) fn set_placement(placement: TaskbarPlacement) {
@@ -92,6 +122,8 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
     let mut immediate_layout_needed = active_priority == TaskbarOverlapPriority::Bar;
     let mut uia_watch_needed = active_priority == TaskbarOverlapPriority::TaskbarElements;
     let mut next_uia_fallback_query = Instant::now() + UIA_FALLBACK_QUERY_INTERVAL;
+    let mut bar_was_suppressed = true;
+    let mut fullscreen_monitor = FullscreenStateMonitor::new(taskbar, Instant::now());
 
     if active_priority == TaskbarOverlapPriority::TaskbarElements {
         stabilizer.invalidate(Instant::now());
@@ -125,6 +157,7 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
                 &mut applied_layout,
                 &mut stabilizer,
             );
+            bar_was_suppressed = true;
             let _ = wait_for_taskbar_change(RECOVERY_RETRY_DELAY);
             continue;
         };
@@ -168,13 +201,15 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
         let auto_hide_transitioning = auto_hide_enabled
             && !monitor_rect(taskbar).is_some_and(|monitor| is_rect_within(taskbar_rect, monitor));
         let hidden_for_fullscreen = !auto_hide_enabled
-            && is_taskbar_covered_by_fullscreen_window(bar, taskbar, taskbar_rect);
+            && (is_taskbar_covered_by_fullscreen_window(bar, taskbar, taskbar_rect)
+                || fullscreen_monitor.active);
         let taskbar_hidden =
             !is_window_visible(taskbar) || taskbar_rect.width() <= 0 || taskbar_rect.height() <= 2;
 
         if !content_visible() || hidden_for_fullscreen || taskbar_hidden || auto_hide_transitioning
         {
             hide_bar(bar);
+            bar_was_suppressed = true;
         } else {
             let should_measure = match active_priority {
                 TaskbarOverlapPriority::Bar => immediate_layout_needed || applied_layout.is_none(),
@@ -218,8 +253,12 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
 
             let has_visible_layout =
                 applied_layout.is_some_and(|layout| layout.visible_rect.width() > 0);
-            if has_visible_layout && !is_window_visible(bar) {
-                show_bar(bar);
+            if has_visible_layout && (bar_was_suppressed || !is_window_visible(bar)) {
+                if show_bar(bar) {
+                    bar_was_suppressed = false;
+                } else {
+                    retry_needed = true;
+                }
             }
         }
 
@@ -232,20 +271,15 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
             retry_needed = true;
         }
 
-        let mut wait_timeout = if retry_needed || hook_fallback_needed {
-            RECOVERY_RETRY_DELAY
-        } else {
-            WINDOW_HEALTH_CHECK_INTERVAL
-        };
-        if let Some(deadline) = stabilizer.next_sample_at() {
-            wait_timeout = wait_timeout.min(deadline.saturating_duration_since(Instant::now()));
-        }
-        if uia_fallback_needed {
-            wait_timeout =
-                wait_timeout.min(next_uia_fallback_query.saturating_duration_since(Instant::now()));
-        }
-
-        match wait_for_taskbar_change(wait_timeout) {
+        match wait_for_relevant_change(
+            taskbar,
+            retry_needed,
+            hook_fallback_needed,
+            &stabilizer,
+            uia_fallback_needed,
+            next_uia_fallback_query,
+            &mut fullscreen_monitor,
+        ) {
             TaskbarChange::Layout => match active_priority {
                 TaskbarOverlapPriority::Bar => immediate_layout_needed = true,
                 TaskbarOverlapPriority::TaskbarElements => {
@@ -257,6 +291,51 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
                 TaskbarOverlapPriority::TaskbarElements => stabilizer.invalidate(Instant::now()),
             },
             TaskbarChange::WindowState | TaskbarChange::Timeout => {}
+        }
+    }
+}
+
+/// 等待真实事件或必要兜底到期；全屏查询未变化时继续休眠，不重跑同步流程。
+fn wait_for_relevant_change(
+    taskbar: HWND,
+    retry_needed: bool,
+    hook_fallback_needed: bool,
+    stabilizer: &LayoutStabilizer,
+    uia_fallback_needed: bool,
+    next_uia_fallback_query: Instant,
+    fullscreen_monitor: &mut FullscreenStateMonitor,
+) -> TaskbarChange {
+    let recovery_deadline =
+        (retry_needed || hook_fallback_needed).then(|| Instant::now() + RECOVERY_RETRY_DELAY);
+    loop {
+        let now = Instant::now();
+        let mut wait_timeout = fullscreen_monitor
+            .next_check_at
+            .saturating_duration_since(now);
+        if let Some(deadline) = recovery_deadline {
+            wait_timeout = wait_timeout.min(deadline.saturating_duration_since(now));
+        }
+        if let Some(deadline) = stabilizer.next_sample_at() {
+            wait_timeout = wait_timeout.min(deadline.saturating_duration_since(now));
+        }
+        if uia_fallback_needed {
+            wait_timeout = wait_timeout.min(next_uia_fallback_query.saturating_duration_since(now));
+        }
+
+        match wait_for_taskbar_change(wait_timeout) {
+            change @ (TaskbarChange::WindowState | TaskbarChange::Layout) => return change,
+            TaskbarChange::Timeout => {}
+        }
+
+        let now = Instant::now();
+        if fullscreen_monitor.refresh_if_due(taskbar, now) {
+            return TaskbarChange::WindowState;
+        }
+        if recovery_deadline.is_some_and(|deadline| now >= deadline)
+            || stabilizer.sample_due(now)
+            || (uia_fallback_needed && now >= next_uia_fallback_query)
+        {
+            return TaskbarChange::Timeout;
         }
     }
 }

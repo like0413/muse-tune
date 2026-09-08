@@ -28,6 +28,7 @@ const MEDIA_SESSION_SELECTION_CHANGED_EVENT = 'settings://media-session-selectio
 export const DEFAULT_MEDIA_SESSION_SELECTION_POLICY: MediaSessionSelectionPolicy = {
   strategy: 'recent_playback',
   playerPriority: [...SUPPORTED_MEDIA_PLAYERS],
+  onlySupportedPlayers: false,
 }
 
 /** 判断外部值是否为有效会话选择策略。 */
@@ -60,6 +61,10 @@ export function normalizeMediaSessionSelectionPolicy(value: unknown): MediaSessi
       ? record.strategy
       : DEFAULT_MEDIA_SESSION_SELECTION_POLICY.strategy,
     playerPriority,
+    onlySupportedPlayers:
+      typeof record.onlySupportedPlayers === 'boolean'
+        ? record.onlySupportedPlayers
+        : DEFAULT_MEDIA_SESSION_SELECTION_POLICY.onlySupportedPlayers,
   }
 }
 

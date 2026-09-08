@@ -23,6 +23,7 @@ export type MediaSessionSelectionStrategy =
 export interface MediaSessionSelectionPolicy {
   strategy: MediaSessionSelectionStrategy
   playerPriority: MediaPlayer[]
+  onlySupportedPlayers: boolean
 }
 
 export interface MediaMetadata {
