@@ -142,12 +142,12 @@ async function initializeElementOrder() {
   }
 }
 
-/** 打开或唤醒设置窗口。 */
-async function openSettings() {
+/** 打开或唤醒当前媒体会话所属的原播放器窗口。 */
+async function activateCurrentPlayer() {
   try {
-    await invoke('open_settings_window')
+    await invoke('activate_current_media_player')
   } catch (error) {
-    console.error('打开设置窗口失败', error)
+    console.error('打开当前播放器失败', error)
   }
 }
 
@@ -167,7 +167,7 @@ onUnmounted(() => {
     class="text-taskbar-foreground relative flex size-full items-center gap-2 overflow-hidden px-2 py-1 shadow-sm select-none"
     :style="[backgroundStyle, progressColorStyle]"
     aria-label="Muse Tune 任务栏播放器"
-    @contextmenu.prevent="openSettings"
+    @contextmenu.prevent="activateCurrentPlayer"
   >
     <AudioSpectrumElement
       :theme-color="progressColor"

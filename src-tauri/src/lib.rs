@@ -2,6 +2,7 @@ mod commands;
 mod media;
 mod system;
 mod taskbar;
+mod tray;
 
 use tauri::Manager;
 
@@ -26,6 +27,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::settings::open_settings_window,
+            commands::media::activate_current_media_player,
             commands::media::control_media_session,
             commands::media::get_current_media_volume,
             commands::media::get_current_media_session,
@@ -50,6 +52,7 @@ pub fn run() {
             let system_theme_service = system::initialize(app.handle().clone())?;
             app.manage(system_theme_service);
             taskbar::initialize(app)?;
+            tray::initialize(app)?;
 
             Ok(())
         })

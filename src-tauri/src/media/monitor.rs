@@ -21,6 +21,7 @@ use windows::{
 use super::{
     MediaControlAction, MediaMetadata, MediaPlayback, MediaPlaybackControls, MediaPlayer,
     MediaSessionSelectionPolicy, MediaSessionSnapshot, MediaTimeline, MediaVolumeSnapshot,
+    activation::activate_player,
     model::MediaPlaybackStatus,
     players::identify,
     selector::{SelectionCandidate, select_session},
@@ -46,6 +47,7 @@ pub(super) enum WorkerMessage {
         mpsc::SyncSender<Result<(), String>>,
     ),
     Control(MediaControlAction, mpsc::SyncSender<Result<bool, String>>),
+    ActivatePlayer(mpsc::SyncSender<Result<(), String>>),
     GetVolume(mpsc::SyncSender<Option<MediaVolumeSnapshot>>),
     SetVolume(f32, mpsc::SyncSender<Result<MediaVolumeSnapshot, String>>),
     ToggleMute(mpsc::SyncSender<Result<MediaVolumeSnapshot, String>>),
@@ -102,6 +104,18 @@ impl MediaService {
         result_receiver
             .recv_timeout(WORKER_RESPONSE_TIMEOUT)
             .map_err(|_| "媒体会话未返回控制结果".to_owned())?
+    }
+
+    /// 打开当前选中会话所对应的原播放器窗口。
+    pub fn activate_current_player(&self) -> Result<(), String> {
+        let (result_sender, result_receiver) = mpsc::sync_channel(1);
+        self.inner
+            .sender
+            .send(WorkerMessage::ActivatePlayer(result_sender))
+            .map_err(|_| "媒体会话监控线程不可用".to_owned())?;
+        result_receiver
+            .recv_timeout(WORKER_RESPONSE_TIMEOUT)
+            .map_err(|_| "媒体会话未返回播放器窗口激活结果".to_owned())?
     }
 
     /// 更新多播放器会话选择策略，并立即重新计算控制目标。
@@ -393,6 +407,10 @@ fn run_worker<R: Runtime>(
                 );
                 let _ = result_sender.send(result);
             }
+            WorkerMessage::ActivatePlayer(result_sender) => {
+                let result = activate_selected_player(&sessions, selected.id);
+                let _ = result_sender.send(result);
+            }
             WorkerMessage::GetVolume(result_sender) => {
                 let _ = result_sender.send(selected.volume.snapshot());
             }
@@ -435,6 +453,25 @@ fn run_worker<R: Runtime>(
     drop(manager);
     // SAFETY: 本线程上的 RoInitialize 已成功，且 WinRT 对象和事件处理器均已释放。
     unsafe { RoUninitialize() };
+}
+
+/// 从当前选择读取稳定来源标识，并交由窗口激活模块处理。
+fn activate_selected_player(
+    entries: &[SessionEntry],
+    selected_id: Option<u64>,
+) -> Result<(), String> {
+    let entry = entries
+        .iter()
+        .find(|entry| Some(entry.id) == selected_id)
+        .ok_or_else(|| "当前没有可打开的媒体播放器".to_owned())?;
+    let source_app_id = entry
+        .registration
+        .session
+        .SourceAppUserModelId()
+        .map(|value| value.to_string())
+        .map_err(|error| format!("读取当前播放器来源失败: {error}"))?;
+    let player = identify(&source_app_id);
+    activate_player(&source_app_id, player.executable_names())
 }
 
 /// 获取 GSMTC 管理器并订阅当前会话与会话列表变化。
