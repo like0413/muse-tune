@@ -146,6 +146,13 @@ struct SessionEntry {
     activity_order: u64,
 }
 
+/// 单次时间线刷新结果，用于区分轻量位置更新与会话质量变化。
+#[derive(Clone, Copy, Default)]
+struct TimelineRefresh {
+    changed: bool,
+    availability_changed: bool,
+}
+
 impl Drop for SessionRegistration {
     fn drop(&mut self) {
         let _ = self
@@ -230,18 +237,8 @@ fn run_worker<R: Runtime>(
             }
             WorkerMessage::MediaPropertiesChanged(session_id) => {
                 let metadata_changed = refresh_metadata(&mut sessions, session_id);
-                if metadata_changed {
-                    refresh_timeline(&mut sessions, session_id);
-                }
-                if metadata_changed && selected_id == Some(session_id) {
-                    publish_selected_snapshot(&app, &snapshot, &sessions, selected_id);
-                }
-            }
-            WorkerMessage::PlaybackInfoChanged(session_id) => {
-                let playback_changed =
-                    refresh_playback(&mut sessions, session_id, &mut next_activity_order);
-                let timeline_changed = refresh_timeline(&mut sessions, session_id);
-                if playback_changed {
+                let timeline_refresh = if metadata_changed { refresh_timeline(&mut sessions, session_id) } else { Default::default() };
+                if metadata_changed || timeline_refresh.availability_changed {
                     let selected_was_refreshed = selected_id == Some(session_id);
                     reconcile_selection(
                         &app,
@@ -252,12 +249,41 @@ fn run_worker<R: Runtime>(
                         &selection_policy,
                         selected_was_refreshed,
                     );
-                } else if timeline_changed && selected_id == Some(session_id) {
+                }
+            }
+            WorkerMessage::PlaybackInfoChanged(session_id) => {
+                let playback_changed =
+                    refresh_playback(&mut sessions, session_id, &mut next_activity_order);
+                let timeline_refresh = refresh_timeline(&mut sessions, session_id);
+                if playback_changed || timeline_refresh.availability_changed {
+                    let selected_was_refreshed = selected_id == Some(session_id);
+                    reconcile_selection(
+                        &app,
+                        &snapshot,
+                        &manager.manager,
+                        &sessions,
+                        &mut selected_id,
+                        &selection_policy,
+                        selected_was_refreshed,
+                    );
+                } else if timeline_refresh.changed && selected_id == Some(session_id) {
                     publish_selected_timeline(&app, &snapshot, &sessions, selected_id);
                 }
             }
             WorkerMessage::TimelinePropertiesChanged(session_id) => {
-                if refresh_timeline(&mut sessions, session_id) && selected_id == Some(session_id) {
+                let timeline_refresh = refresh_timeline(&mut sessions, session_id);
+                if timeline_refresh.availability_changed {
+                    let selected_was_refreshed = selected_id == Some(session_id);
+                    reconcile_selection(
+                        &app,
+                        &snapshot,
+                        &manager.manager,
+                        &sessions,
+                        &mut selected_id,
+                        &selection_policy,
+                        selected_was_refreshed,
+                    );
+                } else if timeline_refresh.changed && selected_id == Some(session_id) {
                     publish_selected_timeline(&app, &snapshot, &sessions, selected_id);
                 }
             }
@@ -490,20 +516,24 @@ fn refresh_playback_entry(entry: &mut SessionEntry, next_activity_order: &mut u6
     true
 }
 
-/// 刷新指定会话的时间线，重复的等值事件不会触发前端更新。
-fn refresh_timeline(entries: &mut [SessionEntry], session_id: u64) -> bool {
+/// 刷新指定会话的时间线，并标记是否需要重新比较重复会话质量。
+fn refresh_timeline(entries: &mut [SessionEntry], session_id: u64) -> TimelineRefresh {
     let Some(entry) = entries.iter_mut().find(|entry| entry.id == session_id) else {
-        return false;
+        return TimelineRefresh::default();
     };
     let timeline = read_timeline(&entry.registration.session).unwrap_or_else(|error| {
         log::warn!("刷新媒体时间线失败: {error}");
         None
     });
     if entry.snapshot.timeline == timeline {
-        return false;
+        return TimelineRefresh::default();
     }
+    let availability_changed = entry.snapshot.timeline.is_some() != timeline.is_some();
     entry.snapshot.timeline = timeline;
-    true
+    TimelineRefresh {
+        changed: true,
+        availability_changed,
+    }
 }
 
 /// 按当前策略重新选择会话，仅在目标或已显示内容变化时广播。
@@ -527,6 +557,10 @@ fn reconcile_selection<R: Runtime>(
             is_windows_current: windows_current
                 .as_ref()
                 .is_some_and(|session| entry.registration.session == *session),
+            title: &entry.snapshot.metadata.title,
+            artist: &entry.snapshot.metadata.artist,
+            has_timeline: entry.snapshot.timeline.is_some(),
+            metadata_completeness: metadata_completeness(&entry.snapshot.metadata),
         })
         .collect::<Vec<_>>();
     let next_id = select_session(&candidates, *selected_id, policy);
@@ -536,6 +570,20 @@ fn reconcile_selection<R: Runtime>(
     if selection_changed || force_publish {
         publish_selected_snapshot(app, snapshot, entries, next_id);
     }
+}
+
+/// 计算用于同曲目重复会话择优的元数据完整度。
+fn metadata_completeness(metadata: &MediaMetadata) -> u8 {
+    [
+        !metadata.title.is_empty(),
+        !metadata.artist.is_empty(),
+        !metadata.album_artist.is_empty(),
+        !metadata.subtitle.is_empty(),
+        metadata.thumbnail_data_url.is_some(),
+    ]
+    .into_iter()
+    .map(u8::from)
+    .sum()
 }
 
 /// 发布已选会话快照；不存在有效目标时清空任务栏媒体状态。
