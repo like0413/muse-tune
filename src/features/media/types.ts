@@ -64,3 +64,8 @@ export interface MediaSessionSnapshot {
   playback: MediaPlayback
   timeline: MediaTimeline | null
 }
+
+export interface MediaVolumeSnapshot {
+  level: number
+  muted: boolean
+}

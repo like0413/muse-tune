@@ -36,6 +36,21 @@
         "center": true,
         "visible": false,
         "create": false
+      },
+      {
+        "label": "volume-popup",
+        "title": "音量",
+        "url": "index.html#/volume",
+        "width": 38,
+        "height": 140,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "focusable": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "visible": false
       }
     ],
     "security": {

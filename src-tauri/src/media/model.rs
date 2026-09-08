@@ -11,6 +11,14 @@ pub struct MediaSessionSnapshot {
     pub timeline: Option<MediaTimeline>,
 }
 
+/// 当前播放器 Windows 应用音频会话的音量状态。
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaVolumeSnapshot {
+    pub level: f32,
+    pub muted: bool,
+}
+
 /// 播放器通过 GSMTC 发布的标准时间线；所有时长统一为毫秒。
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

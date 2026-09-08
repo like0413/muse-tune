@@ -1,3 +1,5 @@
+use tauri::WebviewWindow;
+
 use crate::taskbar::{self, TaskbarDisplay, TaskbarOverlapPriority, TaskbarPlacement};
 
 /// 枚举当前拥有任务栏的显示器。
@@ -38,4 +40,20 @@ pub fn set_taskbar_width(width: i32) -> Result<(), String> {
 pub fn set_taskbar_content_visibility(visible: bool) -> Result<(), String> {
     taskbar::set_content_visibility(visible);
     Ok(())
+}
+
+/// 把独立音量悬浮窗定位到触发按钮上方并显示。
+#[tauri::command]
+pub fn show_volume_popup(
+    window: WebviewWindow,
+    anchor_center_x: f64,
+    theme_color: String,
+) -> Result<(), String> {
+    taskbar::show_volume_popup(&window, anchor_center_x, theme_color)
+}
+
+/// 在离场动画完成后隐藏音量悬浮窗。
+#[tauri::command]
+pub fn hide_volume_popup(window: WebviewWindow, generation: u64) -> Result<(), String> {
+    taskbar::hide_volume_popup(&window, generation)
 }

@@ -27,8 +27,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::settings::open_settings_window,
             commands::media::control_media_session,
+            commands::media::get_current_media_volume,
             commands::media::get_current_media_session,
+            commands::media::set_current_media_volume,
             commands::media::set_media_session_selection_policy,
+            commands::media::toggle_current_media_mute,
             commands::system::get_system_accent_color,
             commands::system::get_system_foreground_color,
             commands::taskbar::list_taskbar_displays,
@@ -36,7 +39,9 @@ pub fn run() {
             commands::taskbar::set_taskbar_content_visibility,
             commands::taskbar::set_taskbar_overlap_priority,
             commands::taskbar::set_taskbar_placement,
-            commands::taskbar::set_taskbar_width
+            commands::taskbar::set_taskbar_width,
+            commands::taskbar::show_volume_popup,
+            commands::taskbar::hide_volume_popup
         ])
         .setup(|app| {
             let media_service = media::initialize(app.handle().clone())?;

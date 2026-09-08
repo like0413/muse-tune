@@ -1,0 +1,136 @@
+<script setup lang="ts">
+import { Volume1, Volume2, VolumeX } from '@lucide/vue'
+import { invoke } from '@tauri-apps/api/core'
+import type { UnlistenFn } from '@tauri-apps/api/event'
+import { emitTo, listen } from '@tauri-apps/api/event'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { onUnmounted, shallowRef, useTemplateRef } from 'vue'
+
+import { Button } from '@/components/ui/button'
+import { useApplicationVolume } from '@/features/media/useApplicationVolume'
+import {
+  VOLUME_POPUP_CLOSE_EVENT,
+  VOLUME_POPUP_HOVER_BRIDGE_MS,
+  VOLUME_POPUP_HOVER_CHANGED_EVENT,
+  VOLUME_POPUP_LABEL,
+  type VolumePopupHoverPayload,
+} from '@/features/media/volume-popup'
+
+const props = defineProps<{ themeColor: string }>()
+const anchor = useTemplateRef<HTMLElement>('anchor')
+const triggerHovered = shallowRef(false)
+const popupHovered = shallowRef(false)
+const currentWindow = getCurrentWebviewWindow()
+const { volume, adjustLevel, toggleMuted } = useApplicationVolume()
+let closeTimer: ReturnType<typeof setTimeout> | undefined
+let unlistenPopupHover: UnlistenFn | undefined
+let disposed = false
+
+const percentage = computed(() => Math.round((volume.value?.level ?? 0) * 100))
+const volumeIcon = computed(() => {
+  if (!volume.value || volume.value.muted || percentage.value === 0) return VolumeX
+  return percentage.value < 50 ? Volume1 : Volume2
+})
+
+/** 取消跨原生窗口移动期间的延迟关闭。 */
+function cancelClose() {
+  if (closeTimer) clearTimeout(closeTimer)
+  closeTimer = undefined
+}
+
+/** 两个 hover 区域都离开后通知悬浮窗播放离场动画。 */
+function scheduleClose() {
+  cancelClose()
+  closeTimer = setTimeout(() => {
+    if (triggerHovered.value || popupHovered.value) return
+    void emitTo(VOLUME_POPUP_LABEL, VOLUME_POPUP_CLOSE_EVENT, {
+      ownerLabel: currentWindow.label,
+    })
+  }, VOLUME_POPUP_HOVER_BRIDGE_MS)
+}
+
+/** 按按钮在 bar 内的中心坐标定位悬浮窗。 */
+async function openPopup() {
+  if (!anchor.value || !volume.value) return
+  cancelClose()
+  const bounds = anchor.value.getBoundingClientRect()
+  try {
+    await invoke('show_volume_popup', {
+      anchorCenterX: bounds.left + bounds.width / 2,
+      themeColor: props.themeColor,
+    })
+  } catch (error) {
+    console.error('显示音量悬浮窗失败', error)
+  }
+}
+
+/** 记录按钮 hover，确保按钮与音量柱之间可连续移动。 */
+function handlePointerEnter() {
+  triggerHovered.value = true
+  void openPopup()
+}
+
+/** 延迟关闭，为鼠标进入独立音量窗留出跨窗时间。 */
+function handlePointerLeave() {
+  triggerHovered.value = false
+  scheduleClose()
+}
+
+/** 将滚轮方向转换为 2% 的应用音量步进。 */
+function handleWheel(event: WheelEvent) {
+  if (event.deltaY === 0) return
+  adjustLevel(event.deltaY < 0 ? 1 : -1)
+}
+
+onMounted(async () => {
+  const stopListener = await listen<VolumePopupHoverPayload>(
+    VOLUME_POPUP_HOVER_CHANGED_EVENT,
+    ({ payload }) => {
+      if (payload.ownerLabel !== currentWindow.label) return
+      popupHovered.value = payload.hovered
+      if (payload.hovered) cancelClose()
+      else scheduleClose()
+    },
+  )
+  if (disposed) stopListener()
+  else unlistenPopupHover = stopListener
+})
+
+onUnmounted(() => {
+  disposed = true
+  cancelClose()
+  unlistenPopupHover?.()
+  void emitTo(VOLUME_POPUP_LABEL, VOLUME_POPUP_CLOSE_EVENT, {
+    ownerLabel: currentWindow.label,
+  })
+})
+</script>
+
+<template>
+  <span
+    ref="anchor"
+    class="flex shrink-0"
+    @pointerenter="handlePointerEnter"
+    @pointerleave="handlePointerLeave"
+    @wheel.prevent="handleWheel"
+  >
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      class="taskbar-volume-control"
+      type="button"
+      aria-label="调节播放器音量"
+      :aria-disabled="!volume"
+      @click="toggleMuted"
+    >
+      <component :is="volumeIcon" data-icon="inline-start" />
+    </Button>
+  </span>
+</template>
+
+<style scoped>
+.taskbar-volume-control:hover {
+  color: inherit;
+  background-color: color-mix(in srgb, currentColor 20%, transparent);
+}
+</style>

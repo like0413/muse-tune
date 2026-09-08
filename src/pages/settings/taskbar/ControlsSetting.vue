@@ -26,6 +26,7 @@ const buttonOptions = [
   { key: 'previous', label: '上一曲' },
   { key: 'playPause', label: '播放 / 暂停' },
   { key: 'next', label: '下一曲' },
+  { key: 'volume', label: '音量' },
 ] as const
 
 type ControlButtonKey = (typeof buttonOptions)[number]['key']
@@ -103,7 +104,7 @@ onMounted(loadVisibility)
           <FieldContent>
             <FieldTitle>显示的按钮</FieldTitle>
           </FieldContent>
-          <div class="grid grid-cols-3 gap-2">
+          <div class="grid grid-cols-4 gap-2">
             <Label
               v-for="option in buttonOptions"
               :key="option.key"

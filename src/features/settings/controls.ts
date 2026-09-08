@@ -11,6 +11,7 @@ export interface TaskbarControlsVisibility {
   previous: boolean
   playPause: boolean
   next: boolean
+  volume: boolean
 }
 
 export const DEFAULT_TASKBAR_CONTROLS_VISIBILITY: TaskbarControlsVisibility = {
@@ -18,6 +19,7 @@ export const DEFAULT_TASKBAR_CONTROLS_VISIBILITY: TaskbarControlsVisibility = {
   previous: true,
   playPause: true,
   next: true,
+  volume: true,
 }
 
 /** 将外部值规范为完整控制按钮配置，损坏字段单独回退默认值。 */
@@ -38,6 +40,10 @@ export function normalizeTaskbarControlsVisibility(value: unknown): TaskbarContr
         ? record.playPause
         : DEFAULT_TASKBAR_CONTROLS_VISIBILITY.playPause,
     next: typeof record.next === 'boolean' ? record.next : DEFAULT_TASKBAR_CONTROLS_VISIBILITY.next,
+    volume:
+      typeof record.volume === 'boolean'
+        ? record.volume
+        : DEFAULT_TASKBAR_CONTROLS_VISIBILITY.volume,
   }
 }
 

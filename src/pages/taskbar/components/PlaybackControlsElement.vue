@@ -12,7 +12,13 @@ import {
   type TaskbarControlsVisibility,
 } from '@/features/settings/controls'
 
-const props = defineProps<{ session: MediaSessionSnapshot | null; pending: boolean }>()
+import VolumeControlElement from './VolumeControlElement.vue'
+
+const props = defineProps<{
+  session: MediaSessionSnapshot | null
+  pending: boolean
+  themeColor: string
+}>()
 const emit = defineEmits<{ control: [action: MediaControlAction] }>()
 const visibility = shallowRef<TaskbarControlsVisibility>({ ...DEFAULT_TASKBAR_CONTROLS_VISIBILITY })
 let unlistenVisibilityChange: UnlistenFn | undefined
@@ -51,7 +57,6 @@ onUnmounted(() => unlistenVisibilityChange?.())
       size="icon-sm"
       class="taskbar-control"
       type="button"
-      title="上一曲"
       aria-label="上一曲"
       :disabled="pending || !session?.playback.controls.canSkipPrevious"
       @click="emit('control', 'skip_previous')"
@@ -64,7 +69,6 @@ onUnmounted(() => unlistenVisibilityChange?.())
       size="icon-sm"
       class="taskbar-control"
       type="button"
-      title="播放或暂停"
       aria-label="播放或暂停"
       :disabled="pending || !canTogglePlayback"
       @click="emit('control', 'toggle_play_pause')"
@@ -78,13 +82,13 @@ onUnmounted(() => unlistenVisibilityChange?.())
       size="icon-sm"
       class="taskbar-control"
       type="button"
-      title="下一曲"
       aria-label="下一曲"
       :disabled="pending || !session?.playback.controls.canSkipNext"
       @click="emit('control', 'skip_next')"
     >
       <SkipForward class="fill-current" data-icon="inline-start" />
     </Button>
+    <VolumeControlElement v-if="visibility.volume" :theme-color="themeColor" />
   </div>
 </template>
 

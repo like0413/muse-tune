@@ -3,12 +3,15 @@
 mod model;
 mod monitor;
 mod players;
+mod process;
 mod selector;
 mod source_icon;
 mod thumbnail;
+mod volume;
 
 pub use model::{
     MediaControlAction, MediaSessionSelectionPolicy, MediaSessionSnapshot, MediaTimeline,
+    MediaVolumeSnapshot,
 };
 pub use monitor::MediaService;
 

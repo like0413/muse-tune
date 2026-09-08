@@ -7,6 +7,7 @@ mod geometry;
 mod layout;
 mod platform;
 mod sync;
+mod volume_popup;
 
 use std::{
     collections::HashMap,
@@ -106,6 +107,23 @@ pub(super) fn content_visible() -> bool {
 /// 返回当前拥有 Windows 任务栏的显示器。
 pub fn available_displays() -> Vec<TaskbarDisplay> {
     displays::available_taskbar_displays()
+}
+
+/// 显示并定位独立音量悬浮窗。
+pub fn show_volume_popup<R: Runtime>(
+    source: &WebviewWindow<R>,
+    anchor_center_x: f64,
+    theme_color: String,
+) -> Result<(), String> {
+    volume_popup::show(source, anchor_center_x, theme_color)
+}
+
+/// 仅允许音量悬浮窗隐藏自身。
+pub fn hide_volume_popup<R: Runtime>(
+    source: &WebviewWindow<R>,
+    generation: u64,
+) -> Result<(), String> {
+    volume_popup::hide(source, generation)
 }
 
 /// 更新目标显示器，并立即唤醒窗口管理线程。

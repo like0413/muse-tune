@@ -20,20 +20,22 @@ use windows::{
 
 use super::{
     MediaControlAction, MediaMetadata, MediaPlayback, MediaPlaybackControls, MediaPlayer,
-    MediaSessionSelectionPolicy, MediaSessionSnapshot, MediaTimeline,
+    MediaSessionSelectionPolicy, MediaSessionSnapshot, MediaTimeline, MediaVolumeSnapshot,
     model::MediaPlaybackStatus,
     players::identify,
     selector::{SelectionCandidate, select_session},
     source_icon::read_source_icon_data_url,
     thumbnail::read_thumbnail_data_url,
+    volume::ApplicationVolumeController,
 };
 
 pub(super) const MEDIA_SESSION_CHANGED_EVENT: &str = "media://session-changed";
 pub(super) const MEDIA_TIMELINE_CHANGED_EVENT: &str = "media://timeline-changed";
+pub(super) const MEDIA_VOLUME_CHANGED_EVENT: &str = "media://volume-changed";
 const WORKER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
 const TICKS_PER_MILLISECOND: i64 = 10_000;
 
-enum WorkerMessage {
+pub(super) enum WorkerMessage {
     ManagerChanged,
     MediaPropertiesChanged(u64),
     PlaybackInfoChanged(u64),
@@ -43,6 +45,11 @@ enum WorkerMessage {
         mpsc::SyncSender<Result<(), String>>,
     ),
     Control(MediaControlAction, mpsc::SyncSender<Result<bool, String>>),
+    GetVolume(mpsc::SyncSender<Option<MediaVolumeSnapshot>>),
+    SetVolume(f32, mpsc::SyncSender<Result<MediaVolumeSnapshot, String>>),
+    ToggleMute(mpsc::SyncSender<Result<MediaVolumeSnapshot, String>>),
+    VolumeChanged(u64),
+    VolumeSessionsChanged(u64),
     Shutdown,
 }
 
@@ -106,6 +113,42 @@ impl MediaService {
             .recv_timeout(WORKER_RESPONSE_TIMEOUT)
             .map_err(|_| "媒体会话未返回策略更新结果".to_owned())?
     }
+
+    /// 返回当前播放器的 Windows 单应用音量。
+    pub fn volume(&self) -> Result<Option<MediaVolumeSnapshot>, String> {
+        let (result_sender, result_receiver) = mpsc::sync_channel(1);
+        self.inner
+            .sender
+            .send(WorkerMessage::GetVolume(result_sender))
+            .map_err(|_| "媒体会话监控线程不可用".to_owned())?;
+        result_receiver
+            .recv_timeout(WORKER_RESPONSE_TIMEOUT)
+            .map_err(|_| "媒体会话未返回应用音量".to_owned())
+    }
+
+    /// 设置当前播放器的 Windows 单应用音量。
+    pub fn set_volume(&self, level: f32) -> Result<MediaVolumeSnapshot, String> {
+        let (result_sender, result_receiver) = mpsc::sync_channel(1);
+        self.inner
+            .sender
+            .send(WorkerMessage::SetVolume(level, result_sender))
+            .map_err(|_| "媒体会话监控线程不可用".to_owned())?;
+        result_receiver
+            .recv_timeout(WORKER_RESPONSE_TIMEOUT)
+            .map_err(|_| "媒体会话未返回音量设置结果".to_owned())?
+    }
+
+    /// 切换当前播放器的 Windows 单应用静音状态。
+    pub fn toggle_mute(&self) -> Result<MediaVolumeSnapshot, String> {
+        let (result_sender, result_receiver) = mpsc::sync_channel(1);
+        self.inner
+            .sender
+            .send(WorkerMessage::ToggleMute(result_sender))
+            .map_err(|_| "媒体会话监控线程不可用".to_owned())?;
+        result_receiver
+            .recv_timeout(WORKER_RESPONSE_TIMEOUT)
+            .map_err(|_| "媒体会话未返回静音切换结果".to_owned())?
+    }
 }
 
 impl Drop for MediaServiceInner {
@@ -144,6 +187,12 @@ struct SessionEntry {
     registration: SessionRegistration,
     snapshot: MediaSessionSnapshot,
     activity_order: u64,
+}
+
+/// 把当前媒体目标及其应用音量绑定保持为同一份运行时状态。
+struct SelectedMedia {
+    id: Option<u64>,
+    volume: ApplicationVolumeController,
 }
 
 /// 单次时间线刷新结果，用于区分轻量位置更新与会话质量变化。
@@ -192,8 +241,11 @@ fn run_worker<R: Runtime>(
     let mut sessions = Vec::new();
     let mut next_session_id = 1;
     let mut next_activity_order = 1;
-    let mut selected_id = None;
     let mut selection_policy = MediaSessionSelectionPolicy::default();
+    let mut selected = SelectedMedia {
+        id: None,
+        volume: ApplicationVolumeController::new(sender.clone()),
+    };
     synchronize_sessions(
         &manager.manager,
         &sender,
@@ -203,12 +255,12 @@ fn run_worker<R: Runtime>(
         false,
         selection_policy.only_supported_players,
     );
-    reconcile_selection(
+    reconcile_selection_and_volume(
         &app,
         &snapshot,
         &manager.manager,
         &sessions,
-        &mut selected_id,
+        &mut selected,
         &selection_policy,
         true,
     );
@@ -226,13 +278,13 @@ fn run_worker<R: Runtime>(
                     selection_policy.only_supported_players,
                 );
                 let selected_was_refreshed =
-                    refresh_all_playback(&mut sessions, &mut next_activity_order, selected_id);
-                reconcile_selection(
+                    refresh_all_playback(&mut sessions, &mut next_activity_order, selected.id);
+                reconcile_selection_and_volume(
                     &app,
                     &snapshot,
                     &manager.manager,
                     &sessions,
-                    &mut selected_id,
+                    &mut selected,
                     &selection_policy,
                     selected_was_refreshed,
                 );
@@ -245,13 +297,13 @@ fn run_worker<R: Runtime>(
                     Default::default()
                 };
                 if metadata_changed || timeline_refresh.availability_changed {
-                    let selected_was_refreshed = selected_id == Some(session_id);
-                    reconcile_selection(
+                    let selected_was_refreshed = selected.id == Some(session_id);
+                    reconcile_selection_and_volume(
                         &app,
                         &snapshot,
                         &manager.manager,
                         &sessions,
-                        &mut selected_id,
+                        &mut selected,
                         &selection_policy,
                         selected_was_refreshed,
                     );
@@ -262,35 +314,35 @@ fn run_worker<R: Runtime>(
                     refresh_playback(&mut sessions, session_id, &mut next_activity_order);
                 let timeline_refresh = refresh_timeline(&mut sessions, session_id);
                 if playback_changed || timeline_refresh.availability_changed {
-                    let selected_was_refreshed = selected_id == Some(session_id);
-                    reconcile_selection(
+                    let selected_was_refreshed = selected.id == Some(session_id);
+                    reconcile_selection_and_volume(
                         &app,
                         &snapshot,
                         &manager.manager,
                         &sessions,
-                        &mut selected_id,
+                        &mut selected,
                         &selection_policy,
                         selected_was_refreshed,
                     );
-                } else if timeline_refresh.changed && selected_id == Some(session_id) {
-                    publish_selected_timeline(&app, &snapshot, &sessions, selected_id);
+                } else if timeline_refresh.changed && selected.id == Some(session_id) {
+                    publish_selected_timeline(&app, &snapshot, &sessions, selected.id);
                 }
             }
             WorkerMessage::TimelinePropertiesChanged(session_id) => {
                 let timeline_refresh = refresh_timeline(&mut sessions, session_id);
                 if timeline_refresh.availability_changed {
-                    let selected_was_refreshed = selected_id == Some(session_id);
-                    reconcile_selection(
+                    let selected_was_refreshed = selected.id == Some(session_id);
+                    reconcile_selection_and_volume(
                         &app,
                         &snapshot,
                         &manager.manager,
                         &sessions,
-                        &mut selected_id,
+                        &mut selected,
                         &selection_policy,
                         selected_was_refreshed,
                     );
-                } else if timeline_refresh.changed && selected_id == Some(session_id) {
-                    publish_selected_timeline(&app, &snapshot, &sessions, selected_id);
+                } else if timeline_refresh.changed && selected.id == Some(session_id) {
+                    publish_selected_timeline(&app, &snapshot, &sessions, selected.id);
                 }
             }
             WorkerMessage::SelectionPolicyChanged(policy, result_sender) => {
@@ -304,12 +356,12 @@ fn run_worker<R: Runtime>(
                     false,
                     selection_policy.only_supported_players,
                 );
-                reconcile_selection(
+                reconcile_selection_and_volume(
                     &app,
                     &snapshot,
                     &manager.manager,
                     &sessions,
-                    &mut selected_id,
+                    &mut selected,
                     &selection_policy,
                     true,
                 );
@@ -319,11 +371,39 @@ fn run_worker<R: Runtime>(
                 let result = control_session(
                     sessions
                         .iter()
-                        .find(|entry| Some(entry.id) == selected_id)
+                        .find(|entry| Some(entry.id) == selected.id)
                         .map(|entry| &entry.registration),
                     action,
                 );
                 let _ = result_sender.send(result);
+            }
+            WorkerMessage::GetVolume(result_sender) => {
+                let _ = result_sender.send(selected.volume.snapshot());
+            }
+            WorkerMessage::SetVolume(level, result_sender) => {
+                let result = selected.volume.set_level(level);
+                if let Ok(next) = result {
+                    publish_volume(&app, Some(next));
+                }
+                let _ = result_sender.send(result);
+            }
+            WorkerMessage::ToggleMute(result_sender) => {
+                let result = selected.volume.toggle_muted();
+                if let Ok(next) = result {
+                    publish_volume(&app, Some(next));
+                }
+                let _ = result_sender.send(result);
+            }
+            WorkerMessage::VolumeChanged(target_id) => {
+                if selected.id == Some(target_id) {
+                    publish_volume(&app, selected.volume.snapshot());
+                }
+            }
+            WorkerMessage::VolumeSessionsChanged(target_id) => {
+                if selected.id == Some(target_id) {
+                    rebind_selected_volume(&mut selected.volume, &sessions, target_id);
+                    publish_volume(&app, selected.volume.snapshot());
+                }
             }
             WorkerMessage::Shutdown => break,
         }
@@ -575,7 +655,7 @@ fn reconcile_selection<R: Runtime>(
     selected_id: &mut Option<u64>,
     policy: &MediaSessionSelectionPolicy,
     force_publish: bool,
-) {
+) -> bool {
     let windows_current = manager.GetCurrentSession().ok();
     let candidates = entries
         .iter()
@@ -599,6 +679,77 @@ fn reconcile_selection<R: Runtime>(
 
     if selection_changed || force_publish {
         publish_selected_snapshot(app, snapshot, entries, next_id);
+    }
+    selection_changed
+}
+
+/// 统一处理会话选择与音量目标切换，避免各事件分支重复绑定逻辑。
+fn reconcile_selection_and_volume<R: Runtime>(
+    app: &AppHandle<R>,
+    snapshot: &RwLock<Option<MediaSessionSnapshot>>,
+    manager: &GlobalSystemMediaTransportControlsSessionManager,
+    entries: &[SessionEntry],
+    selected: &mut SelectedMedia,
+    policy: &MediaSessionSelectionPolicy,
+    force_publish: bool,
+) {
+    if reconcile_selection(
+        app,
+        snapshot,
+        manager,
+        entries,
+        &mut selected.id,
+        policy,
+        force_publish,
+    ) {
+        bind_selected_volume(&mut selected.volume, entries, selected.id);
+        publish_volume(app, selected.volume.snapshot());
+    }
+}
+
+/// 按已选 GSMTC 来源绑定对应播放器的 Windows 应用音频会话。
+fn bind_selected_volume(
+    volume: &mut ApplicationVolumeController,
+    entries: &[SessionEntry],
+    selected_id: Option<u64>,
+) {
+    let Some(entry) = entries.iter().find(|entry| Some(entry.id) == selected_id) else {
+        volume.bind(None, "", &[]);
+        return;
+    };
+    let source_app_id = entry
+        .registration
+        .session
+        .SourceAppUserModelId()
+        .map(|value| value.to_string())
+        .unwrap_or_default();
+    let player = identify(&source_app_id);
+    volume.bind(selected_id, &source_app_id, player.executable_names());
+}
+
+/// Core Audio 通知会话集合变化后重新匹配当前播放器进程。
+fn rebind_selected_volume(
+    volume: &mut ApplicationVolumeController,
+    entries: &[SessionEntry],
+    target_id: u64,
+) {
+    let Some(entry) = entries.iter().find(|entry| entry.id == target_id) else {
+        return;
+    };
+    let source_app_id = entry
+        .registration
+        .session
+        .SourceAppUserModelId()
+        .map(|value| value.to_string())
+        .unwrap_or_default();
+    let player = identify(&source_app_id);
+    volume.rebind(target_id, &source_app_id, player.executable_names());
+}
+
+/// 广播应用音量；悬浮窗未显示时事件只更新轻量前端状态。
+fn publish_volume<R: Runtime>(app: &AppHandle<R>, volume: Option<MediaVolumeSnapshot>) {
+    if let Err(error) = app.emit(MEDIA_VOLUME_CHANGED_EVENT, volume) {
+        log::warn!("向任务栏广播播放器应用音量失败: {error}");
     }
 }
 

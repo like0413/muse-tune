@@ -3,7 +3,7 @@
   "identifier": "default",
   "description": "Permissions for the Muse Tune taskbar and settings windows",
   "platforms": ["windows"],
-  "windows": ["taskbar", "taskbar-*", "settings"],
+  "windows": ["taskbar", "taskbar-*", "settings", "volume-popup"],
   "permissions": [
     "core:default",
     "store:default",

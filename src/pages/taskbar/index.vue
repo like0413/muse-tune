@@ -92,6 +92,7 @@ const taskbarElementProps = computed<Record<TaskbarElement, Record<string, unkno
   controls: {
     session: mediaSession.value,
     pending: controlPending.value,
+    themeColor: progressColor.value,
     onControl: control,
   },
 }))

@@ -1,12 +1,11 @@
 use std::{collections::HashMap, path::Path, sync::OnceLock};
 
-use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
 use windows::{ApplicationModel::AppInfo, Foundation::Size, core::HSTRING};
 use windows_icons::{
     IconSize, get_icon_base64_by_path_with_size, get_icon_base64_by_process_id_with_size,
 };
 
-use super::thumbnail::read_image_data_url;
+use super::{process::find_process_ids, thumbnail::read_image_data_url};
 
 const SOURCE_ICON_SIZE: f32 = 32.0;
 const MAX_SOURCE_ICON_BYTES: u64 = 1024 * 1024;
@@ -47,24 +46,9 @@ fn read_desktop_process_icon(source_app_id: &str, executable_names: &[&str]) -> 
             .map(|base64| format!("data:image/png;base64,{base64}"));
     }
 
-    let source_name = Path::new(source_app_id)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .map(str::to_ascii_lowercase);
-
-    let mut system = System::new();
-    system.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
-    let process_id = system.processes().iter().find_map(|(pid, process)| {
-        let process_name = process.name().to_string_lossy().to_ascii_lowercase();
-        let process_stem = process_name.strip_suffix(".exe").unwrap_or(&process_name);
-        let matches_source = source_name.as_ref().is_some_and(|name| {
-            name == &process_name || name.strip_suffix(".exe") == Some(process_stem)
-        });
-        let matches_adapter = executable_names
-            .iter()
-            .any(|name| *name == process_name || name.strip_suffix(".exe") == Some(process_stem));
-        (matches_source || matches_adapter).then(|| pid.as_u32())
-    })?;
+    let process_id = find_process_ids(source_app_id, executable_names)
+        .into_iter()
+        .next()?;
     let base64 = get_icon_base64_by_process_id_with_size(process_id, IconSize::Small).ok()?;
     Some(format!("data:image/png;base64,{base64}"))
 }
