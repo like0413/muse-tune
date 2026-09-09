@@ -1,5 +1,9 @@
+use std::time::Duration;
+
 use super::PlayerAdapter;
 use crate::media::MediaPlayer;
+
+const TRACK_CHANGE_SELECTION_HOLD: Duration = Duration::from_millis(400);
 
 pub(super) static KUGOU_MUSIC: KugouMusicAdapter = KugouMusicAdapter;
 
@@ -17,5 +21,9 @@ impl PlayerAdapter for KugouMusicAdapter {
 
     fn executable_names(&self) -> &'static [&'static str] {
         &["kugou.exe", "kgmusic.exe"]
+    }
+
+    fn selection_hold_after_title_change(&self) -> Option<Duration> {
+        Some(TRACK_CHANGE_SELECTION_HOLD)
     }
 }

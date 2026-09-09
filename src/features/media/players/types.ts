@@ -6,4 +6,6 @@ export interface MediaPlayerPresentation {
   label: string
   fallbackText: string
   fallbackClass: string
+  /** 播放器连续发布切歌封面时，采用最后一张图片前的等待时间。 */
+  thumbnailUpdateDebounceMs?: number
 }

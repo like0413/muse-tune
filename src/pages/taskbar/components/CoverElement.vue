@@ -3,6 +3,7 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { useTimeoutFn } from '@vueuse/core'
 import { computed, onMounted, onUnmounted, shallowRef, watch } from 'vue'
 
+import { getThumbnailUpdateDebounceMs } from '@/features/media/players'
 import type { MediaSessionSnapshot } from '@/features/media/types'
 import {
   DEFAULT_TASKBAR_COVER_APPEARANCE,
@@ -16,13 +17,22 @@ import PlayerSourceBadge from './PlayerSourceBadge.vue'
 const props = defineProps<{ session: MediaSessionSnapshot | null }>()
 const appearance = shallowRef<TaskbarCoverAppearance>({ ...DEFAULT_TASKBAR_COVER_APPEARANCE })
 const displayedThumbnail = shallowRef<string | null>(null)
+const thumbnailUpdateDelayMs = shallowRef(0)
 let unlistenAppearanceChange: UnlistenFn | undefined
 let thumbnailRequestId = 0
+let pendingThumbnail: string | null = null
 const { start: scheduleThumbnailClear, stop: cancelThumbnailClear } = useTimeoutFn(
   () => {
     displayedThumbnail.value = null
   },
   500,
+  { immediate: false },
+)
+const { start: scheduleThumbnailUpdate, stop: cancelThumbnailUpdate } = useTimeoutFn(
+  () => {
+    void preloadThumbnail(pendingThumbnail)
+  },
+  thumbnailUpdateDelayMs,
   { immediate: false },
 )
 
@@ -71,9 +81,25 @@ async function preloadThumbnail(thumbnailDataUrl: string | null) {
   if (requestId === thumbnailRequestId) displayedThumbnail.value = thumbnailDataUrl
 }
 
+/** 按播放器规则合并切歌期间连续发布的封面，只解码最后一个候选。 */
+function updateThumbnail(
+  player: MediaSessionSnapshot['player'] | null,
+  thumbnailDataUrl: string | null,
+) {
+  cancelThumbnailUpdate()
+  const delayMs = player ? getThumbnailUpdateDebounceMs(player) : 0
+  if (delayMs <= 0 || !thumbnailDataUrl) {
+    void preloadThumbnail(thumbnailDataUrl)
+    return
+  }
+  pendingThumbnail = thumbnailDataUrl
+  thumbnailUpdateDelayMs.value = delayMs
+  scheduleThumbnailUpdate()
+}
+
 watch(
   () => [props.session?.player ?? null, props.session?.metadata.thumbnailDataUrl ?? null] as const,
-  ([, thumbnailDataUrl]) => void preloadThumbnail(thumbnailDataUrl),
+  ([player, thumbnailDataUrl]) => updateThumbnail(player, thumbnailDataUrl),
   { immediate: true },
 )
 
@@ -81,6 +107,7 @@ onMounted(initializeAppearance)
 onUnmounted(() => {
   thumbnailRequestId += 1
   cancelThumbnailClear()
+  cancelThumbnailUpdate()
   unlistenAppearanceChange?.()
 })
 </script>

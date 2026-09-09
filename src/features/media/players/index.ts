@@ -18,3 +18,8 @@ const playerPresentations: Record<MediaPlayer, MediaPlayerPresentation> = {
 export function getMediaPlayerPresentation(player: MediaPlayer): MediaPlayerPresentation {
   return playerPresentations[player]
 }
+
+/** 获取播放器连续发布切歌封面时的防抖时间。 */
+export function getThumbnailUpdateDebounceMs(player: MediaPlayer): number {
+  return getMediaPlayerPresentation(player).thumbnailUpdateDebounceMs ?? 0
+}

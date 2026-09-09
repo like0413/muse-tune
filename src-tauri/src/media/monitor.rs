@@ -4,7 +4,7 @@ use std::{
         mpsc::{self, Receiver, Sender},
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use tauri::{AppHandle, Emitter, Manager, Runtime};
@@ -23,7 +23,7 @@ use super::{
     MediaSessionSelectionPolicy, MediaSessionSnapshot, MediaTimeline, MediaVolumeSnapshot,
     activation::activate_player,
     model::MediaPlaybackStatus,
-    players::identify,
+    players::{identify, selection_hold_after_title_change},
     selector::{SelectionCandidate, select_session},
     source_icon::read_source_icon_data_url,
     spectrum::AudioSpectrumController,
@@ -216,6 +216,7 @@ struct SessionEntry {
     registration: SessionRegistration,
     snapshot: MediaSessionSnapshot,
     activity_order: u64,
+    selection_hold_until: Option<Instant>,
 }
 
 /// 把当前媒体目标及其应用音量绑定保持为同一份运行时状态。
@@ -570,6 +571,7 @@ fn synchronize_sessions(
             registration,
             snapshot,
             activity_order,
+            selection_hold_until: None,
         });
     }
 }
@@ -663,6 +665,13 @@ fn refresh_metadata(entries: &mut [SessionEntry], session_id: u64) -> bool {
     if entry.snapshot.metadata == metadata {
         return false;
     }
+    let title_changed = entry.snapshot.metadata.title != metadata.title
+        && !entry.snapshot.metadata.title.is_empty()
+        && !metadata.title.is_empty();
+    if title_changed {
+        entry.selection_hold_until = selection_hold_after_title_change(entry.snapshot.player)
+            .and_then(|duration| Instant::now().checked_add(duration));
+    }
     entry.snapshot.metadata = metadata;
     true
 }
@@ -740,6 +749,7 @@ fn reconcile_selection<R: Runtime>(
     force_publish: bool,
 ) -> bool {
     let windows_current = manager.GetCurrentSession().ok();
+    let now = Instant::now();
     let candidates = entries
         .iter()
         .map(|entry| SelectionCandidate {
@@ -754,6 +764,9 @@ fn reconcile_selection<R: Runtime>(
             artist: &entry.snapshot.metadata.artist,
             has_timeline: entry.snapshot.timeline.is_some(),
             metadata_completeness: metadata_completeness(&entry.snapshot.metadata),
+            selection_held: entry
+                .selection_hold_until
+                .is_some_and(|deadline| now < deadline),
         })
         .collect::<Vec<_>>();
     let next_id = select_session(&candidates, *selected_id, policy);

@@ -14,6 +14,7 @@ pub(super) struct SelectionCandidate<'a> {
     pub(super) artist: &'a str,
     pub(super) has_timeline: bool,
     pub(super) metadata_completeness: u8,
+    pub(super) selection_held: bool,
 }
 
 impl SelectionCandidate<'_> {
@@ -44,6 +45,12 @@ pub(super) fn select_session(
 ) -> Option<u64> {
     if candidates.is_empty() {
         return None;
+    }
+    if let Some(current) = candidates
+        .iter()
+        .find(|candidate| Some(candidate.id) == current_id && candidate.selection_held)
+    {
+        return Some(current.id);
     }
 
     match policy.strategy {

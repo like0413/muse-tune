@@ -5,6 +5,8 @@ mod netease_cloud_music;
 mod qq_music;
 mod soda_music;
 
+use std::time::Duration;
+
 use super::MediaPlayer;
 
 /// 隔离单个播放器差异的适配器接口。
@@ -17,6 +19,11 @@ trait PlayerAdapter: Sync {
 
     /// 返回传统桌面客户端可能使用的进程文件名。
     fn executable_names(&self) -> &'static [&'static str];
+
+    /// 返回歌曲标题变化后保持当前会话的播放器专属稳定窗口。
+    fn selection_hold_after_title_change(&self) -> Option<Duration> {
+        None
+    }
 }
 
 static ADAPTERS: [&dyn PlayerAdapter; 4] = [
@@ -51,4 +58,13 @@ pub(super) fn identify(source_app_id: &str) -> IdentifiedPlayer {
         player: adapter.map_or(MediaPlayer::Other, PlayerAdapter::player),
         adapter,
     }
+}
+
+/// 返回对应播放器在标题变化后的会话稳定窗口。
+pub(super) fn selection_hold_after_title_change(player: MediaPlayer) -> Option<Duration> {
+    ADAPTERS
+        .iter()
+        .copied()
+        .find(|adapter| adapter.player() == player)
+        .and_then(PlayerAdapter::selection_hold_after_title_change)
 }
