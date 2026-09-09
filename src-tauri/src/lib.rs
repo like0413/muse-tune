@@ -1,4 +1,5 @@
 mod commands;
+mod lyrics;
 mod media;
 mod system;
 mod taskbar;
@@ -17,6 +18,7 @@ pub fn run() {
             });
         }))
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -35,6 +37,10 @@ pub fn run() {
             commands::media::set_media_spectrum_enabled,
             commands::media::set_media_session_selection_policy,
             commands::media::toggle_current_media_mute,
+            commands::lyrics::get_current_lyrics,
+            commands::lyrics::get_lyrics_cache_paths,
+            commands::lyrics::set_lyrics_enabled,
+            commands::lyrics::set_lyrics_cache_path_override,
             commands::system::get_system_accent_color,
             commands::system::get_system_foreground_color,
             commands::taskbar::list_taskbar_displays,
@@ -47,6 +53,8 @@ pub fn run() {
             commands::taskbar::hide_volume_popup
         ])
         .setup(|app| {
+            let lyrics_service = lyrics::initialize(app)?;
+            app.manage(lyrics_service);
             let media_service = media::initialize(app.handle().clone())?;
             app.manage(media_service);
             let system_theme_service = system::initialize(app.handle().clone())?;

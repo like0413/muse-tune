@@ -12,8 +12,8 @@ mod thumbnail;
 mod volume;
 
 pub use model::{
-    MediaControlAction, MediaSessionSelectionPolicy, MediaSessionSnapshot, MediaTimeline,
-    MediaVolumeSnapshot,
+    MediaControlAction, MediaPlayer, MediaSessionSelectionPolicy, MediaSessionSnapshot,
+    MediaTimeline, MediaVolumeSnapshot,
 };
 pub use monitor::MediaService;
 
@@ -24,6 +24,4 @@ pub fn initialize<R: tauri::Runtime>(
     MediaService::initialize(app)
 }
 
-use model::{
-    MediaMetadata, MediaPlayback, MediaPlaybackControls, MediaPlayer, MediaSessionSelectionStrategy,
-};
+use model::{MediaMetadata, MediaPlayback, MediaPlaybackControls, MediaSessionSelectionStrategy};

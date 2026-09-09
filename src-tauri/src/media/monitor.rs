@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 use windows::{
     Foundation::TypedEventHandler,
     Media::Control::{
@@ -35,6 +35,7 @@ pub(super) const MEDIA_SESSION_CHANGED_EVENT: &str = "media://session-changed";
 pub(super) const MEDIA_TIMELINE_CHANGED_EVENT: &str = "media://timeline-changed";
 pub(super) const MEDIA_VOLUME_CHANGED_EVENT: &str = "media://volume-changed";
 const WORKER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
+const METADATA_SETTLE_DELAY: Duration = Duration::from_millis(300);
 const TICKS_PER_MILLISECOND: i64 = 10_000;
 
 pub(super) enum WorkerMessage {
@@ -229,6 +230,7 @@ struct SelectedMedia<R: Runtime> {
 struct TimelineRefresh {
     changed: bool,
     availability_changed: bool,
+    track_boundary: bool,
 }
 
 impl Drop for SessionRegistration {
@@ -321,11 +323,7 @@ fn run_worker<R: Runtime>(
             }
             WorkerMessage::MediaPropertiesChanged(session_id) => {
                 let metadata_changed = refresh_metadata(&mut sessions, session_id);
-                let timeline_refresh = if metadata_changed {
-                    refresh_timeline(&mut sessions, session_id)
-                } else {
-                    Default::default()
-                };
+                let timeline_refresh = refresh_timeline(&mut sessions, session_id);
                 if metadata_changed || timeline_refresh.availability_changed {
                     let selected_was_refreshed = selected.id == Some(session_id);
                     reconcile_selection_and_volume(
@@ -337,13 +335,17 @@ fn run_worker<R: Runtime>(
                         &selection_policy,
                         selected_was_refreshed,
                     );
+                } else if timeline_refresh.changed && selected.id == Some(session_id) {
+                    publish_selected_timeline(&app, &snapshot, &sessions, selected.id);
                 }
             }
             WorkerMessage::PlaybackInfoChanged(session_id) => {
                 let playback_changed =
                     refresh_playback(&mut sessions, session_id, &mut next_activity_order);
+                let metadata_changed =
+                    playback_changed && refresh_metadata(&mut sessions, session_id);
                 let timeline_refresh = refresh_timeline(&mut sessions, session_id);
-                if playback_changed || timeline_refresh.availability_changed {
+                if playback_changed || metadata_changed || timeline_refresh.availability_changed {
                     let selected_was_refreshed = selected.id == Some(session_id);
                     reconcile_selection_and_volume(
                         &app,
@@ -360,7 +362,12 @@ fn run_worker<R: Runtime>(
             }
             WorkerMessage::TimelinePropertiesChanged(session_id) => {
                 let timeline_refresh = refresh_timeline(&mut sessions, session_id);
-                if timeline_refresh.availability_changed {
+                let metadata_changed =
+                    timeline_refresh.track_boundary && refresh_metadata(&mut sessions, session_id);
+                if metadata_changed
+                    || timeline_refresh.availability_changed
+                    || timeline_refresh.track_boundary
+                {
                     let selected_was_refreshed = selected.id == Some(session_id);
                     reconcile_selection_and_volume(
                         &app,
@@ -600,6 +607,13 @@ fn bind_session(
             MediaPropertiesChangedEventArgs,
         >::new(move |_, _| {
             let _ = metadata_sender.send(WorkerMessage::MediaPropertiesChanged(session_id));
+            let settled_sender = metadata_sender.clone();
+            let _ = thread::Builder::new()
+                .name("media-metadata-settle".to_owned())
+                .spawn(move || {
+                    thread::sleep(METADATA_SETTLE_DELAY);
+                    let _ = settled_sender.send(WorkerMessage::MediaPropertiesChanged(session_id));
+                });
             Ok(())
         }))
         .ok()?;
@@ -698,10 +712,20 @@ fn refresh_timeline(entries: &mut [SessionEntry], session_id: u64) -> TimelineRe
         return TimelineRefresh::default();
     }
     let availability_changed = entry.snapshot.timeline.is_some() != timeline.is_some();
+    let track_boundary = match (&entry.snapshot.timeline, &timeline) {
+        (Some(previous), Some(next)) => {
+            previous.start_time_ms != next.start_time_ms
+                || previous.end_time_ms != next.end_time_ms
+                || (next.position_ms <= next.start_time_ms.saturating_add(3_000)
+                    && next.position_ms.saturating_add(5_000) < previous.position_ms)
+        }
+        _ => availability_changed,
+    };
     entry.snapshot.timeline = timeline;
     TimelineRefresh {
         changed: true,
         availability_changed,
+        track_boundary,
     }
 }
 
@@ -971,7 +995,9 @@ fn read_timeline(
 ) -> windows::core::Result<Option<MediaTimeline>> {
     let timeline = session.GetTimelineProperties()?;
     let start_time_ms = timeline.StartTime()?.Duration / TICKS_PER_MILLISECOND;
-    let end_time_ms = timeline.EndTime()?.Duration / TICKS_PER_MILLISECOND;
+    let declared_end_time_ms = timeline.EndTime()?.Duration / TICKS_PER_MILLISECOND;
+    let declared_max_seek_time_ms = timeline.MaxSeekTime()?.Duration / TICKS_PER_MILLISECOND;
+    let end_time_ms = declared_end_time_ms.max(declared_max_seek_time_ms);
     if end_time_ms <= start_time_ms {
         return Ok(None);
     }
@@ -983,11 +1009,7 @@ fn read_timeline(
         .Duration
         .div_euclid(TICKS_PER_MILLISECOND)
         .clamp(start_time_ms, end_time_ms);
-    let max_seek_time_ms = timeline
-        .MaxSeekTime()?
-        .Duration
-        .div_euclid(TICKS_PER_MILLISECOND)
-        .clamp(min_seek_time_ms, end_time_ms);
+    let max_seek_time_ms = declared_max_seek_time_ms.clamp(min_seek_time_ms, end_time_ms);
     let position_ms = timeline
         .Position()?
         .Duration
@@ -1021,6 +1043,9 @@ fn publish_snapshot<R: Runtime>(
 ) {
     if let Ok(mut current) = snapshot.write() {
         current.clone_from(&next);
+    }
+    if let Some(lyrics) = app.try_state::<crate::lyrics::LyricsService>() {
+        lyrics.update_media(next.as_ref());
     }
     emit_snapshot(app, &next);
 }

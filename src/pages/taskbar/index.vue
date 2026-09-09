@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
+import { useElementHover } from '@vueuse/core'
 import type { Component } from 'vue'
-import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
+import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef } from 'vue'
 
+import { useLyrics } from '@/features/lyrics/useLyrics'
+import { useTaskbarLyricsSettings } from '@/features/lyrics/useTaskbarLyricsSettings'
 import { useMediaProgress } from '@/features/media/useMediaProgress'
 import { useMediaSession } from '@/features/media/useMediaSession'
 import { useMediaSessionSelectionPolicy } from '@/features/media/useMediaSessionSelectionPolicy'
@@ -33,6 +36,7 @@ import { useTaskbarProgressColor } from '@/features/theme/useTaskbarProgressColo
 
 import AudioSpectrumElement from './components/AudioSpectrumElement.vue'
 import CoverElement from './components/CoverElement.vue'
+import LyricsElement from './components/LyricsElement.vue'
 import PlaybackControlsElement from './components/PlaybackControlsElement.vue'
 import TrackInfoElement from './components/TrackInfoElement.vue'
 
@@ -44,7 +48,23 @@ const taskbarElementComponents: Record<TaskbarElement, Component> = {
 
 const { session: mediaSession, timeline, controlPending, control } = useMediaSession()
 const playbackStatus = computed(() => mediaSession.value?.playback.status ?? 'unknown')
-const { progress } = useMediaProgress(timeline, playbackStatus)
+const { positionMs, progress } = useMediaProgress(timeline, playbackStatus)
+const { lyrics } = useLyrics()
+const { settings: lyricsSettings } = useTaskbarLyricsSettings()
+const taskbarRoot = useTemplateRef<HTMLElement>('taskbarRoot')
+const isTaskbarHovered = useElementHover(taskbarRoot)
+// 最新版酷狗未提供有效 GSMTC 时间线时，歌词位置无法可靠推进，仅回退其普通界面。
+const canShowCurrentPlayerLyrics = computed(
+  () => mediaSession.value?.player !== 'kugou_music' || timeline.value !== null,
+)
+const showLyrics = computed(
+  () =>
+    lyricsSettings.value.enabled &&
+    canShowCurrentPlayerLyrics.value &&
+    lyrics.value.status === 'ready' &&
+    lyrics.value.lines.length > 0 &&
+    !isTaskbarHovered.value,
+)
 useMediaSessionSelectionPolicy()
 useTaskbarAutoHide(mediaSession)
 const thumbnailDataUrl = computed(() => mediaSession.value?.metadata.thumbnailDataUrl ?? null)
@@ -164,6 +184,7 @@ onUnmounted(() => {
 
 <template>
   <main
+    ref="taskbarRoot"
     class="text-taskbar-foreground relative flex size-full items-center gap-2 overflow-hidden px-2 py-1 shadow-sm select-none"
     :style="[backgroundStyle, progressColorStyle]"
     aria-label="Muse Tune 任务栏播放器"
@@ -181,7 +202,16 @@ onUnmounted(() => {
       v-for="element in elementOrder"
       :key="element"
       class="relative z-10"
+      v-show="element === 'cover' || !showLyrics"
       v-bind="taskbarElementProps[element]"
+    />
+
+    <LyricsElement
+      v-show="showLyrics"
+      class="relative z-10"
+      :lyrics="lyrics"
+      :position-ms="positionMs"
+      :settings="lyricsSettings"
     />
 
     <div

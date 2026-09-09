@@ -6,5 +6,6 @@ export const SETTINGS_SCHEMA_VERSIONS = {
   taskbar: {
     audioSpectrum: 1,
     backgroundTransparency: 1,
+    lyrics: 1,
   },
 } as const
