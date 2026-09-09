@@ -173,7 +173,7 @@ onMounted(loadTrackInfoSettings)
       <ListMusic />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>歌曲信息调整</ItemTitle>
+      <ItemTitle>歌曲信息设置</ItemTitle>
       <ItemDescription>设置歌名对齐及溢出后的滚动表现</ItemDescription>
     </ItemContent>
 
@@ -181,7 +181,7 @@ onMounted(loadTrackInfoSettings)
       <FieldGroup>
         <Field orientation="horizontal">
           <FieldContent>
-            <FieldTitle>歌曲信息对齐方式</FieldTitle>
+            <FieldTitle>对齐方式</FieldTitle>
             <FieldDescription>调整歌名和歌手在可用区域内的对齐方向</FieldDescription>
           </FieldContent>
           <Tabs :model-value="selectedAlignment" @update:model-value="selectAlignment">

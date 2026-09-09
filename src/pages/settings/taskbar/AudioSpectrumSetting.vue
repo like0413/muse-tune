@@ -133,8 +133,8 @@ onMounted(loadSettings)
       <AudioLines />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>音频频谱</ItemTitle>
-      <ItemDescription>在内容后方显示当前播放器的实时频谱</ItemDescription>
+      <ItemTitle>频谱设置</ItemTitle>
+      <ItemDescription>显示当前播放器的实时频谱</ItemDescription>
     </ItemContent>
 
     <template #content>
@@ -142,7 +142,7 @@ onMounted(loadSettings)
         <Field orientation="horizontal">
           <FieldContent>
             <FieldLabel for="taskbar-spectrum-visible">显示频谱</FieldLabel>
-            <FieldDescription>关闭后会停止播放器音频采集与频谱计算</FieldDescription>
+            <FieldDescription>关闭后会停止音频采集与频谱计算</FieldDescription>
           </FieldContent>
           <Switch
             id="taskbar-spectrum-visible"
@@ -177,7 +177,7 @@ onMounted(loadSettings)
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
           <FieldContent>
             <FieldTitle>频谱宽度</FieldTitle>
-            <FieldDescription>频谱占 bar 总宽度的比例</FieldDescription>
+            <FieldDescription>频谱占组件总宽度的比例</FieldDescription>
           </FieldContent>
           <div class="flex w-56 items-center gap-3">
             <Slider
@@ -218,7 +218,7 @@ onMounted(loadSettings)
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
           <FieldContent>
             <FieldTitle>水平位置</FieldTitle>
-            <FieldDescription>从 bar 左侧到右侧连续调整频谱位置</FieldDescription>
+            <FieldDescription>从组件左侧到右侧连续调整频谱位置</FieldDescription>
           </FieldContent>
           <div class="flex w-56 items-center gap-3">
             <Slider

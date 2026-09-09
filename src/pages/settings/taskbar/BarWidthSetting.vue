@@ -99,7 +99,7 @@ onMounted(loadWidth)
       <Ruler />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>Bar 宽度</ItemTitle>
+      <ItemTitle>组件宽度</ItemTitle>
       <ItemDescription>设置未被任务栏元素裁剪时的完整宽度</ItemDescription>
     </ItemContent>
     <ItemActions class="w-56">

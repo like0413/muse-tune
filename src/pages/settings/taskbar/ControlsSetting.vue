@@ -82,7 +82,7 @@ onMounted(loadVisibility)
       <Gamepad2 />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>控制按钮调整</ItemTitle>
+      <ItemTitle>按钮组设置</ItemTitle>
       <ItemDescription>控制按钮组整体及各按钮的显示状态</ItemDescription>
     </ItemContent>
 
@@ -90,7 +90,8 @@ onMounted(loadVisibility)
       <FieldGroup>
         <Field orientation="horizontal">
           <FieldContent>
-            <FieldLabel for="taskbar-controls-visible">显示控制按钮组</FieldLabel>
+            <FieldLabel for="taskbar-controls-visible">显示按钮组</FieldLabel>
+            <FieldDescription>是否显示按钮组</FieldDescription>
           </FieldContent>
           <Switch
             id="taskbar-controls-visible"

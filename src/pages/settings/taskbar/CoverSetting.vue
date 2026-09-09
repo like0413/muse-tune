@@ -79,7 +79,7 @@ onMounted(loadAppearance)
       <Image />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>封面调整</ItemTitle>
+      <ItemTitle>封面设置</ItemTitle>
       <ItemDescription>设置封面的显示、形状与播放时旋转</ItemDescription>
     </ItemContent>
 

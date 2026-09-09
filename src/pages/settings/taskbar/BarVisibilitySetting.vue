@@ -60,7 +60,7 @@ onMounted(loadPreference)
     </ItemMedia>
     <ItemContent>
       <ItemTitle>自动隐藏</ItemTitle>
-      <ItemDescription>根据媒体会话和播放状态自动隐藏 bar</ItemDescription>
+      <ItemDescription>根据媒体会话和播放状态自动隐藏组件</ItemDescription>
     </ItemContent>
 
     <template #content>
@@ -68,7 +68,7 @@ onMounted(loadPreference)
         <Field orientation="horizontal">
           <FieldContent>
             <FieldLabel for="taskbar-hide-when-paused">暂停时隐藏</FieldLabel>
-            <FieldDescription>当前播放器进入暂停状态时隐藏 bar</FieldDescription>
+            <FieldDescription>Windows 有可用媒体会话且处于暂停状态时隐藏</FieldDescription>
           </FieldContent>
           <Switch
             id="taskbar-hide-when-paused"
@@ -81,7 +81,7 @@ onMounted(loadPreference)
         <Field orientation="horizontal">
           <FieldContent>
             <FieldLabel for="taskbar-hide-without-session">无媒体会话时隐藏</FieldLabel>
-            <FieldDescription>Windows 没有可用媒体会话时隐藏 bar</FieldDescription>
+            <FieldDescription>Windows 没有任何可用媒体会话时隐藏</FieldDescription>
           </FieldContent>
           <Switch
             id="taskbar-hide-without-session"

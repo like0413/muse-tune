@@ -89,8 +89,8 @@ onMounted(loadSettings)
       <Captions />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>歌词显示</ItemTitle>
-      <ItemDescription>设置任务栏歌词的布局和逐字效果</ItemDescription>
+      <ItemTitle>歌词设置</ItemTitle>
+      <ItemDescription>设置任务栏歌词的布局和显示</ItemDescription>
     </ItemContent>
 
     <template #content>
@@ -111,7 +111,7 @@ onMounted(loadSettings)
         <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
           <FieldContent>
             <FieldTitle>对齐方式</FieldTitle>
-            <FieldDescription>歌词在剩余空白区域内的水平位置</FieldDescription>
+            <FieldDescription>歌词在空白区域内的水平位置</FieldDescription>
           </FieldContent>
           <ToggleGroup
             type="single"
@@ -157,7 +157,7 @@ onMounted(loadSettings)
         <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
           <FieldContent>
             <FieldLabel for="taskbar-lyrics-word-highlight">逐字高亮</FieldLabel>
-            <FieldDescription>仅在歌词源包含逐字时间轴时生效，否则自动按整行显示</FieldDescription>
+            <FieldDescription>仅在歌词源包含逐字时间轴时生效</FieldDescription>
           </FieldContent>
           <Switch
             id="taskbar-lyrics-word-highlight"

@@ -20,7 +20,7 @@ import {
 } from '@/features/settings/overlap-priority'
 
 const overlapPriorityOptions = [
-  { value: 'bar', label: 'MuseBar 优先' },
+  { value: 'bar', label: '组件优先' },
   { value: 'taskbar', label: '任务栏优先' },
 ] as const satisfies ReadonlyArray<{ value: TaskbarOverlapPriority; label: string }>
 
@@ -75,7 +75,7 @@ onMounted(loadOverlapPriority)
     </ItemMedia>
     <ItemContent>
       <ItemTitle>遮挡优先级</ItemTitle>
-      <ItemDescription>空间不足时，MuseBar与任务栏元素谁显示在上方</ItemDescription>
+      <ItemDescription>空间不足时，组件与任务栏元素谁显示在上方</ItemDescription>
     </ItemContent>
     <ItemActions>
       <Tabs :model-value="selectedOverlapPriority" @update:model-value="selectOverlapPriority">

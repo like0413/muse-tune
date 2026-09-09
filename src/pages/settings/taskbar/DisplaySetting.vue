@@ -103,7 +103,7 @@ onMounted(loadDisplayTarget)
     </ItemMedia>
     <ItemContent>
       <ItemTitle>目标显示器</ItemTitle>
-      <ItemDescription>选择播放器出现在哪些显示器的任务栏</ItemDescription>
+      <ItemDescription>选择组件出现在哪些显示器的任务栏</ItemDescription>
     </ItemContent>
     <ItemActions>
       <Select

@@ -71,8 +71,8 @@ onMounted(loadPlacement)
       <PanelTop />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>播放器位置</ItemTitle>
-      <ItemDescription>自动模式会根据任务栏设置自动切换位置</ItemDescription>
+      <ItemTitle>组件位置</ItemTitle>
+      <ItemDescription>自动模式会根据 Windows 任务栏设置自动切换位置</ItemDescription>
     </ItemContent>
     <ItemActions>
       <Tabs :model-value="selectedPlacement" @update:model-value="selectPlacement">

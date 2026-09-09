@@ -156,7 +156,7 @@ onMounted(loadPolicy)
     </ItemMedia>
     <ItemContent>
       <ItemTitle>播放器抢占策略</ItemTitle>
-      <ItemDescription>决定多个播放器同时存在时，任务栏显示和控制哪一个</ItemDescription>
+      <ItemDescription>决定多个播放器同时存在时，任务栏显示哪一个</ItemDescription>
     </ItemContent>
 
     <template #content>
@@ -192,7 +192,7 @@ onMounted(loadPolicy)
 
         <Field orientation="horizontal">
           <FieldContent>
-            <FieldTitle>禁止采集其他播放器</FieldTitle>
+            <FieldTitle>禁止采集其他媒体</FieldTitle>
             <FieldDescription>
               开启后忽略 QQ 音乐、网易云音乐、汽水音乐和酷狗音乐以外的媒体会话
             </FieldDescription>

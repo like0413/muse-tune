@@ -101,7 +101,7 @@ onMounted(loadBackgroundTransparency)
     </ItemMedia>
     <ItemContent>
       <ItemTitle>背景透明度</ItemTitle>
-      <ItemDescription>仅调整播放器背景，文字与控件保持清晰</ItemDescription>
+      <ItemDescription>仅调组件背景，文字与控件保持清晰</ItemDescription>
     </ItemContent>
     <ItemActions class="w-56">
       <Slider

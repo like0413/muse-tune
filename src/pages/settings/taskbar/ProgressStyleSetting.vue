@@ -114,8 +114,8 @@ onMounted(loadProgressStyle)
       <Activity />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>播放进度样式</ItemTitle>
-      <ItemDescription>选择播放进度在任务栏播放器中的呈现方式</ItemDescription>
+      <ItemTitle>进度条设置</ItemTitle>
+      <ItemDescription>进度条在任务栏组件中的呈现方式</ItemDescription>
     </ItemContent>
     <template #content>
       <FieldGroup>
@@ -141,7 +141,7 @@ onMounted(loadProgressStyle)
         <Field orientation="horizontal" :data-disabled="selectedProgressStyle !== 'bottom'">
           <FieldContent>
             <FieldTitle>横条位置</FieldTitle>
-            <FieldDescription>将条形进度放在 bar 的顶部或底部</FieldDescription>
+            <FieldDescription>将条形进度放在组件的顶部或底部</FieldDescription>
           </FieldContent>
           <Tabs
             :model-value="selectedProgressPosition"

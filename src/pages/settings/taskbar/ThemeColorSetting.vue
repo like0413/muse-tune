@@ -112,8 +112,8 @@ onMounted(loadThemeColor)
       <Palette />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>Bar 主题色</ItemTitle>
-      <ItemDescription>设置播放进度条颜色，暂不影响其他元素</ItemDescription>
+      <ItemTitle>组件主题色</ItemTitle>
+      <ItemDescription>影响进度条、频谱、音量条等元素的颜色</ItemDescription>
     </ItemContent>
 
     <template #content>
