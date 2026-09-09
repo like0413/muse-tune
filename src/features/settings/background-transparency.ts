@@ -2,12 +2,12 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
 import { clamp } from 'es-toolkit'
 
-import { settingsStore } from './store'
+import { SETTINGS_SCHEMA_VERSIONS } from './storage/schema-versions'
+import { getVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
 
 export const TASKBAR_TRANSPARENCY_MIN = 0
 export const TASKBAR_TRANSPARENCY_MAX = 100
 
-const LEGACY_TASKBAR_MATERIAL_KEY = 'taskbar.material'
 const TASKBAR_BACKGROUND_TRANSPARENCY_KEY = 'taskbar.backgroundTransparency'
 const TASKBAR_BACKGROUND_TRANSPARENCY_CHANGED_EVENT =
   'settings://taskbar-background-transparency-changed'
@@ -22,23 +22,17 @@ export function normalizeTaskbarBackgroundTransparency(value: unknown): number |
   return Math.round(clamp(value, TASKBAR_TRANSPARENCY_MIN, TASKBAR_TRANSPARENCY_MAX))
 }
 
-/** 读取背景透明度，并将旧的材质枚举迁移为连续数值。 */
-export async function getTaskbarBackgroundTransparency(): Promise<number> {
-  const saved = normalizeTaskbarBackgroundTransparency(
-    await settingsStore.get<unknown>(TASKBAR_BACKGROUND_TRANSPARENCY_KEY),
-  )
-  if (saved !== undefined) {
-    return saved
-  }
+const backgroundTransparencyStorage = {
+  key: TASKBAR_BACKGROUND_TRANSPARENCY_KEY,
+  version: SETTINGS_SCHEMA_VERSIONS.taskbar.backgroundTransparency,
+  defaultValue: DEFAULT_TASKBAR_BACKGROUND_TRANSPARENCY,
+  normalize: (value: unknown) =>
+    normalizeTaskbarBackgroundTransparency(value) ?? DEFAULT_TASKBAR_BACKGROUND_TRANSPARENCY,
+}
 
-  const legacyMaterial = await settingsStore.get<unknown>(LEGACY_TASKBAR_MATERIAL_KEY)
-  const migrated =
-    legacyMaterial === 'transparent'
-      ? TASKBAR_TRANSPARENCY_MAX
-      : DEFAULT_TASKBAR_BACKGROUND_TRANSPARENCY
-  await settingsStore.set(TASKBAR_BACKGROUND_TRANSPARENCY_KEY, migrated)
-  await settingsStore.delete(LEGACY_TASKBAR_MATERIAL_KEY)
-  return migrated
+/** 读取背景透明度；版本不兼容时仅恢复此项默认值。 */
+export async function getTaskbarBackgroundTransparency(): Promise<number> {
+  return getVersionedSetting(backgroundTransparencyStorage)
 }
 
 /** 仅预览背景透明度，不触发持久化写入。 */
@@ -56,8 +50,8 @@ export async function setTaskbarBackgroundTransparency(transparency: number): Pr
     return
   }
 
-  await settingsStore.set(TASKBAR_BACKGROUND_TRANSPARENCY_KEY, normalized)
-  await emit(TASKBAR_BACKGROUND_TRANSPARENCY_CHANGED_EVENT, normalized)
+  const saved = await setVersionedSetting(backgroundTransparencyStorage, normalized)
+  await emit(TASKBAR_BACKGROUND_TRANSPARENCY_CHANGED_EVENT, saved)
 }
 
 /** 监听设置窗口发出的任务栏背景透明度变更。 */

@@ -4,8 +4,8 @@ import { createApp } from 'vue'
 import { createI18n } from 'vue-i18n'
 
 import App from './App.vue'
-import router from './router'
 import './lib/color-mode'
+import router from './router'
 
 import './style.css'
 
