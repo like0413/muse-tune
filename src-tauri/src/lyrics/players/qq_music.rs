@@ -37,10 +37,12 @@ pub fn resolve(
     cache_path: Option<&Path>,
     client: &Client,
 ) -> Result<Option<ResolvedLyrics>, LyricsError> {
-    if let Some(path) = cache_path
-        && let Some(resolved) = resolve_local(track, path)?
-    {
-        return Ok(Some(resolved));
+    if let Some(path) = cache_path {
+        match resolve_local(track, path) {
+            Ok(Some(resolved)) => return Ok(Some(resolved)),
+            Ok(None) => {}
+            Err(error) => log::warn!("QQ 音乐本地歌词不可用，回退在线源: {error}"),
+        }
     }
     resolve_online(track, client)
 }

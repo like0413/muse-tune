@@ -12,7 +12,7 @@ pub(crate) mod settings;
 mod track;
 mod watcher;
 
-pub use model::{LyricsCachePathState, LyricsSnapshot};
+pub use model::LyricsSnapshot;
 pub use service::LyricsService;
 
 /// 初始化歌词服务；媒体服务随后通过托管状态通知歌曲变化。

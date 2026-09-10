@@ -20,7 +20,7 @@ const MAX_KRC_BYTES: u64 = 2 * 1024 * 1024;
 static CACHE_FILE_SUFFIX: LazyLock<Result<Regex, regex::Error>> =
     LazyLock::new(|| Regex::new(r"(?i)-[0-9a-f]{32}-\d+-\d+$"));
 
-/// 酷狗首版严格只读取本地 KRC，不包含任何 HTTP 在线回退。
+/// 酷狗 20.1.41 读取播放器配置指定的本地 KRC。
 pub fn resolve(
     track: &TrackDescriptor,
     cache_path: Option<&Path>,

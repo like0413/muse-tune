@@ -11,7 +11,7 @@ use crate::media::MediaPlayer;
 
 use super::{error::LyricsError, model::ResolvedLyrics, track::TrackDescriptor};
 
-/// 歌词功能首版支持的播放器集合，供设置与监听复用。
+/// 当前支持的四个播放器，供自动缓存监听复用。
 pub const SUPPORTED_PLAYERS: [MediaPlayer; 4] = [
     MediaPlayer::QqMusic,
     MediaPlayer::NeteaseCloudMusic,
@@ -74,14 +74,25 @@ pub fn automatic_cache_path(player: MediaPlayer) -> Option<PathBuf> {
     }
 }
 
-/// 返回单个平台需要通过文件系统事件观察的配置目录。
-pub fn configuration_watch_paths(player: MediaPlayer) -> Vec<PathBuf> {
+/// 返回单个平台除主缓存外还需观察的数据或配置目录。
+fn additional_watch_paths(player: MediaPlayer) -> Vec<PathBuf> {
     match player {
+        MediaPlayer::NeteaseCloudMusic => netease_cloud_music::additional_watch_path()
+            .into_iter()
+            .collect(),
         MediaPlayer::KugouMusic => kugou_music::configuration_watch_path()
             .into_iter()
             .collect(),
         _ => Vec::new(),
     }
+}
+
+/// 返回单个平台当前版本需要监听的缓存和配置目录。
+pub fn watch_paths(player: MediaPlayer) -> Vec<PathBuf> {
+    automatic_cache_path(player)
+        .into_iter()
+        .chain(additional_watch_paths(player))
+        .collect()
 }
 
 /// QQ 的缓存根目录保存在注册表，使用平台原生通知监听其变化。

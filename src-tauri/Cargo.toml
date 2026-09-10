@@ -73,6 +73,7 @@ reqwest = { version = "0.12", default-features = false, features = [
   "json",
   "rustls-tls",
 ] }
+md5 = "0.8.1"
 
 [profile.dev]
 incremental = true

@@ -33,11 +33,3 @@ export interface LyricsSnapshot {
   lines: LyricLine[]
   errorReason: string | null
 }
-
-export interface LyricsCachePathState {
-  player: MediaPlayer
-  automaticPath: string | null
-  overridePath: string | null
-  effectivePath: string | null
-  exists: boolean
-}

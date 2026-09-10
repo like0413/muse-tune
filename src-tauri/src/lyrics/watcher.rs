@@ -61,7 +61,10 @@ pub fn create(
 fn is_lyrics_source_path(path: &Path) -> bool {
     let file_name = path.file_name().and_then(|value| value.to_str());
     if file_name.is_some_and(|value| {
-        value.eq_ignore_ascii_case("QueueCache") || value.eq_ignore_ascii_case("KuGou.ini")
+        value.eq_ignore_ascii_case("QueueCache")
+            || value.eq_ignore_ascii_case("KuGou.ini")
+            || value.eq_ignore_ascii_case("playingList")
+            || is_netease_cache_name(value)
     }) {
         return true;
     }
@@ -73,6 +76,10 @@ fn is_lyrics_source_path(path: &Path) -> bool {
                 "qrc" | "krc" | "lrc" | "yrc" | "json"
             )
         })
+}
+
+fn is_netease_cache_name(value: &str) -> bool {
+    value.len() == 32 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 /// 仅响应可能改变歌词内容或文件集合的事件。

@@ -121,14 +121,3 @@ pub struct ResolvedLyrics {
     pub source: LyricsSource,
     pub lines: Vec<LyricLine>,
 }
-
-/// 设置页展示的单个播放器目录状态。
-#[derive(Clone, Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LyricsCachePathState {
-    pub player: MediaPlayer,
-    pub automatic_path: Option<String>,
-    pub override_path: Option<String>,
-    pub effective_path: Option<String>,
-    pub exists: bool,
-}

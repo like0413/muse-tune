@@ -10,7 +10,7 @@ import {
   FieldTitle,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   isTaskbarLyricsColorScheme,
   type TaskbarLyricsColorScheme,
@@ -61,7 +61,7 @@ watch(
   },
 )
 
-/** 接收分段按钮返回的歌词配色模式。 */
+/** 接收标签页返回的歌词配色模式。 */
 function selectColorScheme(value: unknown) {
   if (isTaskbarLyricsColorScheme(value)) emit('updateSettings', { colorScheme: value })
 }
@@ -97,22 +97,18 @@ function selectNativeColor(key: EditableColor, event: Event) {
       <FieldTitle>歌词颜色</FieldTitle>
       <FieldDescription>自定义模式可分别设置已播放和未播放歌词颜色</FieldDescription>
     </FieldContent>
-    <ToggleGroup
-      type="single"
-      variant="outline"
-      :model-value="settings.colorScheme"
-      :disabled="disabled"
-      aria-label="歌词颜色模式"
-      @update:model-value="selectColorScheme"
-    >
-      <ToggleGroupItem
-        v-for="option in colorSchemeOptions"
-        :key="option.value"
-        :value="option.value"
-      >
-        {{ option.label }}
-      </ToggleGroupItem>
-    </ToggleGroup>
+    <Tabs :model-value="settings.colorScheme" @update:model-value="selectColorScheme">
+      <TabsList aria-label="歌词颜色模式">
+        <TabsTrigger
+          v-for="option in colorSchemeOptions"
+          :key="option.value"
+          :value="option.value"
+          :disabled="disabled"
+        >
+          {{ option.label }}
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
   </Field>
 
   <template v-if="settings.colorScheme === 'custom'">

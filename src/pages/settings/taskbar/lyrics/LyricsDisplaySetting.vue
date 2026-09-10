@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   DEFAULT_TASKBAR_LYRICS_SETTINGS,
   getTaskbarLyricsSettings,
@@ -152,22 +152,18 @@ onMounted(loadSettings)
             <FieldTitle>对齐方式</FieldTitle>
             <FieldDescription>歌词在空白区域内的水平位置</FieldDescription>
           </FieldContent>
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            :model-value="selectedSettings.alignment"
-            :disabled="settingsSaving || !selectedSettings.enabled"
-            aria-label="歌词对齐方式"
-            @update:model-value="selectAlignment"
-          >
-            <ToggleGroupItem
-              v-for="option in alignmentOptions"
-              :key="option.value"
-              :value="option.value"
-            >
-              {{ option.label }}
-            </ToggleGroupItem>
-          </ToggleGroup>
+          <Tabs :model-value="selectedSettings.alignment" @update:model-value="selectAlignment">
+            <TabsList aria-label="歌词对齐方式">
+              <TabsTrigger
+                v-for="option in alignmentOptions"
+                :key="option.value"
+                :value="option.value"
+                :disabled="settingsSaving || !selectedSettings.enabled"
+              >
+                {{ option.label }}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </Field>
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
@@ -230,22 +226,18 @@ onMounted(loadSettings)
             <FieldTitle>显示行数</FieldTitle>
             <FieldDescription>双行时优先在第二行显示翻译，否则显示下一句</FieldDescription>
           </FieldContent>
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            :model-value="selectedSettings.lineMode"
-            :disabled="settingsSaving || !selectedSettings.enabled"
-            aria-label="歌词显示行数"
-            @update:model-value="selectLineMode"
-          >
-            <ToggleGroupItem
-              v-for="option in lineModeOptions"
-              :key="option.value"
-              :value="option.value"
-            >
-              {{ option.label }}
-            </ToggleGroupItem>
-          </ToggleGroup>
+          <Tabs :model-value="selectedSettings.lineMode" @update:model-value="selectLineMode">
+            <TabsList aria-label="歌词显示行数">
+              <TabsTrigger
+                v-for="option in lineModeOptions"
+                :key="option.value"
+                :value="option.value"
+                :disabled="settingsSaving || !selectedSettings.enabled"
+              >
+                {{ option.label }}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </Field>
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">

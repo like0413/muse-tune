@@ -7,7 +7,6 @@ import ControlsSetting from './ControlsSetting.vue'
 import CoverSetting from './CoverSetting.vue'
 import DisplaySetting from './DisplaySetting.vue'
 import ElementOrderSetting from './ElementOrderSetting.vue'
-import LyricsCacheSetting from './lyrics/LyricsCacheSetting.vue'
 import LyricsDisplaySetting from './lyrics/LyricsDisplaySetting.vue'
 import MediaSessionSetting from './media-session/MediaSessionSetting.vue'
 import OverlapPrioritySetting from './OverlapPrioritySetting.vue'
@@ -34,7 +33,6 @@ import TrackInfoSetting from './track-info/TrackInfoSetting.vue'
     <ControlsSetting />
     <AudioSpectrumSetting />
     <LyricsDisplaySetting />
-    <LyricsCacheSetting />
     <div class="pl-2 text-sm font-bold">其他</div>
     <BarVisibilitySetting />
     <DisplaySetting />
