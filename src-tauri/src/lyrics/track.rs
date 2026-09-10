@@ -32,7 +32,8 @@ impl TrackDescriptor {
         let duration_ms = snapshot
             .timeline
             .as_ref()
-            .and_then(|timeline| u64::try_from(timeline.end_time_ms - timeline.start_time_ms).ok())
+            .and_then(|timeline| timeline.end_time_ms.checked_sub(timeline.start_time_ms))
+            .and_then(|duration| u64::try_from(duration).ok())
             .filter(|duration| *duration > 0);
         let normalized_title = normalize_text(title);
         let mut normalized_artists = artists

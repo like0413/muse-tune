@@ -40,6 +40,8 @@ export function useMediaProgress(
       anchorPositionMs = value?.positionMs ?? 0
       anchorTime = performance.now()
       updatePosition(anchorTime)
+      if (value && playbackStatus.value === 'playing') resume()
+      else pause()
     },
     { immediate: true },
   )

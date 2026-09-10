@@ -53,14 +53,12 @@ const { lyrics } = useLyrics()
 const { settings: lyricsSettings } = useTaskbarLyricsSettings()
 const taskbarRoot = useTemplateRef<HTMLElement>('taskbarRoot')
 const isTaskbarHovered = useElementHover(taskbarRoot)
-// 最新版酷狗未提供有效 GSMTC 时间线时，歌词位置无法可靠推进，仅回退其普通界面。
-const canShowCurrentPlayerLyrics = computed(
-  () => mediaSession.value?.player !== 'kugou_music' || timeline.value !== null,
-)
+// 所有播放器都必须提供有效时间线；能力出现或消失时自动在歌词与普通界面间切换。
+const hasReliableLyricsTimeline = computed(() => timeline.value !== null)
 const showLyrics = computed(
   () =>
     lyricsSettings.value.enabled &&
-    canShowCurrentPlayerLyrics.value &&
+    hasReliableLyricsTimeline.value &&
     lyrics.value.status === 'ready' &&
     lyrics.value.lines.length > 0 &&
     !isTaskbarHovered.value,

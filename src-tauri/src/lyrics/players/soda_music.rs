@@ -168,9 +168,10 @@ fn parse_soda_lyrics(content: &str) -> Result<Vec<LyricLine>, LyricsError> {
                 let relative_start = word.name("start")?.as_str().parse::<u64>().ok()?;
                 let duration = word.name("duration")?.as_str().parse::<u64>().ok()?;
                 let text = word.name("text")?.as_str();
-                (!text.is_empty()).then(|| LyricWord {
-                    start_ms: start_ms + relative_start,
-                    end_ms: start_ms + relative_start + duration,
+                let word_start_ms = start_ms.saturating_add(relative_start);
+                (!text.is_empty() && duration > 0).then(|| LyricWord {
+                    start_ms: word_start_ms,
+                    end_ms: word_start_ms.saturating_add(duration),
                     text: text.to_owned(),
                 })
             })
@@ -184,7 +185,7 @@ fn parse_soda_lyrics(content: &str) -> Result<Vec<LyricLine>, LyricsError> {
         }
         lines.push(LyricLine {
             start_ms,
-            end_ms: start_ms + duration_ms,
+            end_ms: start_ms.saturating_add(duration_ms),
             text,
             translation: None,
             romanization: None,

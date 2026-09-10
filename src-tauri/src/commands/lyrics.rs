@@ -6,9 +6,8 @@ use tauri_plugin_store::StoreExt;
 use crate::{
     lyrics::{LyricsCachePathState, LyricsService, LyricsSnapshot},
     media::MediaPlayer,
+    settings_store::PATH as SETTINGS_STORE_PATH,
 };
-
-const SETTINGS_STORE_PATH: &str = "settings.json";
 
 /// 返回最近一次歌词解析状态，供新创建的任务栏窗口补取初始值。
 #[tauri::command]

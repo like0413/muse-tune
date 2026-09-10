@@ -123,6 +123,7 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
     let mut uia_watch_needed = active_priority == TaskbarOverlapPriority::TaskbarElements;
     let mut next_uia_fallback_query = Instant::now() + UIA_FALLBACK_QUERY_INTERVAL;
     let mut bar_was_suppressed = true;
+    let mut z_order_refresh_needed = true;
     let mut fullscreen_monitor = FullscreenStateMonitor::new(taskbar, Instant::now());
 
     if active_priority == TaskbarOverlapPriority::TaskbarElements {
@@ -210,6 +211,7 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
         {
             hide_bar(bar);
             bar_was_suppressed = true;
+            z_order_refresh_needed = true;
         } else {
             let should_measure = match active_priority {
                 TaskbarOverlapPriority::Bar => immediate_layout_needed || applied_layout.is_none(),
@@ -253,9 +255,12 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
 
             let has_visible_layout =
                 applied_layout.is_some_and(|layout| layout.visible_rect.width() > 0);
-            if has_visible_layout && (bar_was_suppressed || !is_window_visible(bar)) {
+            if has_visible_layout
+                && (bar_was_suppressed || z_order_refresh_needed || !is_window_visible(bar))
+            {
                 if show_bar(bar) {
                     bar_was_suppressed = false;
+                    z_order_refresh_needed = false;
                 } else {
                     retry_needed = true;
                 }
@@ -290,7 +295,8 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
                 TaskbarOverlapPriority::Bar => immediate_layout_needed = true,
                 TaskbarOverlapPriority::TaskbarElements => stabilizer.invalidate(Instant::now()),
             },
-            TaskbarChange::WindowState | TaskbarChange::Timeout => {}
+            TaskbarChange::WindowState => z_order_refresh_needed = true,
+            TaskbarChange::Timeout => {}
         }
     }
 }

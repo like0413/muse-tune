@@ -57,6 +57,15 @@ pub struct LyricLine {
     pub words: Vec<LyricWord>,
 }
 
+/// 仅把包含真实单字时间范围的规范化歌词视为逐字结果。
+pub fn has_word_timing(lines: &[LyricLine]) -> bool {
+    lines.iter().any(|line| {
+        line.words
+            .iter()
+            .any(|word| word.end_ms > word.start_ms && !word.text.is_empty())
+    })
+}
+
 /// 独立于媒体快照广播的歌词状态。
 #[derive(Clone, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -81,7 +90,7 @@ impl LyricsSnapshot {
 
     /// 创建已解析状态并按实际逐字数据声明精度。
     pub fn ready(track_key: String, resolved: ResolvedLyrics) -> Self {
-        let precision = if resolved.lines.iter().any(|line| !line.words.is_empty()) {
+        let precision = if has_word_timing(&resolved.lines) {
             LyricsPrecision::Word
         } else {
             LyricsPrecision::Line

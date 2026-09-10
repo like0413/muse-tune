@@ -9,13 +9,25 @@ use tauri::{
 use crate::commands;
 
 const SETTINGS_MENU_ID: &str = "tray-settings";
+const RESTART_MENU_ID: &str = "tray-restart";
 const EXIT_MENU_ID: &str = "tray-exit";
 
-/// 创建单个常驻托盘图标，并注册“设置”和“退出”菜单。
+/// 创建单个常驻托盘图标，并注册应用级操作菜单。
 pub(super) fn initialize(app: &App) -> tauri::Result<()> {
     let settings_item = MenuItem::with_id(app, SETTINGS_MENU_ID, "设置", true, None::<&str>)?;
+    let restart_item = MenuItem::with_id(
+        app,
+        RESTART_MENU_ID,
+        if cfg!(debug_assertions) {
+            "重启应用（正式版可用）"
+        } else {
+            "重启应用"
+        },
+        !cfg!(debug_assertions),
+        None::<&str>,
+    )?;
     let exit_item = MenuItem::with_id(app, EXIT_MENU_ID, "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&settings_item, &exit_item])?;
+    let menu = Menu::with_items(app, &[&settings_item, &restart_item, &exit_item])?;
 
     let mut builder = TrayIconBuilder::with_id("main")
         .menu(&menu)
@@ -23,6 +35,7 @@ pub(super) fn initialize(app: &App) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             SETTINGS_MENU_ID => open_settings(app.clone()),
+            RESTART_MENU_ID => app.request_restart(),
             EXIT_MENU_ID => app.exit(0),
             _ => {}
         });

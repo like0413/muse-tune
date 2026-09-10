@@ -59,11 +59,14 @@ pub fn normalize_parsed_lines(data: LyricsData) -> Vec<LyricLine> {
         if lines[index].end_ms > lines[index].start_ms {
             continue;
         }
-        lines[index].end_ms = lines
-            .get(index + 1)
-            .map_or(lines[index].start_ms + DEFAULT_LINE_DURATION_MS, |next| {
-                next.start_ms.max(lines[index].start_ms + 1)
-            });
+        lines[index].end_ms = lines.get(index + 1).map_or_else(
+            || {
+                lines[index]
+                    .start_ms
+                    .saturating_add(DEFAULT_LINE_DURATION_MS)
+            },
+            |next| next.start_ms.max(lines[index].start_ms.saturating_add(1)),
+        );
     }
     lines
 }
@@ -163,7 +166,7 @@ fn convert_words(syllables: &[SyllableInfo]) -> Vec<LyricWord> {
         .filter_map(|syllable| {
             let start_ms = u64::try_from(syllable.start_time).ok()?;
             let end_ms = u64::try_from(syllable.end_time).ok()?;
-            (!syllable.text.is_empty() && end_ms >= start_ms).then(|| LyricWord {
+            (!syllable.text.is_empty() && end_ms > start_ms).then(|| LyricWord {
                 start_ms,
                 end_ms,
                 text: syllable.text.clone(),

@@ -22,13 +22,14 @@ use std::{
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 use tauri_plugin_store::StoreExt;
 
+use crate::settings_store::PATH as SETTINGS_STORE_PATH;
+
 pub use displays::TaskbarDisplay;
 pub use geometry::TaskbarPlacement;
 const TASKBAR_WINDOW_LABEL: &str = "taskbar";
 const RECOVERY_RETRY_DELAY: Duration = Duration::from_millis(400);
 const DISPLAY_TOPOLOGY_CHECK_INTERVAL: Duration = Duration::from_secs(1);
 const ALL_DISPLAYS: &str = "all";
-const SETTINGS_STORE_PATH: &str = "settings.json";
 const DISPLAY_TARGET_KEY: &str = "taskbar.displayTarget";
 const WIDTH_KEY: &str = "taskbar.width";
 const PLACEMENT_KEY: &str = "taskbar.placement";

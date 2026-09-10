@@ -1,6 +1,7 @@
 mod commands;
 mod lyrics;
 mod media;
+mod settings_store;
 mod system;
 mod taskbar;
 mod tray;

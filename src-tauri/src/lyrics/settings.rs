@@ -3,19 +3,11 @@ use std::{collections::HashMap, path::PathBuf, sync::RwLock};
 use tauri::Runtime;
 use tauri_plugin_store::StoreExt;
 
-use crate::media::MediaPlayer;
+use crate::{media::MediaPlayer, settings_store::PATH as SETTINGS_STORE_PATH};
 
 use super::{model::LyricsCachePathState, players};
 
-const SETTINGS_STORE_PATH: &str = "settings.json";
 const LYRICS_DISPLAY_KEY: &str = "taskbar.lyrics";
-const SUPPORTED_PLAYERS: [MediaPlayer; 4] = [
-    MediaPlayer::QqMusic,
-    MediaPlayer::NeteaseCloudMusic,
-    MediaPlayer::SodaMusic,
-    MediaPlayer::KugouMusic,
-];
-
 /// 线程安全保存四家播放器的用户目录覆盖。
 pub struct LyricsPathSettings {
     overrides: RwLock<HashMap<MediaPlayer, PathBuf>>,
@@ -36,7 +28,7 @@ impl LyricsPathSettings {
     pub fn restore<R: Runtime>(app: &tauri::App<R>) -> Self {
         let mut overrides = HashMap::new();
         if let Ok(store) = app.store(SETTINGS_STORE_PATH) {
-            for player in SUPPORTED_PLAYERS {
+            for player in players::SUPPORTED_PLAYERS {
                 let Some(key) = override_store_key(player) else {
                     continue;
                 };
@@ -75,7 +67,7 @@ impl LyricsPathSettings {
 
     /// 生成设置页所需的四个平台状态。
     pub fn states(&self) -> Vec<LyricsCachePathState> {
-        SUPPORTED_PLAYERS
+        players::SUPPORTED_PLAYERS
             .into_iter()
             .map(|player| {
                 let automatic = players::automatic_cache_path(player);

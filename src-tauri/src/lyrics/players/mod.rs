@@ -11,6 +11,14 @@ use crate::media::MediaPlayer;
 
 use super::{error::LyricsError, model::ResolvedLyrics, track::TrackDescriptor};
 
+/// 歌词功能首版支持的播放器集合，供设置与监听复用。
+pub const SUPPORTED_PLAYERS: [MediaPlayer; 4] = [
+    MediaPlayer::QqMusic,
+    MediaPlayer::NeteaseCloudMusic,
+    MediaPlayer::SodaMusic,
+    MediaPlayer::KugouMusic,
+];
+
 /// 按当前播放器进入完全隔离的平台解析入口。
 pub fn resolve_current_player(
     track: &TrackDescriptor,
@@ -36,6 +44,17 @@ pub fn resolve_qq_online(
     qq_music::resolve_online(track, client)
 }
 
+/// 仅查询 QQ 音乐本地 QRC，供协调器为其他播放器补足真实逐字时间轴。
+pub fn resolve_qq_local(
+    track: &TrackDescriptor,
+    cache_path: Option<PathBuf>,
+) -> Result<Option<ResolvedLyrics>, LyricsError> {
+    let Some(cache_path) = cache_path else {
+        return Ok(None);
+    };
+    qq_music::resolve_local(track, &cache_path)
+}
+
 /// 使用网易云音乐 HTTPS 作为跨播放器兜底。
 pub fn resolve_netease_online(
     track: &TrackDescriptor,
@@ -55,11 +74,14 @@ pub fn automatic_cache_path(player: MediaPlayer) -> Option<PathBuf> {
     }
 }
 
-/// 返回需要通过文件系统事件观察的播放器配置目录。
-pub fn configuration_watch_paths() -> Vec<PathBuf> {
-    kugou_music::configuration_watch_path()
-        .into_iter()
-        .collect()
+/// 返回单个平台需要通过文件系统事件观察的配置目录。
+pub fn configuration_watch_paths(player: MediaPlayer) -> Vec<PathBuf> {
+    match player {
+        MediaPlayer::KugouMusic => kugou_music::configuration_watch_path()
+            .into_iter()
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// QQ 的缓存根目录保存在注册表，使用平台原生通知监听其变化。

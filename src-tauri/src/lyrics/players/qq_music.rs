@@ -22,13 +22,14 @@ use super::super::{
     error::LyricsError,
     matcher::{SongCandidate, accepted_score},
     model::{LyricsSource, LyricsSourceKind, ResolvedLyrics},
-    network::parse_json,
+    network::{API_USER_AGENT, parse_json},
     parser::{AuxiliaryKind, merge_auxiliary_lines, parse_lrc_lines, parse_qrc_lines},
     track::{TrackDescriptor, split_artists},
 };
 
+mod online;
+
 const MAX_QRC_BYTES: u64 = 2 * 1024 * 1024;
-const USER_AGENT_VALUE: &str = "MuseTune/0.1";
 
 /// QQ 音乐本地缓存优先，未命中后使用 QQ 官方域名 HTTPS。
 pub fn resolve(
@@ -94,7 +95,7 @@ pub fn resolve_online(
     let response = parse_json::<QqSearchResponse>(
         client
             .get("https://c.y.qq.com/soso/fcgi-bin/client_search_cp")
-            .header(USER_AGENT, USER_AGENT_VALUE)
+            .header(USER_AGENT, API_USER_AGENT)
             .header(REFERER, "https://y.qq.com/")
             .query(&[("format", "json"), ("p", "1"), ("n", "10"), ("w", &query)])
             .send()?
@@ -127,10 +128,27 @@ pub fn resolve_online(
         return Ok(None);
     };
 
+    // QQ 的新版匿名接口可返回加密 QRC。优先尝试真实逐字数据；接口缺失、
+    // 格式变化或曲目本身没有 QRC 时，继续走下方已验证的行级 LRC 兜底。
+    match online::fetch_word_lyrics(client, &song.song_mid) {
+        Ok(Some(lines)) => {
+            return Ok(Some(ResolvedLyrics {
+                source: LyricsSource {
+                    player: MediaPlayer::QqMusic,
+                    kind: LyricsSourceKind::Online,
+                    song_id: Some(song.song_mid),
+                },
+                lines,
+            }));
+        }
+        Ok(None) => {}
+        Err(error) => log::debug!("QQ 音乐在线 QRC 不可用，回退行级歌词: {error}"),
+    }
+
     let response = parse_json::<QqLyricsResponse>(
         client
             .get("https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg")
-            .header(USER_AGENT, USER_AGENT_VALUE)
+            .header(USER_AGENT, API_USER_AGENT)
             .header(REFERER, "https://y.qq.com/")
             .query(&[
                 ("songmid", song.song_mid.as_str()),
@@ -161,7 +179,7 @@ pub fn resolve_online(
     }))
 }
 
-fn resolve_local(
+pub(super) fn resolve_local(
     track: &TrackDescriptor,
     cache_path: &Path,
 ) -> Result<Option<ResolvedLyrics>, LyricsError> {

@@ -27,7 +27,7 @@ const currentLineIndex = computed(() => {
   if (lines.length === 0) return -1
   let left = 0
   let right = lines.length - 1
-  let matched = 0
+  let matched = -1
   while (left <= right) {
     const middle = Math.floor((left + right) / 2)
     if (lines[middle]!.startMs <= props.positionMs) {

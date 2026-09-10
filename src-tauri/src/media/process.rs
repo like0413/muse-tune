@@ -37,7 +37,7 @@ pub(super) fn find_process_ids(source_app_id: &str, executable_names: &[&str]) -
         .collect()
 }
 
-/// 从已识别进程中读取一个仍在运行的可执行文件路径，供隐藏到托盘时交还播放器自身唤起。
+/// 优先读取进程树根节点的可执行文件，避免把多进程客户端的渲染子进程当作启动入口。
 pub(super) fn find_process_executable(process_ids: &HashSet<u32>) -> Option<PathBuf> {
     if process_ids.is_empty() {
         return None;
@@ -49,10 +49,16 @@ pub(super) fn find_process_executable(process_ids: &HashSet<u32>) -> Option<Path
         true,
         ProcessRefreshKind::nothing().with_exe(UpdateKind::OnlyIfNotSet),
     );
-    process_ids.iter().find_map(|process_id| {
-        system
-            .process(Pid::from_u32(*process_id))
-            .and_then(|process| process.exe())
-            .map(Path::to_path_buf)
-    })
+    process_ids
+        .iter()
+        .filter_map(|process_id| {
+            let process = system.process(Pid::from_u32(*process_id))?;
+            let executable = process.exe()?.to_path_buf();
+            let is_child = process
+                .parent()
+                .is_some_and(|parent| process_ids.contains(&parent.as_u32()));
+            Some((is_child, executable))
+        })
+        .min_by_key(|(is_child, executable)| (*is_child, executable.components().count()))
+        .map(|(_, executable)| executable)
 }

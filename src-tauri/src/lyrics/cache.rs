@@ -26,13 +26,21 @@ impl ParsedLyricsCache {
         let path = self.entry_path(track_key);
         let metadata = fs::metadata(&path).ok()?;
         if metadata.len() > MAX_CACHE_ENTRY_BYTES {
+            let _ = fs::remove_file(path);
             return None;
         }
         let content = fs::read(&path).ok()?;
-        let snapshot = serde_json::from_slice::<LyricsSnapshot>(&content).ok()?;
-        (snapshot.track_key.as_deref() == Some(track_key)
-            && snapshot.status == super::model::LyricsStatus::Ready)
-            .then_some(snapshot)
+        let snapshot = serde_json::from_slice::<LyricsSnapshot>(&content).ok();
+        if snapshot.as_ref().is_some_and(|snapshot| {
+            snapshot.track_key.as_deref() == Some(track_key)
+                && snapshot.status == super::model::LyricsStatus::Ready
+        }) {
+            return snapshot;
+        }
+        // 无效文件若保留在目标位置，原子写入会始终把它视为已存在，导致缓存
+        // 永远无法自愈；这里只删除可随时重建的解析结果。
+        let _ = fs::remove_file(path);
+        None
     }
 
     /// 通过同目录临时文件和重命名写入新条目。
@@ -68,6 +76,15 @@ impl ParsedLyricsCache {
                 let _ = fs::remove_file(temporary);
                 Err(error.into())
             }
+        }
+    }
+
+    /// 删除当前歌曲的解析结果，使播放器源文件变化后只重建受影响条目。
+    pub fn remove(&self, track_key: &str) -> Result<(), std::io::Error> {
+        match fs::remove_file(self.entry_path(track_key)) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error),
         }
     }
 

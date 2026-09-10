@@ -15,13 +15,12 @@ use super::super::{
     error::LyricsError,
     matcher::{SongCandidate, accepted_score},
     model::{LyricLine, LyricsSource, LyricsSourceKind, ResolvedLyrics},
-    network::parse_json,
+    network::{API_USER_AGENT, parse_json},
     parser::{AuxiliaryKind, merge_auxiliary_lines, parse_lrc_lines, parse_yrc_lines},
     track::{TrackDescriptor, split_artists},
 };
 
 const MAX_LOCAL_LYRICS_BYTES: u64 = 2 * 1024 * 1024;
-const USER_AGENT_VALUE: &str = "MuseTune/0.1";
 
 /// 网易云旧版本地目录只作机会式读取，未命中后使用国内 HTTPS 接口。
 pub fn resolve(
@@ -57,7 +56,7 @@ pub fn resolve_online(
     let response = parse_json::<NeteaseSearchResponse>(
         client
             .post("https://music.163.com/api/search/get")
-            .header(USER_AGENT, USER_AGENT_VALUE)
+            .header(USER_AGENT, API_USER_AGENT)
             .header(REFERER, "https://music.163.com/")
             .header(COOKIE, "os=pc; appver=2.9.7; channel=netease;")
             .form(&[
@@ -98,7 +97,7 @@ pub fn resolve_online(
     let response = parse_json::<NeteaseLyricsResponse>(
         client
             .get("https://music.163.com/api/song/lyric")
-            .header(USER_AGENT, USER_AGENT_VALUE)
+            .header(USER_AGENT, API_USER_AGENT)
             .header(REFERER, "https://music.163.com/")
             .header(COOKIE, "os=pc; appver=2.9.7; channel=netease;")
             .query(&[

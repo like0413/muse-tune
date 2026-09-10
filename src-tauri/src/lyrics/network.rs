@@ -6,6 +6,7 @@ use serde::de::DeserializeOwned;
 use super::error::LyricsError;
 
 const MAX_RESPONSE_BYTES: u64 = 2 * 1024 * 1024;
+pub(super) const API_USER_AGENT: &str = "MuseTune/0.1";
 
 /// 在反序列化前限制内部接口响应体大小，避免异常响应占用过多内存。
 pub fn parse_json<T: DeserializeOwned>(response: Response) -> Result<T, LyricsError> {
