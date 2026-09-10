@@ -1,24 +1,20 @@
 <script setup lang="ts">
-import type { UnlistenFn } from '@tauri-apps/api/event'
 import { useTimeoutFn } from '@vueuse/core'
-import { computed, onMounted, onUnmounted, shallowRef, watch } from 'vue'
+import type { DeepReadonly } from 'vue'
+import { computed, onUnmounted, shallowRef, watch } from 'vue'
 
 import { getThumbnailUpdateDebounceMs } from '@/features/media/players'
 import type { MediaSessionSnapshot } from '@/features/media/types'
-import {
-  DEFAULT_TASKBAR_COVER_APPEARANCE,
-  getTaskbarCoverAppearance,
-  listenTaskbarCoverAppearanceChange,
-  type TaskbarCoverAppearance,
-} from '@/features/settings/cover'
+import type { TaskbarCoverAppearance } from '@/features/settings/cover'
 
 import PlayerSourceBadge from './PlayerSourceBadge.vue'
 
-const props = defineProps<{ session: MediaSessionSnapshot | null }>()
-const appearance = shallowRef<TaskbarCoverAppearance>({ ...DEFAULT_TASKBAR_COVER_APPEARANCE })
+const props = defineProps<{
+  session: MediaSessionSnapshot | null
+  appearance: DeepReadonly<TaskbarCoverAppearance>
+}>()
 const displayedThumbnail = shallowRef<string | null>(null)
 const thumbnailUpdateDelayMs = shallowRef(0)
-let unlistenAppearanceChange: UnlistenFn | undefined
 let thumbnailRequestId = 0
 let pendingThumbnail: string | null = null
 const { start: scheduleThumbnailClear, stop: cancelThumbnailClear } = useTimeoutFn(
@@ -38,27 +34,15 @@ const { start: scheduleThumbnailUpdate, stop: cancelThumbnailUpdate } = useTimeo
 
 /** 依据保存的形状与播放状态生成封面图层类名。 */
 const shapeClass = computed(() => ({
-  'rounded-none': appearance.value.shape === 'square',
-  'rounded-md': appearance.value.shape === 'rounded',
-  'rounded-full': appearance.value.shape === 'circle',
-  'cover-rotating': appearance.value.shape === 'circle' && appearance.value.rotateWhenPlaying,
+  'rounded-none': props.appearance.shape === 'square',
+  'rounded-md': props.appearance.shape === 'rounded',
+  'rounded-full': props.appearance.shape === 'circle',
+  'cover-rotating': props.appearance.shape === 'circle' && props.appearance.rotateWhenPlaying,
   'cover-rotation-paused':
-    appearance.value.shape === 'circle' &&
-    appearance.value.rotateWhenPlaying &&
+    props.appearance.shape === 'circle' &&
+    props.appearance.rotateWhenPlaying &&
     props.session?.playback.status !== 'playing',
 }))
-
-/** 恢复封面配置，并接收设置窗口的实时更新。 */
-async function initializeAppearance() {
-  try {
-    unlistenAppearanceChange = await listenTaskbarCoverAppearanceChange((value) => {
-      appearance.value = value
-    })
-    appearance.value = await getTaskbarCoverAppearance()
-  } catch (error) {
-    console.error('初始化封面配置失败', error)
-  }
-}
 
 /** 先解码新封面再替换当前图片，避免切歌期间短暂显示占位符。 */
 async function preloadThumbnail(thumbnailDataUrl: string | null) {
@@ -103,12 +87,10 @@ watch(
   { immediate: true },
 )
 
-onMounted(initializeAppearance)
 onUnmounted(() => {
   thumbnailRequestId += 1
   cancelThumbnailClear()
   cancelThumbnailUpdate()
-  unlistenAppearanceChange?.()
 })
 </script>
 

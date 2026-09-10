@@ -12,17 +12,31 @@ import {
   FieldTitle,
 } from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   DEFAULT_TASKBAR_LYRICS_SETTINGS,
   getTaskbarLyricsSettings,
   isTaskbarLyricsAlignment,
+  isTaskbarLyricsAnimation,
   isTaskbarLyricsLineMode,
   normalizeTaskbarLyricsSettings,
   setTaskbarLyricsSettings,
+  TASKBAR_LYRICS_FONT_SIZE_MAX,
+  TASKBAR_LYRICS_FONT_SIZE_MIN,
   type TaskbarLyricsSettings,
 } from '@/features/settings/lyrics'
+
+import LyricsAppearanceSettings from './LyricsAppearanceSettings.vue'
 
 const alignmentOptions = [
   { value: 'left', label: '左' },
@@ -32,6 +46,10 @@ const alignmentOptions = [
 const lineModeOptions = [
   { value: 'single', label: '单行' },
   { value: 'double', label: '双行' },
+] as const
+const animationOptions = [
+  { value: 'none', label: '无' },
+  { value: 'up', label: '向上渐变' },
 ] as const
 
 const selectedSettings = shallowRef<TaskbarLyricsSettings>({
@@ -78,6 +96,27 @@ function selectAlignment(value: unknown) {
 /** 接收单选组件的行数模式。 */
 function selectLineMode(value: unknown) {
   if (isTaskbarLyricsLineMode(value)) void updateSettings({ lineMode: value })
+}
+
+/** 接收下拉框的歌词动画值。 */
+function selectAnimation(value: unknown) {
+  if (isTaskbarLyricsAnimation(value)) void updateSettings({ animation: value })
+}
+
+/** 拖动字号滑块时只更新页面草稿，避免连续写入设置文件。 */
+function previewFontSize(values: number[] | undefined) {
+  const fontSize = values?.[0]
+  if (fontSize === undefined) return
+  selectedSettings.value = normalizeTaskbarLyricsSettings({
+    ...selectedSettings.value,
+    fontSize,
+  })
+}
+
+/** 滑块释放后持久化最终字号。 */
+function commitFontSize(values: number[] | undefined) {
+  const fontSize = values?.[0]
+  if (fontSize !== undefined) void updateSettings({ fontSize })
 }
 
 onMounted(loadSettings)
@@ -130,6 +169,61 @@ onMounted(loadSettings)
             </ToggleGroupItem>
           </ToggleGroup>
         </Field>
+
+        <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
+          <FieldContent>
+            <FieldTitle>动画效果</FieldTitle>
+            <FieldDescription>切换到下一句时的移动和渐变方式</FieldDescription>
+          </FieldContent>
+          <Select
+            :model-value="selectedSettings.animation"
+            :disabled="settingsSaving || !selectedSettings.enabled"
+            @update:model-value="selectAnimation"
+          >
+            <SelectTrigger class="w-40" aria-label="歌词动画效果">
+              <SelectValue placeholder="选择动画" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem
+                  v-for="option in animationOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+
+        <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
+          <FieldContent>
+            <FieldTitle>歌词大小</FieldTitle>
+            <FieldDescription>字号范围为 10–18px，双行时自动收紧行距</FieldDescription>
+          </FieldContent>
+          <div class="flex w-56 items-center gap-3">
+            <Slider
+              :model-value="[selectedSettings.fontSize]"
+              :min="TASKBAR_LYRICS_FONT_SIZE_MIN"
+              :max="TASKBAR_LYRICS_FONT_SIZE_MAX"
+              :step="1"
+              :disabled="settingsSaving || !selectedSettings.enabled"
+              aria-label="歌词大小"
+              @update:model-value="previewFontSize"
+              @value-commit="commitFontSize"
+            />
+            <output class="text-muted-foreground w-12 text-right text-xs tabular-nums">
+              {{ selectedSettings.fontSize }}px
+            </output>
+          </div>
+        </Field>
+
+        <LyricsAppearanceSettings
+          :settings="selectedSettings"
+          :disabled="settingsSaving || !selectedSettings.enabled"
+          @update-settings="updateSettings"
+        />
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
           <FieldContent>

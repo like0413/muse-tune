@@ -1,23 +1,38 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
+import { clamp } from 'es-toolkit'
 
 import { SETTINGS_SCHEMA_VERSIONS } from './storage/schema-versions'
 import { getVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
+import { normalizeHexColor } from './theme-color'
 
 const TASKBAR_LYRICS_KEY = 'taskbar.lyrics'
 const TASKBAR_LYRICS_CHANGED_EVENT = 'settings://taskbar-lyrics-changed'
 const TASKBAR_LYRICS_ALIGNMENTS = ['left', 'center', 'right'] as const
 const TASKBAR_LYRICS_LINE_MODES = ['single', 'double'] as const
+const TASKBAR_LYRICS_ANIMATIONS = ['none', 'up'] as const
+const TASKBAR_LYRICS_COLOR_SCHEMES = ['theme', 'custom'] as const
+const MAX_FONT_FAMILY_LENGTH = 128
+export const TASKBAR_LYRICS_FONT_SIZE_MIN = 10
+export const TASKBAR_LYRICS_FONT_SIZE_MAX = 18
 
 export type TaskbarLyricsAlignment = (typeof TASKBAR_LYRICS_ALIGNMENTS)[number]
 export type TaskbarLyricsLineMode = (typeof TASKBAR_LYRICS_LINE_MODES)[number]
+export type TaskbarLyricsAnimation = (typeof TASKBAR_LYRICS_ANIMATIONS)[number]
+export type TaskbarLyricsColorScheme = (typeof TASKBAR_LYRICS_COLOR_SCHEMES)[number]
 
 export interface TaskbarLyricsSettings {
   enabled: boolean
   alignment: TaskbarLyricsAlignment
   lineMode: TaskbarLyricsLineMode
   wordHighlight: boolean
+  animation: TaskbarLyricsAnimation
+  fontSize: number
+  colorScheme: TaskbarLyricsColorScheme
+  playedColor: string
+  unplayedColor: string
+  fontFamily: string
 }
 
 export const DEFAULT_TASKBAR_LYRICS_SETTINGS: TaskbarLyricsSettings = {
@@ -25,6 +40,12 @@ export const DEFAULT_TASKBAR_LYRICS_SETTINGS: TaskbarLyricsSettings = {
   alignment: 'left',
   lineMode: 'double',
   wordHighlight: true,
+  animation: 'up',
+  fontSize: 14,
+  colorScheme: 'theme',
+  playedColor: '#1677ff',
+  unplayedColor: '#b0b0b0',
+  fontFamily: '',
 }
 
 /** 判断外部值是否为支持的歌词对齐方式。 */
@@ -35,6 +56,44 @@ export function isTaskbarLyricsAlignment(value: unknown): value is TaskbarLyrics
 /** 判断外部值是否为支持的歌词行数模式。 */
 export function isTaskbarLyricsLineMode(value: unknown): value is TaskbarLyricsLineMode {
   return TASKBAR_LYRICS_LINE_MODES.some((mode) => mode === value)
+}
+
+/** 判断外部值是否为支持的歌词切换动画。 */
+export function isTaskbarLyricsAnimation(value: unknown): value is TaskbarLyricsAnimation {
+  return TASKBAR_LYRICS_ANIMATIONS.some((animation) => animation === value)
+}
+
+/** 判断外部值是否为支持的歌词配色方案。 */
+export function isTaskbarLyricsColorScheme(value: unknown): value is TaskbarLyricsColorScheme {
+  return TASKBAR_LYRICS_COLOR_SCHEMES.some((scheme) => scheme === value)
+}
+
+/** 规范系统字体族名称，空字符串表示继承任务栏原字体。 */
+export function normalizeTaskbarLyricsFontFamily(value: unknown): string {
+  if (typeof value !== 'string') return DEFAULT_TASKBAR_LYRICS_SETTINGS.fontFamily
+  const fontFamily = value.trim()
+  const hasControlCharacter = Array.from(fontFamily).some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0
+    return codePoint < 32 || codePoint === 127
+  })
+  if (fontFamily.length > MAX_FONT_FAMILY_LENGTH || hasControlCharacter) {
+    return DEFAULT_TASKBAR_LYRICS_SETTINGS.fontFamily
+  }
+  return fontFamily
+}
+
+/** 仅保留跟随主题与自定义配色，已移除的旧预设回退为跟随主题。 */
+function normalizeTaskbarLyricsColorScheme(value: unknown): TaskbarLyricsColorScheme {
+  if (isTaskbarLyricsColorScheme(value)) return value
+  return DEFAULT_TASKBAR_LYRICS_SETTINGS.colorScheme
+}
+
+/** 将字号限制到任务栏双行布局也不会被上下裁切的范围。 */
+export function normalizeTaskbarLyricsFontSize(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_TASKBAR_LYRICS_SETTINGS.fontSize
+  }
+  return Math.round(clamp(value, TASKBAR_LYRICS_FONT_SIZE_MIN, TASKBAR_LYRICS_FONT_SIZE_MAX))
 }
 
 /** 将持久化或事件数据收敛为完整歌词显示配置。 */
@@ -56,6 +115,16 @@ export function normalizeTaskbarLyricsSettings(value: unknown): TaskbarLyricsSet
       typeof record.wordHighlight === 'boolean'
         ? record.wordHighlight
         : DEFAULT_TASKBAR_LYRICS_SETTINGS.wordHighlight,
+    animation: isTaskbarLyricsAnimation(record.animation)
+      ? record.animation
+      : DEFAULT_TASKBAR_LYRICS_SETTINGS.animation,
+    fontSize: normalizeTaskbarLyricsFontSize(record.fontSize),
+    colorScheme: normalizeTaskbarLyricsColorScheme(record.colorScheme),
+    playedColor:
+      normalizeHexColor(record.playedColor) ?? DEFAULT_TASKBAR_LYRICS_SETTINGS.playedColor,
+    unplayedColor:
+      normalizeHexColor(record.unplayedColor) ?? DEFAULT_TASKBAR_LYRICS_SETTINGS.unplayedColor,
+    fontFamily: normalizeTaskbarLyricsFontFamily(record.fontFamily),
   }
 }
 
@@ -75,11 +144,13 @@ export function getTaskbarLyricsSettings(): Promise<TaskbarLyricsSettings> {
 export async function setTaskbarLyricsSettings(value: TaskbarLyricsSettings): Promise<void> {
   const previous = await getTaskbarLyricsSettings()
   const saved = await setVersionedSetting(lyricsStorage, value)
-  try {
-    await invoke('set_lyrics_enabled', { enabled: saved.enabled })
-  } catch (error) {
-    await setVersionedSetting(lyricsStorage, previous)
-    throw error
+  if (saved.enabled !== previous.enabled) {
+    try {
+      await invoke('set_lyrics_enabled', { enabled: saved.enabled })
+    } catch (error) {
+      await setVersionedSetting(lyricsStorage, previous)
+      throw error
+    }
   }
   await emit(TASKBAR_LYRICS_CHANGED_EVENT, saved)
 }

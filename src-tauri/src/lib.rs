@@ -42,6 +42,7 @@ pub fn run() {
             commands::lyrics::get_lyrics_cache_paths,
             commands::lyrics::set_lyrics_enabled,
             commands::lyrics::set_lyrics_cache_path_override,
+            commands::system::list_system_fonts,
             commands::system::get_system_accent_color,
             commands::system::get_system_foreground_color,
             commands::taskbar::list_taskbar_displays,

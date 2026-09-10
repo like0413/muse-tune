@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { useElementHover } from '@vueuse/core'
-import type { Component } from 'vue'
-import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef } from 'vue'
+import { useElementBounding, useElementHover, useMutationObserver } from '@vueuse/core'
+import type { CSSProperties } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
 
 import { useLyrics } from '@/features/lyrics/useLyrics'
 import { useTaskbarLyricsSettings } from '@/features/lyrics/useTaskbarLyricsSettings'
@@ -31,6 +31,7 @@ import {
   type TaskbarProgressStyle,
 } from '@/features/settings/progress-style'
 import { useTaskbarAutoHide } from '@/features/taskbar/useTaskbarAutoHide'
+import { useTaskbarCoverAppearance } from '@/features/taskbar/useTaskbarCoverAppearance'
 import { useTaskbarForegroundColor } from '@/features/theme/useTaskbarForegroundColor'
 import { useTaskbarProgressColor } from '@/features/theme/useTaskbarProgressColor'
 
@@ -40,18 +41,17 @@ import LyricsElement from './components/LyricsElement.vue'
 import PlaybackControlsElement from './components/PlaybackControlsElement.vue'
 import TrackInfoElement from './components/TrackInfoElement.vue'
 
-const taskbarElementComponents: Record<TaskbarElement, Component> = {
-  cover: CoverElement,
-  'track-info': TrackInfoElement,
-  controls: PlaybackControlsElement,
-}
-
 const { session: mediaSession, timeline, controlPending, control } = useMediaSession()
 const playbackStatus = computed(() => mediaSession.value?.playback.status ?? 'unknown')
 const { positionMs, progress } = useMediaProgress(timeline, playbackStatus)
 const { lyrics } = useLyrics()
 const { settings: lyricsSettings } = useTaskbarLyricsSettings()
+const { appearance: coverAppearance } = useTaskbarCoverAppearance()
 const taskbarRoot = useTemplateRef<HTMLElement>('taskbarRoot')
+const contentRoot = useTemplateRef<HTMLElement>('contentRoot')
+const normalLayer = useTemplateRef<HTMLElement>('normalLayer')
+const normalCoverAnchor = useTemplateRef<HTMLElement>('normalCoverAnchor')
+const lyricsCoverAnchor = useTemplateRef<HTMLElement>('lyricsCoverAnchor')
 const isTaskbarHovered = useElementHover(taskbarRoot)
 // 所有播放器都必须提供有效时间线；能力出现或消失时自动在歌词与普通界面间切换。
 const hasReliableLyricsTimeline = computed(() => timeline.value !== null)
@@ -63,6 +63,9 @@ const showLyrics = computed(
     lyrics.value.lines.length > 0 &&
     !isTaskbarHovered.value,
 )
+const contentBounds = useElementBounding(contentRoot)
+const normalCoverBounds = useElementBounding(normalCoverAnchor)
+const lyricsCoverBounds = useElementBounding(lyricsCoverAnchor)
 useMediaSessionSelectionPolicy()
 useTaskbarAutoHide(mediaSession)
 const thumbnailDataUrl = computed(() => mediaSession.value?.metadata.thumbnailDataUrl ?? null)
@@ -78,10 +81,44 @@ let unlistenProgressStyleChange: UnlistenFn | undefined
 let unlistenProgressPositionChange: UnlistenFn | undefined
 let unlistenElementOrderChange: UnlistenFn | undefined
 
+/** 普通层始终保持最终排列；封面位置由同尺寸锚点预留。 */
+const normalElementStyle = computed<Record<TaskbarElement, CSSProperties>>(() => ({
+  cover: { order: elementOrder.value.indexOf('cover') },
+  'track-info': { order: elementOrder.value.indexOf('track-info') },
+  controls: { order: elementOrder.value.indexOf('controls') },
+}))
+
+/** 把唯一的真实封面移动到当前模式的锚点，两个内容层中不会产生封面副本。 */
+const coverMotionStyle = computed<CSSProperties>(() => {
+  const target = showLyrics.value ? lyricsCoverBounds : normalCoverBounds
+  const ready =
+    coverAppearance.value.visible && contentBounds.width.value > 0 && target.width.value > 0
+  if (!ready) return { opacity: 0 }
+
+  return {
+    opacity: 1,
+    transform: `translate3d(${target.left.value - contentBounds.left.value}px, ${target.top.value - contentBounds.top.value}px, 0)`,
+  }
+})
+
+/** 在排列、控件可见性或窗口尺寸变化后刷新两个封面锚点。 */
+function refreshCoverAnchors() {
+  void nextTick(() => {
+    contentBounds.update()
+    normalCoverBounds.update()
+    lyricsCoverBounds.update()
+  })
+}
+
+useMutationObserver(normalLayer, refreshCoverAnchors, { childList: true, subtree: true })
+watch([elementOrder, () => coverAppearance.value.visible], refreshCoverAnchors)
+
 /** 仅改变页面背景 Alpha，高透明时由前景色策略保证内容对比度。 */
 const backgroundStyle = computed(() => ({
   backgroundColor: `color-mix(in srgb, var(--taskbar-background) ${100 - backgroundTransparency.value}%, transparent)`,
   color: foregroundColor.value,
+  '--taskbar-current-foreground': foregroundColor.value,
+  '--taskbar-secondary-foreground': `color-mix(in srgb, ${foregroundColor.value} 85%, var(--taskbar-background))`,
 }))
 
 /** 仅把解析后的主题色暴露给进度条，避免影响全局 primary 色。 */
@@ -102,18 +139,6 @@ const progressBarPositionClass = computed(() =>
 const verticalProgressStyle = computed(() => ({
   width: `${progress.value}%`,
   background: 'linear-gradient(to right, transparent 0%, var(--taskbar-progress-color) 100%)',
-}))
-
-/** 仅向控制区传递请求状态，其余区块共享同一份只读媒体快照。 */
-const taskbarElementProps = computed<Record<TaskbarElement, Record<string, unknown>>>(() => ({
-  cover: { session: mediaSession.value },
-  'track-info': { session: mediaSession.value },
-  controls: {
-    session: mediaSession.value,
-    pending: controlPending.value,
-    themeColor: progressColor.value,
-    onControl: control,
-  },
 }))
 
 /** 恢复背景透明度并订阅设置窗口的实时预览。 */
@@ -153,8 +178,10 @@ async function initializeElementOrder() {
   try {
     unlistenElementOrderChange = await listenTaskbarElementOrderChange((order) => {
       elementOrder.value = order
+      refreshCoverAnchors()
     })
     elementOrder.value = await getTaskbarElementOrder()
+    refreshCoverAnchors()
   } catch (error) {
     console.error('初始化任务栏区块顺序失败', error)
   }
@@ -172,6 +199,7 @@ async function activateCurrentPlayer() {
 onMounted(initializeBackgroundTransparency)
 onMounted(initializeProgressStyle)
 onMounted(initializeElementOrder)
+onMounted(refreshCoverAnchors)
 onUnmounted(() => {
   unlistenBackgroundTransparencyChange?.()
   unlistenProgressStyleChange?.()
@@ -195,22 +223,58 @@ onUnmounted(() => {
       :overlaps-progress-gradient="progressStyle === 'vertical-gradient'"
     />
 
-    <component
-      :is="taskbarElementComponents[element]"
-      v-for="element in elementOrder"
-      :key="element"
-      class="relative z-10"
-      v-show="element === 'cover' || !showLyrics"
-      v-bind="taskbarElementProps[element]"
-    />
+    <div ref="contentRoot" class="relative z-10 min-w-0 flex-1 self-stretch">
+      <div
+        ref="normalLayer"
+        class="taskbar-mode-layer"
+        :class="showLyrics ? 'pointer-events-none opacity-0' : 'opacity-100'"
+        :aria-hidden="showLyrics"
+        :inert="showLyrics || undefined"
+      >
+        <div
+          v-if="coverAppearance.visible"
+          ref="normalCoverAnchor"
+          class="size-8 shrink-0"
+          :style="normalElementStyle.cover"
+          aria-hidden="true"
+        />
+        <TrackInfoElement :session="mediaSession" :style="normalElementStyle['track-info']" />
+        <PlaybackControlsElement
+          :session="mediaSession"
+          :pending="controlPending"
+          :theme-color="progressColor"
+          :style="normalElementStyle.controls"
+          @control="control"
+        />
+      </div>
 
-    <LyricsElement
-      v-show="showLyrics"
-      class="relative z-10"
-      :lyrics="lyrics"
-      :position-ms="positionMs"
-      :settings="lyricsSettings"
-    />
+      <div
+        class="taskbar-mode-layer pointer-events-none"
+        :class="showLyrics ? 'opacity-100' : 'opacity-0'"
+        :aria-hidden="!showLyrics"
+      >
+        <div
+          v-if="coverAppearance.visible"
+          ref="lyricsCoverAnchor"
+          class="size-8 shrink-0"
+          aria-hidden="true"
+        />
+        <LyricsElement
+          :lyrics="lyrics"
+          :position-ms="positionMs"
+          :settings="lyricsSettings"
+          :theme-color="progressColor"
+        />
+      </div>
+
+      <div
+        v-if="coverAppearance.visible"
+        class="taskbar-cover-motion pointer-events-none absolute top-0 left-0 z-20 size-8"
+        :style="coverMotionStyle"
+      >
+        <CoverElement :session="mediaSession" :appearance="coverAppearance" />
+      </div>
+    </div>
 
     <div
       v-if="timeline"
@@ -233,3 +297,28 @@ onUnmounted(() => {
     </div>
   </main>
 </template>
+
+<style scoped>
+.taskbar-mode-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: opacity 280ms ease;
+}
+
+.taskbar-cover-motion {
+  transition:
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 120ms ease;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .taskbar-mode-layer,
+  .taskbar-cover-motion {
+    transition-duration: 0s;
+  }
+}
+</style>

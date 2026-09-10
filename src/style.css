@@ -44,6 +44,7 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --color-taskbar-foreground: var(--taskbar-foreground);
+  --color-taskbar-secondary-foreground: var(--taskbar-secondary-foreground);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
   --radius-sm: calc(var(--radius) - 4px);
@@ -59,6 +60,7 @@
   --foreground: oklch(0.145 0 0);
   --taskbar-background: rgb(243 243 243);
   --taskbar-foreground: rgb(26 26 26);
+  --taskbar-secondary-foreground: rgb(62 62 62);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
@@ -95,6 +97,7 @@
   --foreground: oklch(0.985 0 0);
   --taskbar-background: rgb(32 32 32);
   --taskbar-foreground: rgb(255 255 255);
+  --taskbar-secondary-foreground: rgb(216 216 216);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
