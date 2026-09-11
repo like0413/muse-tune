@@ -19,6 +19,36 @@ pub struct MediaVolumeSnapshot {
     pub muted: bool,
 }
 
+/// 不包含封面和来源图标的媒体诊断摘要。
+pub(crate) struct MediaSnapshotDiagnostics {
+    pub player: MediaPlayer,
+    pub playback_status: MediaPlaybackStatus,
+    pub title: String,
+    pub artist: String,
+    pub timeline: Option<MediaTimeline>,
+    pub controls: MediaPlaybackControls,
+}
+
+/// 媒体工作线程拥有的轻量运行状态，仅供应用诊断汇总。
+pub(crate) struct MediaRuntimeDiagnostics {
+    pub session_count: usize,
+    pub sessions: Vec<MediaRuntimeSessionDiagnostics>,
+    pub selection_strategy: MediaSessionSelectionStrategy,
+    pub volume: Option<MediaVolumeSnapshot>,
+    pub audio_process_id: Option<u32>,
+    pub spectrum_enabled: bool,
+    pub spectrum_active: bool,
+}
+
+pub(crate) struct MediaRuntimeSessionDiagnostics {
+    pub player: MediaPlayer,
+    pub playback_status: MediaPlaybackStatus,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub timeline_available: bool,
+    pub selected: bool,
+}
+
 /// 播放器通过 GSMTC 发布的标准时间线；所有时长统一为毫秒。
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

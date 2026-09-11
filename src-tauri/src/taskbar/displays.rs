@@ -16,7 +16,7 @@ use windows::{
 use super::geometry::ScreenRect;
 
 /// 提供给设置页的任务栏显示器信息。
-#[derive(serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskbarDisplay {
     pub id: String,

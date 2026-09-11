@@ -101,13 +101,20 @@ pub fn set_content_visibility(visible: bool) {
 }
 
 /// 读取媒体状态计算出的 bar 内容可见性。
-pub(super) fn content_visible() -> bool {
+pub(crate) fn content_visible() -> bool {
     TASKBAR_CONTENT_VISIBLE.load(Ordering::Acquire)
 }
 
 /// 返回当前拥有 Windows 任务栏的显示器。
 pub fn available_displays() -> Vec<TaskbarDisplay> {
     displays::available_taskbar_displays()
+}
+
+/// 返回诊断页所需的目标显示器和当前原生布局设置。
+pub(crate) fn diagnostic_settings() -> (String, TaskbarPlacement, TaskbarOverlapPriority, i32) {
+    let target = display_target_snapshot().0;
+    let (placement, overlap_priority, width) = sync::diagnostic_settings();
+    (target, placement, overlap_priority, width)
 }
 
 /// 显示并定位独立音量悬浮窗。

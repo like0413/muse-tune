@@ -35,6 +35,7 @@ pub(super) const MEDIA_SESSION_CHANGED_EVENT: &str = "media://session-changed";
 pub(super) const MEDIA_TIMELINE_CHANGED_EVENT: &str = "media://timeline-changed";
 pub(super) const MEDIA_VOLUME_CHANGED_EVENT: &str = "media://volume-changed";
 const WORKER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
+const DIAGNOSTICS_RESPONSE_TIMEOUT: Duration = Duration::from_secs(1);
 const METADATA_SETTLE_DELAY: Duration = Duration::from_millis(300);
 const TICKS_PER_MILLISECOND: i64 = 10_000;
 
@@ -52,6 +53,7 @@ pub(super) enum WorkerMessage {
     GetVolume(mpsc::SyncSender<Option<MediaVolumeSnapshot>>),
     SetVolume(f32, mpsc::SyncSender<Result<MediaVolumeSnapshot, String>>),
     ToggleMute(mpsc::SyncSender<Result<MediaVolumeSnapshot, String>>),
+    GetDiagnostics(mpsc::SyncSender<super::MediaRuntimeDiagnostics>),
     SpectrumEnabled(bool, mpsc::SyncSender<Result<(), String>>),
     VolumeChanged(u64),
     VolumeSessionsChanged(u64),
@@ -93,6 +95,34 @@ impl MediaService {
             .read()
             .ok()
             .and_then(|value| value.clone())
+    }
+
+    /// 在持有读锁期间只复制诊断所需文本，跳过可能很大的 Base64 图片。
+    pub(crate) fn diagnostics_snapshot(&self) -> Option<super::MediaSnapshotDiagnostics> {
+        self.inner.snapshot.read().ok().and_then(|snapshot| {
+            snapshot
+                .as_ref()
+                .map(|snapshot| super::MediaSnapshotDiagnostics {
+                    player: snapshot.player,
+                    playback_status: snapshot.playback.status,
+                    title: snapshot.metadata.title.clone(),
+                    artist: snapshot.metadata.artist.clone(),
+                    timeline: snapshot.timeline.clone(),
+                    controls: snapshot.playback.controls,
+                })
+        })
+    }
+
+    /// 从媒体线程读取会话选择、应用音频和频谱绑定状态。
+    pub(crate) fn runtime_diagnostics(&self) -> Result<super::MediaRuntimeDiagnostics, String> {
+        let (result_sender, result_receiver) = mpsc::sync_channel(1);
+        self.inner
+            .sender
+            .send(WorkerMessage::GetDiagnostics(result_sender))
+            .map_err(|_| "媒体会话监控线程不可用".to_owned())?;
+        result_receiver
+            .recv_timeout(DIAGNOSTICS_RESPONSE_TIMEOUT)
+            .map_err(|_| "媒体会话未返回诊断状态".to_owned())
     }
 
     /// 将控制请求串行投递给持有当前 WinRT 会话的线程。
@@ -436,6 +466,28 @@ fn run_worker<R: Runtime>(
                 }
                 let _ = result_sender.send(result);
             }
+            WorkerMessage::GetDiagnostics(result_sender) => {
+                let (spectrum_enabled, spectrum_active) = selected.spectrum.diagnostics();
+                let _ = result_sender.send(super::MediaRuntimeDiagnostics {
+                    session_count: sessions.len(),
+                    sessions: sessions
+                        .iter()
+                        .map(|entry| super::MediaRuntimeSessionDiagnostics {
+                            player: entry.snapshot.player,
+                            playback_status: entry.snapshot.playback.status,
+                            title: non_empty_metadata(&entry.snapshot.metadata.title),
+                            artist: non_empty_metadata(&entry.snapshot.metadata.artist),
+                            timeline_available: entry.snapshot.timeline.is_some(),
+                            selected: selected.id == Some(entry.id),
+                        })
+                        .collect(),
+                    selection_strategy: selection_policy.strategy,
+                    volume: selected.volume.snapshot(),
+                    audio_process_id: selected.volume.capture_process_id(),
+                    spectrum_enabled,
+                    spectrum_active,
+                });
+            }
             WorkerMessage::SpectrumEnabled(enabled, result_sender) => {
                 let result = selected.spectrum.set_enabled(enabled);
                 let _ = result_sender.send(result);
@@ -461,6 +513,10 @@ fn run_worker<R: Runtime>(
     drop(manager);
     // SAFETY: 本线程上的 RoInitialize 已成功，且 WinRT 对象和事件处理器均已释放。
     unsafe { RoUninitialize() };
+}
+
+fn non_empty_metadata(value: &str) -> Option<String> {
+    (!value.trim().is_empty()).then(|| value.to_owned())
 }
 
 /// 从当前选择读取稳定来源标识，并交由窗口激活模块处理。

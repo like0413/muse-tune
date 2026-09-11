@@ -1,6 +1,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::Mutex,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -10,7 +11,9 @@ use crate::media::MediaPlayer;
 
 use super::{
     error::LyricsError,
-    model::{LyricsPrecision, LyricsSnapshot, LyricsSourceKind, LyricsStatus},
+    model::{
+        LyricsCacheDiagnostics, LyricsPrecision, LyricsSnapshot, LyricsSourceKind, LyricsStatus,
+    },
 };
 
 const MAX_CACHE_ENTRY_BYTES: u64 = 2 * 1024 * 1024;
@@ -35,6 +38,28 @@ struct CacheEntry {
 /// 版本化的解析后歌词文件缓存。
 pub struct ParsedLyricsCache {
     entries_path: PathBuf,
+    diagnostics: Mutex<CacheDiagnosticsState>,
+}
+
+#[derive(Clone, Copy, Default)]
+struct CacheTotals {
+    entry_count: usize,
+    total_bytes: u64,
+}
+
+#[derive(Clone)]
+struct CurrentCacheEntry {
+    bytes: u64,
+    refreshed_at_seconds: u64,
+    refresh_interval: Option<Duration>,
+}
+
+#[derive(Default)]
+struct CacheDiagnosticsState {
+    revision: u64,
+    totals: Option<CacheTotals>,
+    current_track_key: Option<String>,
+    current_entry: Option<CurrentCacheEntry>,
 }
 
 impl ParsedLyricsCache {
@@ -42,7 +67,10 @@ impl ParsedLyricsCache {
     pub fn new(app_cache_dir: &Path) -> Result<Self, std::io::Error> {
         let entries_path = app_cache_dir.join("lyrics").join("v3").join("entries");
         fs::create_dir_all(&entries_path)?;
-        Ok(Self { entries_path })
+        Ok(Self {
+            entries_path,
+            diagnostics: Mutex::new(CacheDiagnosticsState::default()),
+        })
     }
 
     /// 读取并校验单个缓存条目，损坏条目按未命中处理。
@@ -50,7 +78,8 @@ impl ParsedLyricsCache {
         let path = self.entry_path(track_key);
         let metadata = fs::metadata(&path).ok()?;
         if metadata.len() > MAX_CACHE_ENTRY_BYTES {
-            let _ = fs::remove_file(path);
+            let _ = fs::remove_file(&path);
+            self.invalidate_diagnostics();
             return None;
         }
         let content = fs::read(&path).ok()?;
@@ -62,12 +91,15 @@ impl ParsedLyricsCache {
                     LyricsStatus::Ready | LyricsStatus::Unavailable
                 )
         }) {
+            let is_fresh = is_fresh(&entry);
+            self.record_current_entry(track_key, metadata.len(), &entry);
             return Some(CacheLookup {
-                is_fresh: is_fresh(&entry),
+                is_fresh,
                 snapshot: entry.snapshot,
             });
         }
         let _ = fs::remove_file(path);
+        self.invalidate_diagnostics();
         None
     }
 
@@ -90,15 +122,17 @@ impl ParsedLyricsCache {
         let temporary =
             self.entries_path
                 .join(format!(".{track_key}.{}.{}.tmp", std::process::id(), nonce));
-        let content = serde_json::to_vec(&CacheEntry {
+        let cache_entry = CacheEntry {
             refreshed_at_seconds: now_seconds(),
             snapshot: snapshot.clone(),
-        })?;
+        };
+        let content = serde_json::to_vec(&cache_entry)?;
         if content.len() as u64 > MAX_CACHE_ENTRY_BYTES {
             return Err(LyricsError::InvalidData(
                 "规范化歌词超过缓存大小上限".to_owned(),
             ));
         }
+        let content_bytes = content.len() as u64;
         fs::write(&temporary, content)?;
         if target.exists()
             && let Err(error) = fs::remove_file(&target)
@@ -107,12 +141,19 @@ impl ParsedLyricsCache {
             return Err(error.into());
         }
         match fs::rename(&temporary, &target) {
-            Ok(()) => {
-                self.prune_to_size_limit(&target)?;
-                Ok(())
-            }
+            Ok(()) => match self.prune_to_size_limit(&target) {
+                Ok(totals) => {
+                    self.record_stored_entry(track_key, content_bytes, &cache_entry, totals);
+                    Ok(())
+                }
+                Err(error) => {
+                    self.invalidate_diagnostics();
+                    Err(error.into())
+                }
+            },
             Err(error) => {
                 let _ = fs::remove_file(temporary);
+                self.invalidate_diagnostics();
                 Err(error.into())
             }
         }
@@ -120,34 +161,182 @@ impl ParsedLyricsCache {
 
     /// 删除当前歌曲的解析结果，使播放器源文件变化后只重建受影响条目。
     pub fn remove(&self, track_key: &str) -> Result<(), std::io::Error> {
-        match fs::remove_file(self.entry_path(track_key)) {
-            Ok(()) => Ok(()),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        let path = self.entry_path(track_key);
+        let removed_bytes = fs::metadata(&path).ok().map(|metadata| metadata.len());
+        match fs::remove_file(path) {
+            Ok(()) => {
+                self.record_removed_entry(track_key, removed_bytes);
+                Ok(())
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                self.record_removed_entry(track_key, None);
+                Ok(())
+            }
             Err(error) => Err(error),
         }
     }
 
     /// 只删除依赖指定播放器本地目录的结果，在线结果与其他播放器缓存继续保留。
     pub fn clear_local_source(&self, player: MediaPlayer) -> Result<(), std::io::Error> {
-        for entry in fs::read_dir(&self.entries_path)? {
-            let entry = entry?;
-            if !entry.file_type()?.is_file() {
-                continue;
+        let result = (|| {
+            for entry in fs::read_dir(&self.entries_path)? {
+                let entry = entry?;
+                if !entry.file_type()?.is_file() {
+                    continue;
+                }
+                let path = entry.path();
+                let should_remove = fs::read(&path)
+                    .ok()
+                    .and_then(|content| serde_json::from_slice::<CacheEntry>(&content).ok())
+                    .is_some_and(|entry| {
+                        entry.snapshot.source.is_some_and(|source| {
+                            source.player == player && source.kind == LyricsSourceKind::Local
+                        })
+                    });
+                if should_remove {
+                    fs::remove_file(path)?;
+                }
             }
-            let path = entry.path();
-            let should_remove = fs::read(&path)
-                .ok()
-                .and_then(|content| serde_json::from_slice::<CacheEntry>(&content).ok())
-                .is_some_and(|entry| {
-                    entry.snapshot.source.is_some_and(|source| {
-                        source.player == player && source.kind == LyricsSourceKind::Local
-                    })
-                });
-            if should_remove {
-                fs::remove_file(path)?;
+            Ok(())
+        })();
+        self.invalidate_diagnostics();
+        result
+    }
+
+    /// 读取缓存占用和当前歌曲条目状态；文件未变化时复用轻量索引。
+    pub fn diagnostics(&self, track_key: Option<&str>) -> LyricsCacheDiagnostics {
+        let Ok(state) = self.diagnostics.lock() else {
+            return LyricsCacheDiagnostics {
+                schema_version: "v3".to_owned(),
+                limit_bytes: MAX_CACHE_TOTAL_BYTES,
+                ..LyricsCacheDiagnostics::default()
+            };
+        };
+        let revision = state.revision;
+        let cached_totals = state.totals;
+        let cached_current =
+            (state.current_track_key.as_deref() == track_key).then(|| state.current_entry.clone());
+        drop(state);
+
+        let totals = cached_totals.unwrap_or_else(|| self.scan_cache_totals());
+        let current_was_cached = cached_current.is_some();
+        let current_entry = cached_current
+            .unwrap_or_else(|| track_key.and_then(|key| self.read_current_entry(key)));
+        if (cached_totals.is_none() || !current_was_cached)
+            && let Ok(mut state) = self.diagnostics.lock()
+            && state.revision == revision
+        {
+            state.totals.get_or_insert(totals);
+            if !current_was_cached {
+                state.current_track_key = track_key.map(str::to_owned);
+                state.current_entry.clone_from(&current_entry);
             }
         }
-        Ok(())
+        let mut result = LyricsCacheDiagnostics {
+            schema_version: "v3".to_owned(),
+            entry_count: totals.entry_count,
+            total_bytes: totals.total_bytes,
+            limit_bytes: MAX_CACHE_TOTAL_BYTES,
+            ..LyricsCacheDiagnostics::default()
+        };
+        let Some(entry) = current_entry.as_ref() else {
+            return result;
+        };
+        result.current_entry_exists = true;
+        result.current_entry_bytes = Some(entry.bytes);
+        let current = now_seconds();
+        let age = current.checked_sub(entry.refreshed_at_seconds);
+        result.current_entry_age_seconds = age;
+        result.current_entry_fresh = Some(
+            age.zip(entry.refresh_interval)
+                .is_some_and(|(age, interval)| age < interval.as_secs()),
+        );
+        result.current_refresh_remaining_seconds = age
+            .zip(entry.refresh_interval)
+            .map(|(age, interval)| interval.as_secs().saturating_sub(age));
+        result
+    }
+
+    fn scan_cache_totals(&self) -> CacheTotals {
+        let mut totals = CacheTotals::default();
+        if let Ok(entries) = fs::read_dir(&self.entries_path) {
+            for metadata in entries
+                .flatten()
+                .filter_map(|entry| entry.metadata().ok())
+                .filter(|metadata| metadata.is_file())
+            {
+                totals.entry_count += 1;
+                totals.total_bytes = totals.total_bytes.saturating_add(metadata.len());
+            }
+        }
+        totals
+    }
+
+    fn read_current_entry(&self, track_key: &str) -> Option<CurrentCacheEntry> {
+        let path = self.entry_path(track_key);
+        let metadata = fs::metadata(&path).ok()?;
+        let entry = fs::read(path)
+            .ok()
+            .and_then(|content| serde_json::from_slice::<CacheEntry>(&content).ok())?;
+        Some(CurrentCacheEntry {
+            bytes: metadata.len(),
+            refreshed_at_seconds: entry.refreshed_at_seconds,
+            refresh_interval: refresh_interval(&entry),
+        })
+    }
+
+    fn invalidate_diagnostics(&self) {
+        if let Ok(mut diagnostics) = self.diagnostics.lock() {
+            diagnostics.revision = diagnostics.revision.wrapping_add(1);
+            diagnostics.totals = None;
+            diagnostics.current_track_key = None;
+            diagnostics.current_entry = None;
+        }
+    }
+
+    fn record_current_entry(&self, track_key: &str, bytes: u64, entry: &CacheEntry) {
+        if let Ok(mut diagnostics) = self.diagnostics.lock() {
+            diagnostics.current_track_key = Some(track_key.to_owned());
+            diagnostics.current_entry = Some(CurrentCacheEntry {
+                bytes,
+                refreshed_at_seconds: entry.refreshed_at_seconds,
+                refresh_interval: refresh_interval(entry),
+            });
+        }
+    }
+
+    fn record_stored_entry(
+        &self,
+        track_key: &str,
+        bytes: u64,
+        entry: &CacheEntry,
+        totals: CacheTotals,
+    ) {
+        if let Ok(mut diagnostics) = self.diagnostics.lock() {
+            diagnostics.revision = diagnostics.revision.wrapping_add(1);
+            diagnostics.totals = Some(totals);
+            diagnostics.current_track_key = Some(track_key.to_owned());
+            diagnostics.current_entry = Some(CurrentCacheEntry {
+                bytes,
+                refreshed_at_seconds: entry.refreshed_at_seconds,
+                refresh_interval: refresh_interval(entry),
+            });
+        }
+    }
+
+    fn record_removed_entry(&self, track_key: &str, removed_bytes: Option<u64>) {
+        if let Ok(mut diagnostics) = self.diagnostics.lock() {
+            diagnostics.revision = diagnostics.revision.wrapping_add(1);
+            if let (Some(totals), Some(bytes)) = (diagnostics.totals.as_mut(), removed_bytes) {
+                totals.entry_count = totals.entry_count.saturating_sub(1);
+                totals.total_bytes = totals.total_bytes.saturating_sub(bytes);
+            } else if removed_bytes.is_some() {
+                diagnostics.totals = None;
+            }
+            if diagnostics.current_track_key.as_deref() == Some(track_key) {
+                diagnostics.current_entry = None;
+            }
+        }
     }
 
     fn entry_path(&self, track_key: &str) -> PathBuf {
@@ -155,8 +344,9 @@ impl ParsedLyricsCache {
     }
 
     /// 按最近写入时间淘汰旧条目，使永久运行也不会无限占用磁盘。
-    fn prune_to_size_limit(&self, protected_path: &Path) -> Result<(), std::io::Error> {
+    fn prune_to_size_limit(&self, protected_path: &Path) -> Result<CacheTotals, std::io::Error> {
         let mut total_bytes = 0_u64;
+        let mut entry_count = 0_usize;
         let mut entries = Vec::new();
         for entry in fs::read_dir(&self.entries_path)? {
             let entry = entry?;
@@ -164,6 +354,7 @@ impl ParsedLyricsCache {
             if !metadata.is_file() {
                 continue;
             }
+            entry_count += 1;
             total_bytes = total_bytes.saturating_add(metadata.len());
             entries.push((
                 metadata.modified().unwrap_or(UNIX_EPOCH),
@@ -172,7 +363,10 @@ impl ParsedLyricsCache {
             ));
         }
         if total_bytes <= MAX_CACHE_TOTAL_BYTES {
-            return Ok(());
+            return Ok(CacheTotals {
+                entry_count,
+                total_bytes,
+            });
         }
         entries.sort_unstable_by_key(|(modified, _, _)| *modified);
         for (_, size, path) in entries {
@@ -183,9 +377,13 @@ impl ParsedLyricsCache {
                 continue;
             }
             fs::remove_file(path)?;
+            entry_count = entry_count.saturating_sub(1);
             total_bytes = total_bytes.saturating_sub(size);
         }
-        Ok(())
+        Ok(CacheTotals {
+            entry_count,
+            total_bytes,
+        })
     }
 }
 
@@ -197,15 +395,21 @@ fn is_fresh_at(entry: &CacheEntry, current_seconds: u64) -> bool {
     let Some(age) = current_seconds.checked_sub(entry.refreshed_at_seconds) else {
         return false;
     };
-    let interval = match entry.snapshot.status {
-        LyricsStatus::Ready if entry.snapshot.precision == Some(LyricsPrecision::Word) => {
-            WORD_REFRESH_INTERVAL
-        }
-        LyricsStatus::Ready => LINE_REFRESH_INTERVAL,
-        LyricsStatus::Unavailable => UNAVAILABLE_REFRESH_INTERVAL,
-        LyricsStatus::Loading | LyricsStatus::Error => return false,
+    let Some(interval) = refresh_interval(entry) else {
+        return false;
     };
     age < interval.as_secs()
+}
+
+fn refresh_interval(entry: &CacheEntry) -> Option<Duration> {
+    match entry.snapshot.status {
+        LyricsStatus::Ready if entry.snapshot.precision == Some(LyricsPrecision::Word) => {
+            Some(WORD_REFRESH_INTERVAL)
+        }
+        LyricsStatus::Ready => Some(LINE_REFRESH_INTERVAL),
+        LyricsStatus::Unavailable => Some(UNAVAILABLE_REFRESH_INTERVAL),
+        LyricsStatus::Loading | LyricsStatus::Error => None,
+    }
 }
 
 fn now_seconds() -> u64 {

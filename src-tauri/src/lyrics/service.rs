@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     io,
     panic::{AssertUnwindSafe, catch_unwind},
     path::PathBuf,
@@ -8,7 +8,7 @@ use std::{
         atomic::{AtomicBool, AtomicU64, Ordering},
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use notify::RecommendedWatcher;
@@ -21,8 +21,9 @@ use super::{
     cache::ParsedLyricsCache,
     error::LyricsError,
     model::{
-        LyricsDiagnostics, LyricsSnapshot, LyricsSourceKind, LyricsStatus, ResolvedLyrics,
-        has_word_timing,
+        LyricsAdapterDiagnostics, LyricsDiagnostics, LyricsResolutionMethod,
+        LyricsResolutionOutcome, LyricsResolutionStep, LyricsSnapshot, LyricsSnapshotDiagnostics,
+        LyricsSourceKind, LyricsStatus, ResolvedLyrics, has_word_timing,
     },
     network::ResolutionDeadline,
     players,
@@ -57,7 +58,8 @@ struct LyricsServiceInner {
     enabled: AtomicBool,
     publisher: Arc<SnapshotPublisher>,
     diagnostics_notifier: Arc<DiagnosticsNotifier>,
-    snapshot: RwLock<LyricsSnapshot>,
+    runtime_state: RwLock<LyricsRuntimeState>,
+    adapter_paths: RwLock<HashMap<MediaPlayer, Option<PathBuf>>>,
     watchers: Mutex<HashMap<MediaPlayer, RecommendedWatcher>>,
     resolver: Mutex<ResolverState>,
 }
@@ -73,6 +75,21 @@ struct ResolutionRequest {
     track: TrackDescriptor,
     generation: u64,
     cancellation: Arc<AtomicBool>,
+}
+
+#[derive(Default)]
+struct LyricsRuntimeState {
+    snapshot: LyricsSnapshot,
+    resolution_method: LyricsResolutionMethod,
+    trace_generation: u64,
+    resolution_started_at: Option<Instant>,
+    resolution_duration_ms: Option<u64>,
+    resolution_steps: Vec<LyricsResolutionStep>,
+}
+
+struct LyricsCandidate {
+    resolved: ResolvedLyrics,
+    resolution_method: LyricsResolutionMethod,
 }
 
 impl LyricsService {
@@ -113,7 +130,8 @@ impl LyricsService {
                 enabled: AtomicBool::new(super::settings::restore_lyrics_enabled(app)),
                 publisher,
                 diagnostics_notifier,
-                snapshot: RwLock::new(LyricsSnapshot::default()),
+                runtime_state: RwLock::new(LyricsRuntimeState::default()),
+                adapter_paths: RwLock::new(HashMap::new()),
                 watchers: Mutex::new(HashMap::new()),
                 resolver: Mutex::new(ResolverState::default()),
             }),
@@ -125,21 +143,21 @@ impl LyricsService {
 
     /// 返回最近一次歌词快照。
     pub fn snapshot(&self) -> LyricsSnapshot {
-        self.inner
-            .snapshot
-            .read()
-            .map_or_else(|_| LyricsSnapshot::default(), |snapshot| snapshot.clone())
+        self.inner.runtime_state.read().map_or_else(
+            |_| LyricsSnapshot::default(),
+            |state| state.snapshot.clone(),
+        )
     }
 
     /// 返回当前来源、自动目录与调度器状态，供设置页只读诊断。
     pub fn diagnostics(&self) -> LyricsDiagnostics {
-        let current_player = self
+        let current_track = self
             .inner
             .current_track
             .lock()
             .ok()
-            .and_then(|track| track.as_ref().map(|track| track.player));
-        let local_cache_path = current_player.and_then(players::automatic_cache_path);
+            .and_then(|track| track.clone());
+        let current_player = current_track.as_ref().map(|track| track.player);
         let (resolver_running, pending_resolution) = self
             .inner
             .resolver
@@ -147,16 +165,85 @@ impl LyricsService {
             .map_or((false, false), |resolver| {
                 (resolver.running, resolver.pending.is_some())
             });
+        let (snapshot, resolution_method, resolution_duration_ms, resolution_steps) =
+            self.inner.runtime_state.read().map_or_else(
+                |_| {
+                    (
+                        LyricsSnapshotDiagnostics::default(),
+                        LyricsResolutionMethod::None,
+                        None,
+                        Vec::new(),
+                    )
+                },
+                |state| {
+                    (
+                        LyricsSnapshotDiagnostics {
+                            status: state.snapshot.status,
+                            source: state.snapshot.source.clone(),
+                            precision: state.snapshot.precision,
+                            line_count: state.snapshot.lines.len(),
+                            error_reason: state.snapshot.error_reason.clone(),
+                        },
+                        state.resolution_method,
+                        state.resolution_duration_ms,
+                        state.resolution_steps.clone(),
+                    )
+                },
+            );
+        let active_watchers = self
+            .inner
+            .watchers
+            .lock()
+            .map(|watchers| watchers.keys().copied().collect::<HashSet<_>>())
+            .unwrap_or_default();
+        let discovered_paths = self.inner.adapter_paths.read().map_or_else(
+            |_| Vec::new(),
+            |paths| {
+                players::SUPPORTED_PLAYERS
+                    .into_iter()
+                    .map(|player| {
+                        let cache_path = paths.get(&player).cloned().flatten();
+                        let available = cache_path.as_ref().is_some_and(|path| path.is_dir());
+                        (player, cache_path, available)
+                    })
+                    .collect::<Vec<_>>()
+            },
+        );
+        let (local_cache_path, local_cache_available) = current_player
+            .and_then(|current_player| {
+                discovered_paths
+                    .iter()
+                    .find(|(player, _, _)| *player == current_player)
+                    .map(|(_, path, available)| (path.clone(), *available))
+            })
+            .unwrap_or_default();
+        let adapters = discovered_paths
+            .into_iter()
+            .map(
+                |(player, cache_path, cache_path_available)| LyricsAdapterDiagnostics {
+                    player,
+                    cache_path_available,
+                    cache_path: cache_path.map(|path| display_path(&path)),
+                    watcher_active: active_watchers.contains(&player),
+                },
+            )
+            .collect();
         LyricsDiagnostics {
-            snapshot: self.snapshot(),
+            snapshot,
             current_player,
-            local_cache_available: local_cache_path.as_ref().is_some_and(|path| path.is_dir()),
-            local_cache_path: local_cache_path.map(|path| {
-                let value = path.to_string_lossy();
-                value.strip_prefix(r"\\?\").unwrap_or(&value).to_owned()
-            }),
+            enabled: self.inner.enabled.load(Ordering::Acquire),
+            resolution_method,
+            local_cache_available,
+            local_cache_path: local_cache_path.map(|path| display_path(&path)),
             resolver_running,
             pending_resolution,
+            resolution_duration_ms,
+            resolution_steps,
+            cache: self
+                .inner
+                .cache
+                .diagnostics(current_track.as_ref().map(|track| track.key.as_str())),
+            adapters,
         }
     }
 
@@ -243,9 +330,9 @@ impl LyricsService {
             return;
         }
         let keeps_current_ready = preserve_ready
-            && self.inner.snapshot.read().is_ok_and(|snapshot| {
-                snapshot.status == LyricsStatus::Ready
-                    && snapshot.track_key.as_ref() == Some(&track.key)
+            && self.inner.runtime_state.read().is_ok_and(|state| {
+                state.snapshot.status == LyricsStatus::Ready
+                    && state.snapshot.track_key.as_ref() == Some(&track.key)
             });
         if !keeps_current_ready {
             self.publish_if_current(LyricsSnapshot::loading(track.key.clone()), generation);
@@ -350,11 +437,13 @@ impl LyricsService {
         cancellation: Arc<AtomicBool>,
     ) {
         let track_key = track.key.clone();
-        if catch_unwind(AssertUnwindSafe(|| {
+        self.begin_resolution_trace(generation);
+        let panicked = catch_unwind(AssertUnwindSafe(|| {
             self.resolve_track(track, generation, cancellation)
         }))
-        .is_err()
-        {
+        .is_err();
+        self.finish_resolution_trace(generation);
+        if panicked {
             self.publish_if_current(
                 LyricsSnapshot {
                     track_key: Some(track_key),
@@ -387,6 +476,22 @@ impl LyricsService {
                 None
             }
         });
+        self.record_resolution_step(
+            generation,
+            "Muse Tune 缓存",
+            if cached.is_some() {
+                LyricsResolutionOutcome::Hit
+            } else {
+                LyricsResolutionOutcome::Miss
+            },
+            cached.as_ref().map(|cached| {
+                if cached.is_fresh {
+                    "有效期内".to_owned()
+                } else {
+                    "已过期，作为兜底候选".to_owned()
+                }
+            }),
+        );
         if let Some(cached) = cached {
             if cached.is_fresh {
                 let should_check_local = cached.snapshot.status == LyricsStatus::Unavailable
@@ -397,15 +502,18 @@ impl LyricsService {
                         .as_ref()
                         .is_some_and(|source| source.kind != LyricsSourceKind::Local);
                 if should_check_local {
-                    match players::resolve_current_local(
-                        &track,
-                        players::automatic_cache_path(track.player),
-                    ) {
+                    match players::resolve_current_local(&track, self.cache_path(track.player)) {
                         Ok(Some(local))
                             if is_plausible_timeline(&track, &local.lines)
                                 && (has_word_timing(&local.lines)
                                     || cached.snapshot.status == LyricsStatus::Unavailable) =>
                         {
+                            self.record_resolution_step(
+                                generation,
+                                "当前播放器本地升级",
+                                LyricsResolutionOutcome::Hit,
+                                Some("发现更高精度或新生成的本地歌词".to_owned()),
+                            );
                             self.publish_resolution(&track, local, generation);
                             return;
                         }
@@ -413,38 +521,72 @@ impl LyricsService {
                         Err(error) => log::debug!("检查播放器本地歌词升级失败: {error}"),
                     }
                 }
-                self.publish_if_current(cached.snapshot, generation);
+                self.publish_if_current_with_method(
+                    cached.snapshot,
+                    generation,
+                    LyricsResolutionMethod::ApplicationCache,
+                );
                 return;
             }
             if let Some(source) = cached.snapshot.source {
-                candidates.push(ResolvedLyrics {
-                    source,
-                    lines: cached.snapshot.lines,
+                candidates.push(LyricsCandidate {
+                    resolved: ResolvedLyrics {
+                        source,
+                        lines: cached.snapshot.lines,
+                    },
+                    resolution_method: LyricsResolutionMethod::ApplicationCache,
                 });
             }
         }
 
-        let path = players::automatic_cache_path(track.player);
+        let path = self.cache_path(track.player);
         let current_result =
             players::resolve_current_player(&track, path, &self.inner.client, &deadline);
         match current_result {
             Ok(Some(resolved)) if is_plausible_timeline(&track, &resolved.lines) => {
+                self.record_resolution_step(
+                    generation,
+                    "当前播放器适配器",
+                    LyricsResolutionOutcome::Hit,
+                    Some(source_summary(&resolved)),
+                );
                 if has_word_timing(&resolved.lines) {
                     self.publish_resolution(&track, resolved, generation);
                     return;
                 }
-                candidates.push(resolved);
+                candidates.push(candidate_from_source(resolved));
             }
-            Ok(Some(_)) => log::warn!("当前播放器歌词时间轴超出歌曲有效范围"),
-            Ok(None) => {}
+            Ok(Some(_)) => {
+                self.record_resolution_step(
+                    generation,
+                    "当前播放器适配器",
+                    LyricsResolutionOutcome::Error,
+                    Some("歌词时间轴超出歌曲有效范围".to_owned()),
+                );
+                log::warn!("当前播放器歌词时间轴超出歌曲有效范围");
+            }
+            Ok(None) => self.record_resolution_step(
+                generation,
+                "当前播放器适配器",
+                LyricsResolutionOutcome::Miss,
+                None,
+            ),
             Err(LyricsError::Cancelled) => return,
-            Err(error) => log::warn!("当前播放器歌词适配器失败: {error}"),
+            Err(error) => {
+                self.record_resolution_step(
+                    generation,
+                    "当前播放器适配器",
+                    LyricsResolutionOutcome::Error,
+                    Some(error.to_string()),
+                );
+                log::warn!("当前播放器歌词适配器失败: {error}");
+            }
         }
         if !self.is_current_generation(generation) {
             return;
         }
 
-        let qq_cache_path = players::automatic_cache_path(MediaPlayer::QqMusic);
+        let qq_cache_path = self.cache_path(MediaPlayer::QqMusic);
         let (qq_local_result, qq_online_result, netease_result) = thread::scope(|scope| {
             let qq_local = (track.player != MediaPlayer::QqMusic)
                 .then(|| scope.spawn(|| players::resolve_qq_local(&track, qq_cache_path)));
@@ -464,12 +606,22 @@ impl LyricsService {
                 netease.and_then(|handle| handle.join().ok()),
             )
         });
+        for (label, result) in [
+            ("QQ 本地兜底", qq_local_result.as_ref()),
+            ("QQ 在线兜底", qq_online_result.as_ref()),
+            ("网易云在线兜底", netease_result.as_ref()),
+        ] {
+            if let Some(result) = result {
+                let (outcome, detail) = summarize_resolution_result(result);
+                self.record_resolution_step(generation, label, outcome, detail);
+            }
+        }
         candidates.extend(
             [qq_local_result, qq_online_result, netease_result]
                 .into_iter()
                 .flatten()
                 .filter_map(|result| match result {
-                    Ok(value) => value,
+                    Ok(value) => value.map(candidate_from_source),
                     Err(LyricsError::Cancelled) => None,
                     Err(error) => {
                         log::warn!("跨平台歌词适配器失败: {error}");
@@ -477,12 +629,13 @@ impl LyricsService {
                     }
                 }),
         );
-        if let Some(resolved) = select_best_candidate(&track, candidates) {
-            self.publish_resolution(&track, resolved, generation);
+        if let Some(candidate) = select_best_candidate(&track, candidates) {
+            self.publish_candidate(&track, candidate, generation);
         } else {
             self.store_and_publish_if_current(
                 LyricsSnapshot::unavailable(Some(track.key), "没有找到可靠歌词"),
                 generation,
+                LyricsResolutionMethod::None,
             );
         }
     }
@@ -494,12 +647,29 @@ impl LyricsService {
         resolved: ResolvedLyrics,
         generation: u64,
     ) {
+        let resolution_method = method_from_source(&resolved);
         let snapshot = LyricsSnapshot::ready(track.key.clone(), resolved);
-        self.store_and_publish_if_current(snapshot, generation);
+        self.store_and_publish_if_current(snapshot, generation, resolution_method);
+    }
+
+    /// 发布已带有实际取得方式的候选，区分在线来源与应用缓存命中。
+    fn publish_candidate(
+        &self,
+        track: &TrackDescriptor,
+        candidate: LyricsCandidate,
+        generation: u64,
+    ) {
+        let snapshot = LyricsSnapshot::ready(track.key.clone(), candidate.resolved);
+        self.store_and_publish_if_current(snapshot, generation, candidate.resolution_method);
     }
 
     /// 持久化解析结果，并仅在请求仍对应当前歌曲时发布，避免慢请求覆盖新歌曲。
-    fn store_and_publish_if_current(&self, snapshot: LyricsSnapshot, generation: u64) {
+    fn store_and_publish_if_current(
+        &self,
+        snapshot: LyricsSnapshot,
+        generation: u64,
+        resolution_method: LyricsResolutionMethod,
+    ) {
         // 代数检查、缓存写入和发布必须与歌曲身份更新互斥，否则旧任务可能覆盖新歌曲。
         let Ok(_current) = self.inner.current_track.lock() else {
             return;
@@ -510,16 +680,25 @@ impl LyricsService {
         if let Err(error) = self.inner.cache.store(&snapshot) {
             log::warn!("保存解析后歌词缓存失败: {error}");
         }
-        self.publish(snapshot);
+        self.publish(snapshot, resolution_method);
     }
 
     fn publish_if_current(&self, snapshot: LyricsSnapshot, generation: u64) {
+        self.publish_if_current_with_method(snapshot, generation, LyricsResolutionMethod::None);
+    }
+
+    fn publish_if_current_with_method(
+        &self,
+        snapshot: LyricsSnapshot,
+        generation: u64,
+        resolution_method: LyricsResolutionMethod,
+    ) {
         // 与歌曲身份更新使用同一把锁，使“检查代数 → 发布”不会被切歌事件穿插。
         let Ok(_current) = self.inner.current_track.lock() else {
             return;
         };
         if self.is_current_generation(generation) {
-            self.publish(snapshot);
+            self.publish(snapshot, resolution_method);
         }
     }
 
@@ -527,19 +706,68 @@ impl LyricsService {
         self.inner.generation.load(Ordering::Acquire) == generation
     }
 
-    fn publish(&self, snapshot: LyricsSnapshot) {
-        if let Ok(mut current) = self.inner.snapshot.write() {
-            current.clone_from(&snapshot);
+    fn publish(&self, snapshot: LyricsSnapshot, resolution_method: LyricsResolutionMethod) {
+        if let Ok(mut state) = self.inner.runtime_state.write() {
+            state.snapshot.clone_from(&snapshot);
+            state.resolution_method = resolution_method;
         }
         (self.inner.publisher)(&snapshot);
         (self.inner.diagnostics_notifier)();
     }
 
+    fn begin_resolution_trace(&self, generation: u64) {
+        if let Ok(mut state) = self.inner.runtime_state.write() {
+            state.trace_generation = generation;
+            state.resolution_started_at = Some(Instant::now());
+            state.resolution_duration_ms = None;
+            state.resolution_steps.clear();
+        }
+    }
+
+    fn record_resolution_step(
+        &self,
+        generation: u64,
+        label: &str,
+        outcome: LyricsResolutionOutcome,
+        detail: Option<String>,
+    ) {
+        if let Ok(mut state) = self.inner.runtime_state.write()
+            && state.trace_generation == generation
+            && state.resolution_steps.len() < 8
+        {
+            state.resolution_steps.push(LyricsResolutionStep {
+                label: label.to_owned(),
+                outcome,
+                detail,
+            });
+        }
+    }
+
+    fn finish_resolution_trace(&self, generation: u64) {
+        if let Ok(mut state) = self.inner.runtime_state.write()
+            && state.trace_generation == generation
+        {
+            state.resolution_duration_ms = state
+                .resolution_started_at
+                .take()
+                .map(|started_at| duration_millis(started_at.elapsed()));
+        }
+        (self.inner.diagnostics_notifier)();
+    }
+
     /// 按播放器分别重建非递归监听器，避免其他播放器的写入刷新当前歌词。
     fn refresh_watchers(&self) {
+        let next_paths = players::SUPPORTED_PLAYERS
+            .into_iter()
+            .map(|player| (player, players::automatic_cache_path(player)))
+            .collect::<HashMap<_, _>>();
+        if let Ok(mut current) = self.inner.adapter_paths.write() {
+            current.clone_from(&next_paths);
+        }
         let mut next_watchers = HashMap::new();
         for player in players::SUPPORTED_PLAYERS {
-            let paths = players::watch_paths(player);
+            let cache_path = next_paths.get(&player).cloned().flatten();
+            let paths = players::watch_paths_for(player, cache_path.as_deref());
             let weak_inner = Arc::downgrade(&self.inner);
             let callback: Arc<dyn Fn(Vec<PathBuf>) + Send + Sync> = Arc::new(move |paths| {
                 let Some(inner) = weak_inner.upgrade() else {
@@ -604,7 +832,8 @@ impl LyricsService {
         player: MediaPlayer,
         paths: &[PathBuf],
     ) -> Result<(), String> {
-        let watched_paths = players::watch_paths(player);
+        let cache_path = self.cache_path(player);
+        let watched_paths = players::watch_paths_for(player, cache_path.as_deref());
         let watch_root_changed = paths.iter().any(|changed| {
             watched_paths
                 .iter()
@@ -624,10 +853,9 @@ impl LyricsService {
         let Some(track) = track else {
             return Ok(());
         };
-        let cache_path = players::automatic_cache_path(player);
-        let current_source = self.inner.snapshot.read().ok().and_then(|snapshot| {
-            (snapshot.track_key.as_ref() == Some(&track.key))
-                .then(|| snapshot.source.clone())
+        let current_source = self.inner.runtime_state.read().ok().and_then(|state| {
+            (state.snapshot.track_key.as_ref() == Some(&track.key))
+                .then(|| state.snapshot.source.clone())
                 .flatten()
         });
         if !watch_root_changed
@@ -649,6 +877,14 @@ impl LyricsService {
         }
         self.start_resolution(Some(track), generation, true);
         Ok(())
+    }
+
+    fn cache_path(&self, player: MediaPlayer) -> Option<PathBuf> {
+        self.inner
+            .adapter_paths
+            .read()
+            .ok()
+            .and_then(|paths| paths.get(&player).cloned().flatten())
     }
 
     /// 当前播放器匹配时先提升代数，再执行缓存变更，阻止旧任务回写失效结果。
@@ -726,19 +962,72 @@ fn is_allowed_url(url: &Url) -> bool {
 /// 跨平台候选先比较时间精度，再保持当前平台和本地来源优先。
 fn select_best_candidate(
     track: &TrackDescriptor,
-    candidates: Vec<ResolvedLyrics>,
-) -> Option<ResolvedLyrics> {
+    candidates: Vec<LyricsCandidate>,
+) -> Option<LyricsCandidate> {
     candidates
         .into_iter()
-        .filter(|candidate| is_plausible_timeline(track, &candidate.lines))
+        .filter(|candidate| is_plausible_timeline(track, &candidate.resolved.lines))
         .max_by_key(|candidate| {
             (
-                u8::from(has_word_timing(&candidate.lines)),
-                u8::from(candidate.source.player == track.player),
-                u8::from(candidate.source.kind == LyricsSourceKind::Local),
-                source_priority(candidate.source.player),
+                u8::from(has_word_timing(&candidate.resolved.lines)),
+                u8::from(candidate.resolved.source.player == track.player),
+                u8::from(candidate.resolved.source.kind == LyricsSourceKind::Local),
+                source_priority(candidate.resolved.source.player),
             )
         })
+}
+
+fn candidate_from_source(resolved: ResolvedLyrics) -> LyricsCandidate {
+    LyricsCandidate {
+        resolution_method: method_from_source(&resolved),
+        resolved,
+    }
+}
+
+fn method_from_source(resolved: &ResolvedLyrics) -> LyricsResolutionMethod {
+    match resolved.source.kind {
+        LyricsSourceKind::Local => LyricsResolutionMethod::PlayerLocal,
+        LyricsSourceKind::Online => LyricsResolutionMethod::Online,
+    }
+}
+
+fn summarize_resolution_result(
+    result: &Result<Option<ResolvedLyrics>, LyricsError>,
+) -> (LyricsResolutionOutcome, Option<String>) {
+    match result {
+        Ok(Some(resolved)) => (LyricsResolutionOutcome::Hit, Some(source_summary(resolved))),
+        Ok(None) => (LyricsResolutionOutcome::Miss, None),
+        Err(error) => (LyricsResolutionOutcome::Error, Some(error.to_string())),
+    }
+}
+
+fn source_summary(resolved: &ResolvedLyrics) -> String {
+    let precision = if has_word_timing(&resolved.lines) {
+        "逐字"
+    } else {
+        "逐行"
+    };
+    let player = match resolved.source.player {
+        MediaPlayer::QqMusic => "QQ 音乐",
+        MediaPlayer::NeteaseCloudMusic => "网易云音乐",
+        MediaPlayer::SodaMusic => "汽水音乐",
+        MediaPlayer::KugouMusic => "酷狗音乐",
+        MediaPlayer::Other => "其他播放器",
+    };
+    let source_kind = match resolved.source.kind {
+        LyricsSourceKind::Local => "本地",
+        LyricsSourceKind::Online => "在线",
+    };
+    format!("{player} · {source_kind} · {precision}")
+}
+
+fn display_path(path: &std::path::Path) -> String {
+    let value = path.to_string_lossy();
+    value.strip_prefix(r"\\?\").unwrap_or(&value).to_owned()
+}
+
+fn duration_millis(duration: Duration) -> u64 {
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }
 
 /// 拒绝明显超出歌曲时长或顺序倒退的解析结果，避免错误候选进入长期缓存。

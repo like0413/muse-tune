@@ -1,4 +1,5 @@
 mod commands;
+mod diagnostics;
 mod lyrics;
 mod media;
 mod settings_store;
@@ -29,6 +30,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
+            commands::diagnostics::get_diagnostics,
             commands::settings::open_settings_window,
             commands::media::activate_current_media_player,
             commands::media::control_media_session,
@@ -39,7 +41,6 @@ pub fn run() {
             commands::media::set_media_session_selection_policy,
             commands::media::toggle_current_media_mute,
             commands::lyrics::get_current_lyrics,
-            commands::lyrics::get_lyrics_diagnostics,
             commands::lyrics::set_lyrics_enabled,
             commands::system::list_system_fonts,
             commands::system::get_system_accent_color,

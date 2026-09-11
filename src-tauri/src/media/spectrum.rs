@@ -68,6 +68,11 @@ impl<R: Runtime> AudioSpectrumController<R> {
         }
     }
 
+    /// 返回配置开关与捕获线程是否实际运行。
+    pub(super) fn diagnostics(&self) -> (bool, bool) {
+        (self.enabled, self.worker.is_some())
+    }
+
     /// 停止旧目标并在需要时启动新目标，保证同时只有一个捕获流。
     fn restart(&mut self) -> Result<(), String> {
         self.worker.take();

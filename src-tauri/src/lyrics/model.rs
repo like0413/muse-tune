@@ -31,6 +31,60 @@ pub enum LyricsSourceKind {
     Online,
 }
 
+/// 当前歌词在本次播放中的实际取得方式，与歌词的原始平台来源分开记录。
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LyricsResolutionMethod {
+    #[default]
+    None,
+    ApplicationCache,
+    PlayerLocal,
+    Online,
+}
+
+/// 最近一次歌词解析步骤的结果。
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LyricsResolutionOutcome {
+    Hit,
+    Miss,
+    Error,
+}
+
+/// 最近一次解析的有界步骤记录，仅保留诊断所需摘要。
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsResolutionStep {
+    pub label: String,
+    pub outcome: LyricsResolutionOutcome,
+    pub detail: Option<String>,
+}
+
+/// Muse Tune 规范化歌词缓存的磁盘状态。
+#[derive(Clone, Debug, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsCacheDiagnostics {
+    pub schema_version: String,
+    pub entry_count: usize,
+    pub total_bytes: u64,
+    pub limit_bytes: u64,
+    pub current_entry_exists: bool,
+    pub current_entry_bytes: Option<u64>,
+    pub current_entry_age_seconds: Option<u64>,
+    pub current_entry_fresh: Option<bool>,
+    pub current_refresh_remaining_seconds: Option<u64>,
+}
+
+/// 单个播放器歌词适配器的自动发现与监听状态。
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsAdapterDiagnostics {
+    pub player: MediaPlayer,
+    pub cache_path: Option<String>,
+    pub cache_path_available: bool,
+    pub watcher_active: bool,
+}
+
 /// 可展示且可诊断的歌词来源。
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -101,12 +155,29 @@ pub struct LyricsSnapshot {
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LyricsDiagnostics {
-    pub snapshot: LyricsSnapshot,
+    pub snapshot: LyricsSnapshotDiagnostics,
     pub current_player: Option<MediaPlayer>,
+    pub enabled: bool,
+    pub resolution_method: LyricsResolutionMethod,
     pub local_cache_path: Option<String>,
     pub local_cache_available: bool,
     pub resolver_running: bool,
     pub pending_resolution: bool,
+    pub resolution_duration_ms: Option<u64>,
+    pub resolution_steps: Vec<LyricsResolutionStep>,
+    pub cache: LyricsCacheDiagnostics,
+    pub adapters: Vec<LyricsAdapterDiagnostics>,
+}
+
+/// 歌词诊断只传递摘要，避免正文和逐字数组进入 IPC。
+#[derive(Clone, Debug, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsSnapshotDiagnostics {
+    pub status: LyricsStatus,
+    pub source: Option<LyricsSource>,
+    pub precision: Option<LyricsPrecision>,
+    pub line_count: usize,
+    pub error_reason: Option<String>,
 }
 
 impl LyricsSnapshot {

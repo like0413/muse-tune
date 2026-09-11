@@ -97,6 +97,15 @@ fn overlap_priority() -> TaskbarOverlapPriority {
     TaskbarOverlapPriority::from_stored(TASKBAR_OVERLAP_PRIORITY.load(Ordering::Acquire))
 }
 
+/// 返回当前生效的定位、遮挡优先级与逻辑宽度。
+pub(super) fn diagnostic_settings() -> (TaskbarPlacement, TaskbarOverlapPriority, i32) {
+    (
+        TaskbarPlacement::from_stored(TASKBAR_PLACEMENT.load(Ordering::Acquire)),
+        overlap_priority(),
+        content_width(),
+    )
+}
+
 /// 将用户偏好和系统任务栏对齐方式解析为实际停靠侧。
 fn resolve_taskbar_side() -> TaskbarSide {
     match TaskbarPlacement::from_stored(TASKBAR_PLACEMENT.load(Ordering::Acquire)) {

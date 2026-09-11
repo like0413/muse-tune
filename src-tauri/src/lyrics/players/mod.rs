@@ -4,7 +4,10 @@ mod netease_cloud_music;
 mod qq_music;
 mod soda_music;
 
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use reqwest::blocking::Client;
 
@@ -149,9 +152,10 @@ fn additional_watch_paths(player: MediaPlayer) -> Vec<PathBuf> {
     }
 }
 
-/// 返回单个平台当前版本需要监听的缓存和配置目录。
-pub fn watch_paths(player: MediaPlayer) -> Vec<PathBuf> {
-    automatic_cache_path(player)
+/// 使用已经发现的主缓存目录构建监听路径，避免重复读取注册表或配置文件。
+pub fn watch_paths_for(player: MediaPlayer, cache_path: Option<&Path>) -> Vec<PathBuf> {
+    cache_path
+        .map(Path::to_owned)
         .into_iter()
         .chain(additional_watch_paths(player))
         .collect()
