@@ -4,7 +4,7 @@ use unicode_normalization::UnicodeNormalization;
 use crate::media::{MediaPlayer, MediaSessionSnapshot};
 
 /// 歌词解析所需的稳定歌曲描述，不携带封面和播放状态。
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct TrackDescriptor {
     pub key: String,
     pub player: MediaPlayer,
@@ -12,6 +12,14 @@ pub struct TrackDescriptor {
     pub artists: Vec<String>,
     pub duration_ms: Option<u64>,
 }
+
+impl PartialEq for TrackDescriptor {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+    }
+}
+
+impl Eq for TrackDescriptor {}
 
 impl TrackDescriptor {
     /// 从 GSMTC 快照提取歌词匹配字段；空标题不能形成有效歌曲。
@@ -79,4 +87,28 @@ pub fn split_artists(value: &str) -> Vec<String> {
         .filter(|artist| !artist.is_empty())
         .map(str::to_owned)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::media::MediaPlayer;
+
+    use super::TrackDescriptor;
+
+    #[test]
+    fn descriptor_equality_uses_stable_cache_identity() {
+        let left = TrackDescriptor {
+            key: "same".to_owned(),
+            player: MediaPlayer::QqMusic,
+            title: "歌曲".to_owned(),
+            artists: vec!["歌手".to_owned()],
+            duration_ms: Some(180_100),
+        };
+        let right = TrackDescriptor {
+            duration_ms: Some(180_900),
+            ..left.clone()
+        };
+
+        assert_eq!(left, right);
+    }
 }

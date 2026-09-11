@@ -182,3 +182,40 @@ fn select_translation(translations: &std::collections::HashMap<String, String>) 
         .or_else(|| translations.values().find(|value| !value.trim().is_empty()))
         .cloned()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{AuxiliaryKind, merge_auxiliary_lines, parse_lrc_lines, parse_yrc_lines};
+
+    #[test]
+    fn lrc_parser_orders_lines_and_fills_last_duration() {
+        let lines =
+            parse_lrc_lines("[00:02.00]第二句\n[00:01.00]第一句").expect("测试 LRC 应可解析");
+
+        assert_eq!(lines.first().map(|line| line.text.as_str()), Some("第一句"));
+        assert!(lines.last().is_some_and(|line| line.end_ms > line.start_ms));
+    }
+
+    #[test]
+    fn yrc_parser_preserves_word_timing() {
+        let lines =
+            parse_yrc_lines("[1000,1000](1000,500,0)逐(1500,500,0)字").expect("测试 YRC 应可解析");
+
+        assert_eq!(lines.first().map(|line| line.words.len()), Some(2));
+    }
+
+    #[test]
+    fn auxiliary_merge_uses_nearest_timestamp_inside_tolerance() {
+        let mut original = parse_lrc_lines("[00:01.00]原文").expect("原文应可解析");
+        let translation = parse_lrc_lines("[00:01.10]翻译").expect("翻译应可解析");
+
+        merge_auxiliary_lines(&mut original, &translation, AuxiliaryKind::Translation);
+
+        assert_eq!(
+            original
+                .first()
+                .and_then(|line| line.translation.as_deref()),
+            Some("翻译")
+        );
+    }
+}

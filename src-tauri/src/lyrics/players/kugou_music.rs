@@ -15,10 +15,20 @@ use super::super::{
     parser::parse_krc_lines,
     track::{TrackDescriptor, split_artists},
 };
+use super::file_index::DirectoryFileIndex;
 
 const MAX_KRC_BYTES: u64 = 2 * 1024 * 1024;
 static CACHE_FILE_SUFFIX: LazyLock<Result<Regex, regex::Error>> =
-    LazyLock::new(|| Regex::new(r"(?i)-[0-9a-f]{32}-\d+-\d+$"));
+    LazyLock::new(|| Regex::new(r"(?i)-[0-9a-f]{32}-\d+-[0-9a-f]+$"));
+static LOCAL_KRC_INDEX: LazyLock<DirectoryFileIndex<IndexedKrcFile>> =
+    LazyLock::new(DirectoryFileIndex::new);
+
+#[derive(Clone)]
+struct IndexedKrcFile {
+    path: PathBuf,
+    artist: String,
+    title: String,
+}
 
 /// 酷狗 20.1.41 读取播放器配置指定的本地 KRC。
 pub fn resolve(
@@ -28,24 +38,14 @@ pub fn resolve(
     let Some(cache_path) = cache_path.filter(|path| path.is_dir()) else {
         return Ok(None);
     };
+    let entries = LOCAL_KRC_INDEX.load(cache_path, || scan_local_krc_files(cache_path))?;
     let mut best: Option<(u8, PathBuf)> = None;
-    for entry in fs::read_dir(cache_path)? {
-        let entry = entry?;
-        if !entry.file_type()?.is_file() {
-            continue;
-        }
-        let file_name = entry.file_name();
-        let Some(file_name) = file_name.to_str() else {
-            continue;
-        };
-        let Some((artist, title)) = parse_file_name(file_name) else {
-            continue;
-        };
-        let artists = split_artists(&artist);
+    for entry in entries {
+        let artists = split_artists(&entry.artist);
         let Some(score) = accepted_score(
             track,
             SongCandidate {
-                title: &title,
+                title: &entry.title,
                 artists: &artists,
                 duration_ms: None,
             },
@@ -56,7 +56,7 @@ pub fn resolve(
             .as_ref()
             .is_none_or(|(best_score, _)| score > *best_score)
         {
-            best = Some((score, entry.path()));
+            best = Some((score, entry.path));
         }
     }
     let Some((_, path)) = best else {
@@ -84,6 +84,51 @@ pub fn resolve(
         },
         lines,
     }))
+}
+
+/// 扫描一次酷狗 KRC 文件并缓存稳定的文件名元数据。
+fn scan_local_krc_files(cache_path: &Path) -> std::io::Result<Vec<IndexedKrcFile>> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(cache_path)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_file() {
+            continue;
+        }
+        let file_name = entry.file_name();
+        let Some(file_name) = file_name.to_str() else {
+            continue;
+        };
+        let Some((artist, title)) = parse_file_name(file_name) else {
+            continue;
+        };
+        files.push(IndexedKrcFile {
+            path: entry.path(),
+            artist,
+            title,
+        });
+    }
+    Ok(files)
+}
+
+/// 判断酷狗文件事件中的 KRC 文件名是否与当前歌曲匹配。
+pub(super) fn changed_paths_affect_track(track: &TrackDescriptor, paths: &[PathBuf]) -> bool {
+    paths.iter().any(|path| {
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            return false;
+        };
+        let Some((artist, title)) = parse_file_name(name) else {
+            return false;
+        };
+        accepted_score(
+            track,
+            SongCandidate {
+                title: &title,
+                artists: &split_artists(&artist),
+                duration_ms: None,
+            },
+        )
+        .is_some()
+    })
 }
 
 /// 从酷狗 UTF-16LE 配置中的 LyricPath 定位歌词目录。
@@ -128,4 +173,24 @@ fn parse_file_name(file_name: &str) -> Option<(String, String)> {
     let without_ids = regex.replace(stem, "");
     let (artist, title) = without_ids.split_once(" - ")?;
     Some((artist.to_owned(), title.to_owned()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_file_name;
+
+    #[test]
+    fn filename_parser_removes_current_kugou_suffix() {
+        let parsed = parse_file_name("歌手 - 歌名-0123456789abcdef0123456789abcdef-123-456.krc");
+
+        assert_eq!(parsed, Some(("歌手".to_owned(), "歌名".to_owned())));
+    }
+
+    #[test]
+    fn filename_parser_accepts_current_hex_tail_variant() {
+        let parsed =
+            parse_file_name("歌手 - 歌名-0123456789abcdef0123456789abcdef-123456789-ab12cd34.krc");
+
+        assert_eq!(parsed, Some(("歌手".to_owned(), "歌名".to_owned())));
+    }
 }

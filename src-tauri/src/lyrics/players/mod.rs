@@ -1,3 +1,4 @@
+mod file_index;
 mod kugou_music;
 mod netease_cloud_music;
 mod qq_music;
@@ -9,7 +10,12 @@ use reqwest::blocking::Client;
 
 use crate::media::MediaPlayer;
 
-use super::{error::LyricsError, model::ResolvedLyrics, track::TrackDescriptor};
+use super::{
+    error::LyricsError,
+    model::{LyricsSource, LyricsSourceKind, ResolvedLyrics},
+    network::ResolutionDeadline,
+    track::TrackDescriptor,
+};
 
 /// 当前支持的四个播放器，供自动缓存监听复用。
 pub const SUPPORTED_PLAYERS: [MediaPlayer; 4] = [
@@ -24,24 +30,79 @@ pub fn resolve_current_player(
     track: &TrackDescriptor,
     cache_path: Option<PathBuf>,
     client: &Client,
+    deadline: &ResolutionDeadline,
 ) -> Result<Option<ResolvedLyrics>, LyricsError> {
     match track.player {
-        MediaPlayer::QqMusic => qq_music::resolve(track, cache_path.as_deref(), client),
+        MediaPlayer::QqMusic => qq_music::resolve(track, cache_path.as_deref(), client, deadline),
         MediaPlayer::NeteaseCloudMusic => {
-            netease_cloud_music::resolve(track, cache_path.as_deref(), client)
+            netease_cloud_music::resolve(track, cache_path.as_deref(), client, deadline)
         }
-        MediaPlayer::SodaMusic => soda_music::resolve(track, cache_path.as_deref(), client),
+        MediaPlayer::SodaMusic => {
+            soda_music::resolve(track, cache_path.as_deref(), client, deadline)
+        }
         MediaPlayer::KugouMusic => kugou_music::resolve(track, cache_path.as_deref()),
         MediaPlayer::Other => Ok(None),
     }
 }
 
-/// 使用 QQ 音乐 HTTPS 作为跨播放器兜底。
+/// 只读取当前播放器的本地歌词，用于新鲜持久缓存的低成本升级检查。
+pub fn resolve_current_local(
+    track: &TrackDescriptor,
+    cache_path: Option<PathBuf>,
+) -> Result<Option<ResolvedLyrics>, LyricsError> {
+    let Some(cache_path) = cache_path else {
+        return Ok(None);
+    };
+    match track.player {
+        MediaPlayer::QqMusic => qq_music::resolve_local(track, &cache_path),
+        MediaPlayer::NeteaseCloudMusic => netease_cloud_music::resolve_local(track, &cache_path),
+        MediaPlayer::KugouMusic => kugou_music::resolve(track, Some(&cache_path)),
+        MediaPlayer::SodaMusic | MediaPlayer::Other => Ok(None),
+    }
+}
+
+/// 判断播放器缓存事件是否确实可能改变当前歌曲的歌词。
+pub fn changed_paths_affect_track(
+    track: &TrackDescriptor,
+    cache_path: Option<&std::path::Path>,
+    paths: &[PathBuf],
+    current_source: Option<&LyricsSource>,
+) -> bool {
+    match track.player {
+        MediaPlayer::QqMusic => qq_music::changed_paths_affect_track(track, paths),
+        MediaPlayer::NeteaseCloudMusic => cache_path.is_some_and(|cache_path| {
+            netease_cloud_music::changed_paths_affect_track(
+                track,
+                cache_path,
+                paths,
+                current_source,
+            )
+        }),
+        MediaPlayer::KugouMusic => kugou_music::changed_paths_affect_track(track, paths),
+        MediaPlayer::SodaMusic => {
+            let already_uses_soda = current_source.is_some_and(|source| {
+                source.player == MediaPlayer::SodaMusic
+                    && source.kind == LyricsSourceKind::Online
+                    && source.song_id.is_some()
+            });
+            !already_uses_soda
+                && paths.iter().any(|path| {
+                    path.file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.eq_ignore_ascii_case("QueueCache"))
+                })
+        }
+        MediaPlayer::Other => false,
+    }
+}
+
+/// 使用 QQ 官方域名下的网页内部 HTTPS 接口作为跨播放器兜底。
 pub fn resolve_qq_online(
     track: &TrackDescriptor,
     client: &Client,
+    deadline: &ResolutionDeadline,
 ) -> Result<Option<ResolvedLyrics>, LyricsError> {
-    qq_music::resolve_online(track, client)
+    qq_music::resolve_online(track, client, deadline)
 }
 
 /// 仅查询 QQ 音乐本地 QRC，供协调器为其他播放器补足真实逐字时间轴。
@@ -55,12 +116,13 @@ pub fn resolve_qq_local(
     qq_music::resolve_local(track, &cache_path)
 }
 
-/// 使用网易云音乐 HTTPS 作为跨播放器兜底。
+/// 使用网易云官方域名下的网页内部 HTTPS 接口作为跨播放器兜底。
 pub fn resolve_netease_online(
     track: &TrackDescriptor,
     client: &Client,
+    deadline: &ResolutionDeadline,
 ) -> Result<Option<ResolvedLyrics>, LyricsError> {
-    netease_cloud_music::resolve_online(track, client)
+    netease_cloud_music::resolve_online(track, client, deadline)
 }
 
 /// 将路径自动发现委派给对应播放器模块。

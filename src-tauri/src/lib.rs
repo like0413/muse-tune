@@ -39,6 +39,7 @@ pub fn run() {
             commands::media::set_media_session_selection_policy,
             commands::media::toggle_current_media_mute,
             commands::lyrics::get_current_lyrics,
+            commands::lyrics::get_lyrics_diagnostics,
             commands::lyrics::set_lyrics_enabled,
             commands::system::list_system_fonts,
             commands::system::get_system_accent_color,

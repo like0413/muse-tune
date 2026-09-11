@@ -9,4 +9,8 @@ pub enum LyricsError {
     Network(#[from] reqwest::Error),
     #[error("歌词响应解析失败: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("歌词解析超过总时限")]
+    DeadlineExceeded,
+    #[error("歌词解析已由更新请求取消")]
+    Cancelled,
 }

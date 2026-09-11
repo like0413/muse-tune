@@ -4,17 +4,21 @@ use strsim::normalized_levenshtein;
 
 use super::track::{TrackDescriptor, normalize_text, split_artists};
 
-const VERSION_MARKERS: [&str; 10] = [
-    "live",
-    "现场",
-    "remix",
-    "dj",
-    "伴奏",
-    "纯音乐",
-    "翻唱",
-    "cover",
-    "demo",
-    "片段",
+const VERSION_MARKERS: [(&str, &[&str]); 14] = [
+    ("live", &["live", "现场"]),
+    ("remix", &["remix", "混音"]),
+    ("dj", &["dj", "dj版"]),
+    ("instrumental", &["instrumental", "伴奏", "纯音乐"]),
+    ("cover", &["cover", "翻唱"]),
+    ("demo", &["demo", "小样"]),
+    ("clip", &["片段", "tv size", "short version"]),
+    ("acoustic", &["acoustic", "unplugged", "不插电"]),
+    ("remaster", &["remaster", "remastered", "重制"]),
+    ("radio_edit", &["radio edit"]),
+    ("edit", &["edit", "剪辑版"]),
+    ("sped_up", &["sped up", "加速版"]),
+    ("slowed", &["slowed", "慢速版"]),
+    ("anniversary", &["anniversary", "周年版"]),
 ];
 
 /// 可供各播放器独立适配器使用的歌曲候选元数据。
@@ -78,8 +82,76 @@ fn normalized_artist_set(artists: &[String]) -> BTreeSet<String> {
 
 fn version_markers(value: &str) -> BTreeSet<&'static str> {
     let normalized = value.to_lowercase();
+    let ascii_words = normalized
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let padded_ascii = format!(" {ascii_words} ");
     VERSION_MARKERS
         .into_iter()
-        .filter(|marker| normalized.contains(marker))
+        .filter(|(_, aliases)| {
+            aliases.iter().any(|alias| {
+                if alias.is_ascii() {
+                    padded_ascii.contains(&format!(" {alias} "))
+                } else {
+                    normalized.contains(alias)
+                }
+            })
+        })
+        .map(|(marker, _)| marker)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::media::MediaPlayer;
+
+    use super::{SongCandidate, accepted_score, version_markers};
+    use crate::lyrics::track::TrackDescriptor;
+
+    #[test]
+    fn live_marker_does_not_match_inside_an_english_word() {
+        assert!(version_markers("Olive Tree").is_empty());
+    }
+
+    #[test]
+    fn version_markers_group_equivalent_aliases() {
+        assert_eq!(
+            version_markers("Song (Live)"),
+            version_markers("Song 现场版")
+        );
+    }
+
+    #[test]
+    fn version_markers_recognize_common_new_variants() {
+        let markers = version_markers("Song (Acoustic Remastered)");
+
+        assert!(markers.contains("acoustic"));
+        assert!(markers.contains("remaster"));
+    }
+
+    #[test]
+    fn matcher_rejects_different_song_version() {
+        let track = TrackDescriptor {
+            key: "track".to_owned(),
+            player: MediaPlayer::QqMusic,
+            title: "歌曲 Live".to_owned(),
+            artists: vec!["歌手".to_owned()],
+            duration_ms: Some(180_000),
+        };
+        let candidate_artists = vec!["歌手".to_owned()];
+
+        assert_eq!(
+            accepted_score(
+                &track,
+                SongCandidate {
+                    title: "歌曲",
+                    artists: &candidate_artists,
+                    duration_ms: Some(180_000),
+                }
+            ),
+            None
+        );
+    }
 }

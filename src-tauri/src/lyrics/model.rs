@@ -1,5 +1,9 @@
 use crate::media::MediaPlayer;
 
+use super::track::normalize_text;
+
+const MIN_WORD_TIMING_COVERAGE_PERCENT: usize = 80;
+
 /// 歌词解析生命周期；技术错误与“确实无歌词”保持可区分。
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -57,13 +61,28 @@ pub struct LyricLine {
     pub words: Vec<LyricWord>,
 }
 
-/// 仅把包含真实单字时间范围的规范化歌词视为逐字结果。
+/// 仅把绝大多数正文行都有完整时间轴的规范化歌词视为逐字结果。
 pub fn has_word_timing(lines: &[LyricLine]) -> bool {
-    lines.iter().any(|line| {
-        line.words
-            .iter()
-            .any(|word| word.end_ms > word.start_ms && !word.text.is_empty())
-    })
+    let eligible_lines = lines
+        .iter()
+        .filter(|line| !normalize_text(&line.text).is_empty())
+        .collect::<Vec<_>>();
+    if eligible_lines.is_empty() {
+        return false;
+    }
+    let timed_lines = eligible_lines
+        .iter()
+        .filter(|line| {
+            let timed_text = line
+                .words
+                .iter()
+                .filter(|word| word.end_ms > word.start_ms && !word.text.trim().is_empty())
+                .map(|word| word.text.as_str())
+                .collect::<String>();
+            !timed_text.is_empty() && normalize_text(&timed_text) == normalize_text(&line.text)
+        })
+        .count();
+    timed_lines * 100 >= eligible_lines.len() * MIN_WORD_TIMING_COVERAGE_PERCENT
 }
 
 /// 独立于媒体快照广播的歌词状态。
@@ -76,6 +95,18 @@ pub struct LyricsSnapshot {
     pub precision: Option<LyricsPrecision>,
     pub lines: Vec<LyricLine>,
     pub error_reason: Option<String>,
+}
+
+/// 设置页只读展示的歌词运行状态，不开放路径覆盖能力。
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsDiagnostics {
+    pub snapshot: LyricsSnapshot,
+    pub current_player: Option<MediaPlayer>,
+    pub local_cache_path: Option<String>,
+    pub local_cache_available: bool,
+    pub resolver_running: bool,
+    pub pending_resolution: bool,
 }
 
 impl LyricsSnapshot {
@@ -120,4 +151,53 @@ impl LyricsSnapshot {
 pub struct ResolvedLyrics {
     pub source: LyricsSource,
     pub lines: Vec<LyricLine>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LyricLine, LyricWord, has_word_timing};
+
+    fn line(text: &str, words: Vec<LyricWord>) -> LyricLine {
+        LyricLine {
+            start_ms: 0,
+            end_ms: 1_000,
+            text: text.to_owned(),
+            translation: None,
+            romanization: None,
+            words,
+        }
+    }
+
+    fn word(text: &str) -> LyricWord {
+        LyricWord {
+            start_ms: 0,
+            end_ms: 500,
+            text: text.to_owned(),
+        }
+    }
+
+    #[test]
+    fn word_precision_requires_most_lines_to_have_matching_timing() {
+        let lines = [
+            line("完整", vec![word("完整")]),
+            line("缺失一", Vec::new()),
+            line("缺失二", Vec::new()),
+        ];
+
+        assert!(!has_word_timing(&lines));
+    }
+
+    #[test]
+    fn word_precision_accepts_punctuation_differences() {
+        let lines = [line("Hello, world!", vec![word("Hello world")])];
+
+        assert!(has_word_timing(&lines));
+    }
+
+    #[test]
+    fn word_precision_rejects_timing_for_different_text() {
+        let lines = [line("正确歌词", vec![word("错误歌词")])];
+
+        assert!(!has_word_timing(&lines));
+    }
 }

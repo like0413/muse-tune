@@ -33,3 +33,12 @@ export interface LyricsSnapshot {
   lines: LyricLine[]
   errorReason: string | null
 }
+
+export interface LyricsDiagnostics {
+  snapshot: LyricsSnapshot
+  currentPlayer: MediaPlayer | null
+  localCachePath: string | null
+  localCacheAvailable: boolean
+  resolverRunning: boolean
+  pendingResolution: boolean
+}

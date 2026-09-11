@@ -17,7 +17,7 @@ use super::super::{
     error::LyricsError,
     matcher::{SongCandidate, accepted_score},
     model::{LyricLine, LyricWord, LyricsSource, LyricsSourceKind, ResolvedLyrics},
-    network::parse_json,
+    network::{ResolutionDeadline, parse_json},
     track::TrackDescriptor,
 };
 
@@ -33,6 +33,7 @@ pub fn resolve(
     track: &TrackDescriptor,
     cache_path: Option<&Path>,
     client: &Client,
+    deadline: &ResolutionDeadline,
 ) -> Result<Option<ResolvedLyrics>, LyricsError> {
     let Some(cache_path) = cache_path else {
         return Ok(None);
@@ -41,10 +42,13 @@ pub fn resolve(
         return Ok(None);
     };
     let response = parse_json::<SodaSeoResponse>(
-        client
-            .get("https://beta-luna.douyin.com/luna/h5/seo_track")
-            .header(USER_AGENT, USER_AGENT_VALUE)
-            .query(&[("track_id", song.id.as_str()), ("device_platform", "web")])
+        deadline
+            .apply(
+                client
+                    .get("https://beta-luna.douyin.com/luna/h5/seo_track")
+                    .header(USER_AGENT, USER_AGENT_VALUE)
+                    .query(&[("track_id", song.id.as_str()), ("device_platform", "web")]),
+            )?
             .send()?
             .error_for_status()?,
     )?;
@@ -176,10 +180,14 @@ fn parse_soda_lyrics(content: &str) -> Result<Vec<LyricLine>, LyricsError> {
                 })
             })
             .collect::<Vec<_>>();
-        let text = words
-            .iter()
-            .map(|word| word.text.as_str())
-            .collect::<String>();
+        let text = if words.is_empty() {
+            body.trim().to_owned()
+        } else {
+            words
+                .iter()
+                .map(|word| word.text.as_str())
+                .collect::<String>()
+        };
         if text.trim().is_empty() {
             continue;
         }
@@ -229,4 +237,27 @@ struct SodaSeoResponse {
 #[derive(Deserialize)]
 struct SodaLyric {
     content: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_soda_lyrics;
+
+    #[test]
+    fn parser_keeps_plain_line_when_word_tags_are_absent() {
+        let lines = parse_soda_lyrics("[1000,4000]普通行歌词").expect("测试歌词应可解析");
+
+        assert_eq!(
+            lines.first().map(|line| line.text.as_str()),
+            Some("普通行歌词")
+        );
+    }
+
+    #[test]
+    fn parser_builds_word_timing_from_tagged_line() {
+        let lines =
+            parse_soda_lyrics("[1000,4000]<0,500,0>逐<500,500,0>字").expect("测试歌词应可解析");
+
+        assert_eq!(lines.first().map(|line| line.words.len()), Some(2));
+    }
 }

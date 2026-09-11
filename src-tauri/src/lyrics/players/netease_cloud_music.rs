@@ -14,29 +14,45 @@ use crate::media::MediaPlayer;
 use super::super::{
     error::LyricsError,
     matcher::{SongCandidate, accepted_score},
-    model::{LyricLine, LyricsSource, LyricsSourceKind, ResolvedLyrics},
-    network::{API_USER_AGENT, parse_json},
+    model::{LyricLine, LyricsSource, LyricsSourceKind, ResolvedLyrics, has_word_timing},
+    network::{API_USER_AGENT, ResolutionDeadline, parse_json},
     parser::{AuxiliaryKind, merge_auxiliary_lines, parse_lrc_lines, parse_yrc_lines},
     track::TrackDescriptor,
 };
 
 const MAX_LOCAL_LYRICS_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_PLAYING_LIST_BYTES: u64 = 16 * 1024 * 1024;
+const NETEASE_COOKIE: &str = "os=pc; appver=3.1.39; channel=netease;";
 
-/// 网易云 3.1.39 本地缓存优先，未命中后使用国内 HTTPS 接口。
+/// 网易云 3.1.39 本地缓存优先，未命中后使用官方域名下的网页内部 HTTPS 接口。
 pub fn resolve(
     track: &TrackDescriptor,
     cache_path: Option<&Path>,
     client: &Client,
+    deadline: &ResolutionDeadline,
 ) -> Result<Option<ResolvedLyrics>, LyricsError> {
-    if let Some(path) = cache_path {
-        match resolve_local(track, path) {
-            Ok(Some(resolved)) => return Ok(Some(resolved)),
-            Ok(None) => {}
-            Err(error) => log::warn!("网易云音乐本地歌词不可用，回退在线源: {error}"),
+    let local = cache_path.and_then(|path| match resolve_local(track, path) {
+        Ok(resolved) => resolved,
+        Err(error) => {
+            log::warn!("网易云音乐本地歌词不可用，回退在线源: {error}");
+            None
         }
+    });
+    if local
+        .as_ref()
+        .is_some_and(|resolved| has_word_timing(&resolved.lines))
+    {
+        return Ok(local);
     }
-    resolve_online(track, client)
+    match resolve_online(track, client, deadline) {
+        Ok(Some(online)) if has_word_timing(&online.lines) => Ok(Some(online)),
+        Ok(online) => Ok(local.or(online)),
+        Err(error) if local.is_some() => {
+            log::warn!("网易云音乐在线逐字升级失败，保留本地逐行歌词: {error}");
+            Ok(local)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 /// 返回网易云 3.1.39 无扩展名歌词响应所在的临时目录。
@@ -60,20 +76,24 @@ pub fn additional_watch_path() -> Option<PathBuf> {
 pub fn resolve_online(
     track: &TrackDescriptor,
     client: &Client,
+    deadline: &ResolutionDeadline,
 ) -> Result<Option<ResolvedLyrics>, LyricsError> {
     let query = format!("{} {}", track.title, track.artists.join(" "));
     let response = parse_json::<NeteaseSearchResponse>(
-        client
-            .post("https://music.163.com/api/search/get")
-            .header(USER_AGENT, API_USER_AGENT)
-            .header(REFERER, "https://music.163.com/")
-            .header(COOKIE, "os=pc; appver=2.9.7; channel=netease;")
-            .form(&[
-                ("s", query.as_str()),
-                ("type", "1"),
-                ("limit", "10"),
-                ("offset", "0"),
-            ])
+        deadline
+            .apply(
+                client
+                    .post("https://music.163.com/api/search/get")
+                    .header(USER_AGENT, API_USER_AGENT)
+                    .header(REFERER, "https://music.163.com/")
+                    .header(COOKIE, NETEASE_COOKIE)
+                    .form(&[
+                        ("s", query.as_str()),
+                        ("type", "1"),
+                        ("limit", "10"),
+                        ("offset", "0"),
+                    ]),
+            )?
             .send()?
             .error_for_status()?,
     )?;
@@ -104,18 +124,21 @@ pub fn resolve_online(
     };
 
     let response = parse_json::<NeteaseLyricsResponse>(
-        client
-            .get("https://music.163.com/api/song/lyric")
-            .header(USER_AGENT, API_USER_AGENT)
-            .header(REFERER, "https://music.163.com/")
-            .header(COOKIE, "os=pc; appver=2.9.7; channel=netease;")
-            .query(&[
-                ("id", song.id.to_string()),
-                ("lv", "1".to_owned()),
-                ("kv", "1".to_owned()),
-                ("tv", "-1".to_owned()),
-                ("yv", "1".to_owned()),
-            ])
+        deadline
+            .apply(
+                client
+                    .get("https://music.163.com/api/song/lyric")
+                    .header(USER_AGENT, API_USER_AGENT)
+                    .header(REFERER, "https://music.163.com/")
+                    .header(COOKIE, NETEASE_COOKIE)
+                    .query(&[
+                        ("id", song.id.to_string()),
+                        ("lv", "1".to_owned()),
+                        ("kv", "1".to_owned()),
+                        ("tv", "-1".to_owned()),
+                        ("yv", "1".to_owned()),
+                    ]),
+            )?
             .send()?
             .error_for_status()?,
     )?;
@@ -133,7 +156,7 @@ pub fn resolve_online(
     }))
 }
 
-fn resolve_local(
+pub(super) fn resolve_local(
     track: &TrackDescriptor,
     cache_path: &Path,
 ) -> Result<Option<ResolvedLyrics>, LyricsError> {
@@ -143,7 +166,7 @@ fn resolve_local(
     let Some(song) = find_playing_list_song(track, cache_path)? else {
         return Ok(None);
     };
-    let path = cache_path.join(format!("{:x}", md5::compute(song.id.as_bytes())));
+    let path = cache_path.join(cache_file_name(&song.id));
     if !path.is_file() {
         return Ok(None);
     }
@@ -166,6 +189,48 @@ fn resolve_local(
         },
         lines,
     }))
+}
+
+/// 只让播放队列或当前歌曲对应的散列缓存触发网易云重新解析。
+pub(super) fn changed_paths_affect_track(
+    track: &TrackDescriptor,
+    cache_path: &Path,
+    paths: &[PathBuf],
+    current_source: Option<&LyricsSource>,
+) -> bool {
+    let playing_list_changed = paths.iter().any(|path| {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.eq_ignore_ascii_case("playingList"))
+    });
+    let song = match find_playing_list_song(track, cache_path) {
+        Ok(Some(song)) => song,
+        Ok(None) => return false,
+        Err(error) => {
+            log::debug!("判断网易云缓存事件归属失败，按相关变化处理: {error}");
+            return true;
+        }
+    };
+    let expected = cache_file_name(&song.id);
+    let lyrics_file_changed = paths.iter().any(|path| {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.eq_ignore_ascii_case(&expected))
+    });
+    if lyrics_file_changed {
+        return true;
+    }
+    let already_uses_same_local_song = current_source.is_some_and(|source| {
+        source.player == MediaPlayer::NeteaseCloudMusic
+            && source.kind == LyricsSourceKind::Local
+            && source.song_id.as_deref() == Some(song.id.as_str())
+    });
+    playing_list_changed && !already_uses_same_local_song && cache_path.join(expected).is_file()
+}
+
+/// 网易云 3.1.39 使用歌曲 ID 的小写 MD5 作为 Temp 歌词文件名。
+fn cache_file_name(song_id: &str) -> String {
+    format!("{:x}", md5::compute(song_id.as_bytes()))
 }
 
 fn find_playing_list_song(
@@ -301,4 +366,17 @@ struct NeteaseCachedTrack {
     duration: u64,
     #[serde(default)]
     artists: Vec<NeteaseArtist>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cache_file_name;
+
+    #[test]
+    fn cache_file_name_matches_current_client_contract() {
+        assert_eq!(
+            cache_file_name("2612982142"),
+            "a23e95de276b45a445f5fe9c87c33f6a"
+        );
+    }
 }

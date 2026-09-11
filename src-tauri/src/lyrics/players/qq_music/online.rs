@@ -8,7 +8,7 @@ use serde_json::json;
 use super::super::super::{
     error::LyricsError,
     model::{LyricLine, has_word_timing},
-    network::{API_USER_AGENT, parse_json},
+    network::{API_USER_AGENT, ResolutionDeadline, parse_json},
     parser::{AuxiliaryKind, merge_auxiliary_lines, parse_lrc_lines, parse_qrc_lines},
 };
 
@@ -18,6 +18,7 @@ const PLAY_LYRIC_ENDPOINT: &str = "https://u.y.qq.com/cgi-bin/musicu.fcg";
 pub(super) fn fetch_word_lyrics(
     client: &Client,
     song_mid: &str,
+    deadline: &ResolutionDeadline,
 ) -> Result<Option<Vec<LyricLine>>, LyricsError> {
     let request = json!({
         "comm": {
@@ -48,11 +49,14 @@ pub(super) fn fetch_word_lyrics(
         }
     });
     let response = parse_json::<PlayLyricResponse>(
-        client
-            .post(PLAY_LYRIC_ENDPOINT)
-            .header(USER_AGENT, API_USER_AGENT)
-            .header(REFERER, "https://y.qq.com/")
-            .json(&request)
+        deadline
+            .apply(
+                client
+                    .post(PLAY_LYRIC_ENDPOINT)
+                    .header(USER_AGENT, API_USER_AGENT)
+                    .header(REFERER, "https://y.qq.com/")
+                    .json(&request),
+            )?
             .send()?
             .error_for_status()?,
     )?;

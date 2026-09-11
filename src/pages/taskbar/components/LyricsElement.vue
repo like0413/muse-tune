@@ -45,7 +45,8 @@ const currentLineIndex = computed(() => {
       right = middle - 1
     }
   }
-  return matched
+  // 前奏阶段提前展示第一句未播放歌词，避免歌词层已经启用却完全空白。
+  return Math.max(0, matched)
 })
 
 /** 判断当前内容是否确实存在第二行，末句无翻译和下一句时恢复单行居中。 */

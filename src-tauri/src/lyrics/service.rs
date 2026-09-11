@@ -19,13 +19,19 @@ use crate::media::{MediaPlayer, MediaSessionSnapshot};
 
 use super::{
     cache::ParsedLyricsCache,
-    model::{LyricsSnapshot, LyricsSourceKind, LyricsStatus, ResolvedLyrics, has_word_timing},
+    error::LyricsError,
+    model::{
+        LyricsDiagnostics, LyricsSnapshot, LyricsSourceKind, LyricsStatus, ResolvedLyrics,
+        has_word_timing,
+    },
+    network::ResolutionDeadline,
     players,
     track::TrackDescriptor,
     watcher,
 };
 
 const LYRICS_CHANGED_EVENT: &str = "lyrics://changed";
+const LYRICS_DIAGNOSTICS_CHANGED_EVENT: &str = "lyrics://diagnostics-changed";
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(8);
 const ALLOWED_HTTPS_HOSTS: [&str; 4] = [
     "c.y.qq.com",
@@ -35,6 +41,7 @@ const ALLOWED_HTTPS_HOSTS: [&str; 4] = [
 ];
 
 type SnapshotPublisher = dyn Fn(&LyricsSnapshot) + Send + Sync;
+type DiagnosticsNotifier = dyn Fn() + Send + Sync;
 
 /// 可被 Tauri command 和媒体监控线程安全共享的歌词服务。
 #[derive(Clone)]
@@ -49,8 +56,23 @@ struct LyricsServiceInner {
     generation: AtomicU64,
     enabled: AtomicBool,
     publisher: Arc<SnapshotPublisher>,
+    diagnostics_notifier: Arc<DiagnosticsNotifier>,
     snapshot: RwLock<LyricsSnapshot>,
     watchers: Mutex<HashMap<MediaPlayer, RecommendedWatcher>>,
+    resolver: Mutex<ResolverState>,
+}
+
+#[derive(Default)]
+struct ResolverState {
+    running: bool,
+    pending: Option<ResolutionRequest>,
+    active_cancellation: Option<Arc<AtomicBool>>,
+}
+
+struct ResolutionRequest {
+    track: TrackDescriptor,
+    generation: u64,
+    cancellation: Arc<AtomicBool>,
 }
 
 impl LyricsService {
@@ -71,9 +93,15 @@ impl LyricsService {
             .build()
             .map_err(io::Error::other)?;
         let app_handle = app.handle().clone();
+        let diagnostics_handle = app.handle().clone();
         let publisher = Arc::new(move |snapshot: &LyricsSnapshot| {
             if let Err(error) = app_handle.emit(LYRICS_CHANGED_EVENT, snapshot) {
                 log::warn!("广播歌词状态失败: {error}");
+            }
+        });
+        let diagnostics_notifier = Arc::new(move || {
+            if let Err(error) = diagnostics_handle.emit(LYRICS_DIAGNOSTICS_CHANGED_EVENT, ()) {
+                log::warn!("广播歌词诊断变化失败: {error}");
             }
         });
         let service = Self {
@@ -84,8 +112,10 @@ impl LyricsService {
                 generation: AtomicU64::new(0),
                 enabled: AtomicBool::new(super::settings::restore_lyrics_enabled(app)),
                 publisher,
+                diagnostics_notifier,
                 snapshot: RwLock::new(LyricsSnapshot::default()),
                 watchers: Mutex::new(HashMap::new()),
+                resolver: Mutex::new(ResolverState::default()),
             }),
         };
         service.refresh_watchers();
@@ -99,6 +129,35 @@ impl LyricsService {
             .snapshot
             .read()
             .map_or_else(|_| LyricsSnapshot::default(), |snapshot| snapshot.clone())
+    }
+
+    /// 返回当前来源、自动目录与调度器状态，供设置页只读诊断。
+    pub fn diagnostics(&self) -> LyricsDiagnostics {
+        let current_player = self
+            .inner
+            .current_track
+            .lock()
+            .ok()
+            .and_then(|track| track.as_ref().map(|track| track.player));
+        let local_cache_path = current_player.and_then(players::automatic_cache_path);
+        let (resolver_running, pending_resolution) = self
+            .inner
+            .resolver
+            .lock()
+            .map_or((false, false), |resolver| {
+                (resolver.running, resolver.pending.is_some())
+            });
+        LyricsDiagnostics {
+            snapshot: self.snapshot(),
+            current_player,
+            local_cache_available: local_cache_path.as_ref().is_some_and(|path| path.is_dir()),
+            local_cache_path: local_cache_path.map(|path| {
+                let value = path.to_string_lossy();
+                value.strip_prefix(r"\\?\").unwrap_or(&value).to_owned()
+            }),
+            resolver_running,
+            pending_resolution,
+        }
     }
 
     /// 更新歌词总开关；关闭时取消解析，开启时立即解析当前歌曲。
@@ -118,6 +177,7 @@ impl LyricsService {
                 let generation = self.inner.generation.fetch_add(1, Ordering::AcqRel) + 1;
                 (current.as_ref().map(|track| track.key.clone()), generation)
             };
+            self.cancel_resolution();
             self.publish_if_current(
                 LyricsSnapshot::unavailable(track_key, "歌词显示已关闭"),
                 generation,
@@ -158,6 +218,7 @@ impl LyricsService {
             return;
         }
         let Some(track) = track else {
+            self.cancel_resolution();
             self.publish_if_current(
                 LyricsSnapshot::unavailable(None, "当前没有支持的歌曲"),
                 generation,
@@ -165,6 +226,7 @@ impl LyricsService {
             return;
         };
         if !self.inner.enabled.load(Ordering::Acquire) {
+            self.cancel_resolution();
             self.publish_if_current(
                 LyricsSnapshot::unavailable(Some(track.key), "歌词显示已关闭"),
                 generation,
@@ -173,6 +235,7 @@ impl LyricsService {
         }
         // 没有有效 GSMTC 时间线时无法可靠同步歌词，必须在读缓存和启动解析前回退。
         if track.duration_ms.is_none() {
+            self.cancel_resolution();
             self.publish_if_current(
                 LyricsSnapshot::unavailable(Some(track.key), "当前播放器未提供有效播放时间线"),
                 generation,
@@ -187,26 +250,111 @@ impl LyricsService {
         if !keeps_current_ready {
             self.publish_if_current(LyricsSnapshot::loading(track.key.clone()), generation);
         }
+        self.enqueue_resolution(track, generation);
+    }
+
+    /// 合并解析期间到达的新请求，始终只保留最新歌曲且最多运行一个主解析线程。
+    fn enqueue_resolution(&self, track: TrackDescriptor, generation: u64) {
+        let track_key = track.key.clone();
+        let cancellation = Arc::new(AtomicBool::new(false));
+        let should_start = {
+            let Ok(mut resolver) = self.inner.resolver.lock() else {
+                return;
+            };
+            if let Some(active) = resolver.active_cancellation.as_ref() {
+                active.store(true, Ordering::Release);
+            }
+            if let Some(pending) = resolver.pending.as_ref() {
+                pending.cancellation.store(true, Ordering::Release);
+            }
+            resolver.pending = Some(ResolutionRequest {
+                track,
+                generation,
+                cancellation,
+            });
+            if resolver.running {
+                false
+            } else {
+                resolver.running = true;
+                true
+            }
+        };
+        if !should_start {
+            (self.inner.diagnostics_notifier)();
+            return;
+        }
+        (self.inner.diagnostics_notifier)();
         let service = self.clone();
         if let Err(error) = thread::Builder::new()
             .name("lyrics-resolver".to_owned())
-            .spawn(move || service.resolve_track_guarded(track, generation))
+            .spawn(move || service.run_resolution_queue())
         {
+            if let Ok(mut resolver) = self.inner.resolver.lock() {
+                resolver.running = false;
+                resolver.pending = None;
+            }
             self.publish_if_current(
                 LyricsSnapshot {
+                    track_key: Some(track_key),
                     status: LyricsStatus::Error,
                     error_reason: Some(format!("启动歌词解析线程失败: {error}")),
                     ..LyricsSnapshot::default()
                 },
                 generation,
             );
+            (self.inner.diagnostics_notifier)();
+        }
+    }
+
+    /// 在没有替代任务时取消活动请求并丢弃尚未开始的旧请求。
+    fn cancel_resolution(&self) {
+        let Ok(mut resolver) = self.inner.resolver.lock() else {
+            return;
+        };
+        if let Some(active) = resolver.active_cancellation.as_ref() {
+            active.store(true, Ordering::Release);
+        }
+        if let Some(pending) = resolver.pending.take() {
+            pending.cancellation.store(true, Ordering::Release);
+        }
+        drop(resolver);
+        (self.inner.diagnostics_notifier)();
+    }
+
+    /// 串行消费最新请求；旧请求结束后跳过所有已经被更新请求覆盖的中间状态。
+    fn run_resolution_queue(&self) {
+        loop {
+            let request = {
+                let Ok(mut resolver) = self.inner.resolver.lock() else {
+                    return;
+                };
+                let Some(request) = resolver.pending.take() else {
+                    resolver.running = false;
+                    resolver.active_cancellation = None;
+                    drop(resolver);
+                    (self.inner.diagnostics_notifier)();
+                    return;
+                };
+                resolver.active_cancellation = Some(request.cancellation.clone());
+                request
+            };
+            self.resolve_track_guarded(request.track, request.generation, request.cancellation);
         }
     }
 
     /// 隔离单个平台或第三方库的非预期 panic，确保状态不会永久停留在加载中。
-    fn resolve_track_guarded(&self, track: TrackDescriptor, generation: u64) {
+    fn resolve_track_guarded(
+        &self,
+        track: TrackDescriptor,
+        generation: u64,
+        cancellation: Arc<AtomicBool>,
+    ) {
         let track_key = track.key.clone();
-        if catch_unwind(AssertUnwindSafe(|| self.resolve_track(track, generation))).is_err() {
+        if catch_unwind(AssertUnwindSafe(|| {
+            self.resolve_track(track, generation, cancellation)
+        }))
+        .is_err()
+        {
             self.publish_if_current(
                 LyricsSnapshot {
                     track_key: Some(track_key),
@@ -219,10 +367,52 @@ impl LyricsService {
         }
     }
 
-    fn resolve_track(&self, track: TrackDescriptor, generation: u64) {
+    fn resolve_track(
+        &self,
+        track: TrackDescriptor,
+        generation: u64,
+        cancellation: Arc<AtomicBool>,
+    ) {
+        let deadline = ResolutionDeadline::new(cancellation);
         let mut candidates = Vec::new();
-        if let Some(cached) = self.inner.cache.load(&track.key) {
+        let cached = self.inner.cache.load(&track.key).and_then(|cached| {
+            let valid = cached.snapshot.status != LyricsStatus::Ready
+                || is_plausible_timeline(&track, &cached.snapshot.lines);
+            if valid {
+                Some(cached)
+            } else {
+                if let Err(error) = self.inner.cache.remove(&track.key) {
+                    log::warn!("清理时间轴异常的歌词缓存失败: {error}");
+                }
+                None
+            }
+        });
+        if let Some(cached) = cached {
             if cached.is_fresh {
+                let should_check_local = cached.snapshot.status == LyricsStatus::Unavailable
+                    || cached.snapshot.precision != Some(super::model::LyricsPrecision::Word)
+                    || cached
+                        .snapshot
+                        .source
+                        .as_ref()
+                        .is_some_and(|source| source.kind != LyricsSourceKind::Local);
+                if should_check_local {
+                    match players::resolve_current_local(
+                        &track,
+                        players::automatic_cache_path(track.player),
+                    ) {
+                        Ok(Some(local))
+                            if is_plausible_timeline(&track, &local.lines)
+                                && (has_word_timing(&local.lines)
+                                    || cached.snapshot.status == LyricsStatus::Unavailable) =>
+                        {
+                            self.publish_resolution(&track, local, generation);
+                            return;
+                        }
+                        Ok(_) => {}
+                        Err(error) => log::debug!("检查播放器本地歌词升级失败: {error}"),
+                    }
+                }
                 self.publish_if_current(cached.snapshot, generation);
                 return;
             }
@@ -235,16 +425,19 @@ impl LyricsService {
         }
 
         let path = players::automatic_cache_path(track.player);
-        let current_result = players::resolve_current_player(&track, path, &self.inner.client);
+        let current_result =
+            players::resolve_current_player(&track, path, &self.inner.client, &deadline);
         match current_result {
-            Ok(Some(resolved)) => {
+            Ok(Some(resolved)) if is_plausible_timeline(&track, &resolved.lines) => {
                 if has_word_timing(&resolved.lines) {
                     self.publish_resolution(&track, resolved, generation);
                     return;
                 }
                 candidates.push(resolved);
             }
+            Ok(Some(_)) => log::warn!("当前播放器歌词时间轴超出歌曲有效范围"),
             Ok(None) => {}
+            Err(LyricsError::Cancelled) => return,
             Err(error) => log::warn!("当前播放器歌词适配器失败: {error}"),
         }
         if !self.is_current_generation(generation) {
@@ -257,10 +450,13 @@ impl LyricsService {
                 .then(|| scope.spawn(|| players::resolve_qq_local(&track, qq_cache_path)));
             // 逐行候选不能阻止逐字升级：非 QQ 播放器即使已拿到本平台 LRC，
             // 仍查询 QQ 在线 QRC；QQ 自身已在当前适配器中完成同一查询。
-            let qq_online = (track.player != MediaPlayer::QqMusic)
-                .then(|| scope.spawn(|| players::resolve_qq_online(&track, &self.inner.client)));
+            let qq_online = (track.player != MediaPlayer::QqMusic).then(|| {
+                scope.spawn(|| players::resolve_qq_online(&track, &self.inner.client, &deadline))
+            });
             let netease = (track.player != MediaPlayer::NeteaseCloudMusic).then(|| {
-                scope.spawn(|| players::resolve_netease_online(&track, &self.inner.client))
+                scope.spawn(|| {
+                    players::resolve_netease_online(&track, &self.inner.client, &deadline)
+                })
             });
             (
                 qq_local.and_then(|handle| handle.join().ok()),
@@ -274,6 +470,7 @@ impl LyricsService {
                 .flatten()
                 .filter_map(|result| match result {
                     Ok(value) => value,
+                    Err(LyricsError::Cancelled) => None,
                     Err(error) => {
                         log::warn!("跨平台歌词适配器失败: {error}");
                         None
@@ -335,6 +532,7 @@ impl LyricsService {
             current.clone_from(&snapshot);
         }
         (self.inner.publisher)(&snapshot);
+        (self.inner.diagnostics_notifier)();
     }
 
     /// 按播放器分别重建非递归监听器，避免其他播放器的写入刷新当前歌词。
@@ -356,7 +554,7 @@ impl LyricsService {
                 let result = if configuration_changed {
                     service.handle_configuration_change(player)
                 } else {
-                    service.handle_cache_content_change(player)
+                    service.handle_cache_content_change(player, &paths)
                 };
                 if let Err(error) = result {
                     log::warn!("响应 {player:?} 歌词缓存变化失败: {error}");
@@ -393,16 +591,56 @@ impl LyricsService {
     fn handle_configuration_change(&self, player: MediaPlayer) -> Result<(), String> {
         let pending = self.prepare_player_resolution(player)?;
         self.refresh_watchers();
-        if let Err(error) = self.inner.cache.clear() {
-            log::warn!("清理旧歌词解析缓存失败: {error}");
+        if let Err(error) = self.inner.cache.clear_local_source(player) {
+            log::warn!("清理播放器旧本地歌词缓存失败: {error}");
         }
         self.start_prepared_resolution(pending, true);
         Ok(())
     }
 
     /// 只淘汰当前播放器、当前歌曲的结果，其他播放器写缓存时不做任何工作。
-    fn handle_cache_content_change(&self, player: MediaPlayer) -> Result<(), String> {
-        let pending = self.prepare_player_resolution(player)?;
+    fn handle_cache_content_change(
+        &self,
+        player: MediaPlayer,
+        paths: &[PathBuf],
+    ) -> Result<(), String> {
+        let watched_paths = players::watch_paths(player);
+        let watch_root_changed = paths.iter().any(|changed| {
+            watched_paths
+                .iter()
+                .any(|watched| watcher::paths_equivalent(changed, watched))
+        });
+        if watch_root_changed {
+            self.refresh_watchers();
+        }
+        let track = self
+            .inner
+            .current_track
+            .lock()
+            .map_err(|_| "当前歌曲状态不可用".to_owned())?
+            .as_ref()
+            .filter(|track| track.player == player)
+            .cloned();
+        let Some(track) = track else {
+            return Ok(());
+        };
+        let cache_path = players::automatic_cache_path(player);
+        let current_source = self.inner.snapshot.read().ok().and_then(|snapshot| {
+            (snapshot.track_key.as_ref() == Some(&track.key))
+                .then(|| snapshot.source.clone())
+                .flatten()
+        });
+        if !watch_root_changed
+            && !players::changed_paths_affect_track(
+                &track,
+                cache_path.as_deref(),
+                paths,
+                current_source.as_ref(),
+            )
+        {
+            return Ok(());
+        }
+        let pending = self.prepare_track_resolution(player, &track.key)?;
         let Some((track, generation)) = pending else {
             return Ok(());
         };
@@ -424,6 +662,27 @@ impl LyricsService {
             .lock()
             .map_err(|_| "当前歌曲状态不可用".to_owned())?;
         let Some(track) = current.as_ref().filter(|track| track.player == player) else {
+            return Ok(None);
+        };
+        let generation = self.inner.generation.fetch_add(1, Ordering::AcqRel) + 1;
+        Ok(Some((track.clone(), generation)))
+    }
+
+    /// 仅在文件归属检查期间歌曲没有再次切换时预留解析代数。
+    fn prepare_track_resolution(
+        &self,
+        player: MediaPlayer,
+        expected_track_key: &str,
+    ) -> Result<Option<(TrackDescriptor, u64)>, String> {
+        let current = self
+            .inner
+            .current_track
+            .lock()
+            .map_err(|_| "当前歌曲状态不可用".to_owned())?;
+        let Some(track) = current
+            .as_ref()
+            .filter(|track| track.player == player && track.key == expected_track_key)
+        else {
             return Ok(None);
         };
         let generation = self.inner.generation.fetch_add(1, Ordering::AcqRel) + 1;
@@ -469,13 +728,39 @@ fn select_best_candidate(
     track: &TrackDescriptor,
     candidates: Vec<ResolvedLyrics>,
 ) -> Option<ResolvedLyrics> {
-    candidates.into_iter().max_by_key(|candidate| {
-        (
-            u8::from(has_word_timing(&candidate.lines)),
-            u8::from(candidate.source.player == track.player),
-            u8::from(candidate.source.kind == LyricsSourceKind::Local),
-            source_priority(candidate.source.player),
-        )
+    candidates
+        .into_iter()
+        .filter(|candidate| is_plausible_timeline(track, &candidate.lines))
+        .max_by_key(|candidate| {
+            (
+                u8::from(has_word_timing(&candidate.lines)),
+                u8::from(candidate.source.player == track.player),
+                u8::from(candidate.source.kind == LyricsSourceKind::Local),
+                source_priority(candidate.source.player),
+            )
+        })
+}
+
+/// 拒绝明显超出歌曲时长或顺序倒退的解析结果，避免错误候选进入长期缓存。
+fn is_plausible_timeline(track: &TrackDescriptor, lines: &[super::model::LyricLine]) -> bool {
+    let Some(duration_ms) = track.duration_ms else {
+        return false;
+    };
+    if lines.is_empty()
+        || lines
+            .windows(2)
+            .any(|pair| pair[0].start_ms > pair[1].start_ms)
+    {
+        return false;
+    }
+    let allowed_end = duration_ms.saturating_add(10_000);
+    lines.iter().all(|line| {
+        line.start_ms <= allowed_end
+            && line.words.iter().all(|word| {
+                word.end_ms > word.start_ms
+                    && word.start_ms >= line.start_ms
+                    && word.start_ms <= allowed_end
+            })
     })
 }
 
@@ -487,5 +772,56 @@ fn source_priority(player: MediaPlayer) -> u8 {
         MediaPlayer::SodaMusic => 2,
         MediaPlayer::KugouMusic => 1,
         MediaPlayer::Other => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::media::MediaPlayer;
+
+    use super::{TrackDescriptor, is_plausible_timeline};
+    use crate::lyrics::model::{LyricLine, LyricWord};
+
+    fn track() -> TrackDescriptor {
+        TrackDescriptor {
+            key: "track".to_owned(),
+            player: MediaPlayer::QqMusic,
+            title: "歌曲".to_owned(),
+            artists: vec!["歌手".to_owned()],
+            duration_ms: Some(180_000),
+        }
+    }
+
+    fn line(start_ms: u64) -> LyricLine {
+        LyricLine {
+            start_ms,
+            end_ms: start_ms + 1_000,
+            text: "歌词".to_owned(),
+            translation: None,
+            romanization: None,
+            words: vec![LyricWord {
+                start_ms,
+                end_ms: start_ms + 500,
+                text: "歌词".to_owned(),
+            }],
+        }
+    }
+
+    #[test]
+    fn timeline_rejects_lines_far_beyond_track_duration() {
+        assert!(!is_plausible_timeline(&track(), &[line(200_000)]));
+    }
+
+    #[test]
+    fn timeline_rejects_unsorted_lines() {
+        assert!(!is_plausible_timeline(
+            &track(),
+            &[line(2_000), line(1_000)]
+        ));
+    }
+
+    #[test]
+    fn timeline_accepts_ordered_lines_inside_duration() {
+        assert!(is_plausible_timeline(&track(), &[line(1_000), line(2_000)]));
     }
 }

@@ -1,7 +1,7 @@
 use std::{
     fs, io,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, LazyLock},
     thread,
 };
 
@@ -21,30 +21,56 @@ use crate::media::MediaPlayer;
 use super::super::{
     error::LyricsError,
     matcher::{SongCandidate, accepted_score},
-    model::{LyricsSource, LyricsSourceKind, ResolvedLyrics},
-    network::{API_USER_AGENT, parse_json},
+    model::{LyricsSource, LyricsSourceKind, ResolvedLyrics, has_word_timing},
+    network::{API_USER_AGENT, ResolutionDeadline, parse_json},
     parser::{AuxiliaryKind, merge_auxiliary_lines, parse_lrc_lines, parse_qrc_lines},
     track::{TrackDescriptor, split_artists},
 };
+use super::file_index::DirectoryFileIndex;
 
 mod online;
 
 const MAX_QRC_BYTES: u64 = 2 * 1024 * 1024;
+static LOCAL_QRC_INDEX: LazyLock<DirectoryFileIndex<IndexedQrcFile>> =
+    LazyLock::new(DirectoryFileIndex::new);
 
-/// QQ 音乐本地缓存优先，未命中后使用 QQ 官方域名 HTTPS。
+#[derive(Clone)]
+struct IndexedQrcFile {
+    path: PathBuf,
+    artist: String,
+    title: String,
+    duration_seconds: u64,
+}
+
+/// QQ 音乐本地缓存优先，未命中后使用官方域名下的网页内部 HTTPS 接口。
 pub fn resolve(
     track: &TrackDescriptor,
     cache_path: Option<&Path>,
     client: &Client,
+    deadline: &ResolutionDeadline,
 ) -> Result<Option<ResolvedLyrics>, LyricsError> {
-    if let Some(path) = cache_path {
-        match resolve_local(track, path) {
-            Ok(Some(resolved)) => return Ok(Some(resolved)),
-            Ok(None) => {}
-            Err(error) => log::warn!("QQ 音乐本地歌词不可用，回退在线源: {error}"),
+    let local = cache_path.and_then(|path| match resolve_local(track, path) {
+        Ok(resolved) => resolved,
+        Err(error) => {
+            log::warn!("QQ 音乐本地歌词不可用，回退在线源: {error}");
+            None
         }
+    });
+    if local
+        .as_ref()
+        .is_some_and(|resolved| has_word_timing(&resolved.lines))
+    {
+        return Ok(local);
     }
-    resolve_online(track, client)
+    match resolve_online(track, client, deadline) {
+        Ok(Some(online)) if has_word_timing(&online.lines) => Ok(Some(online)),
+        Ok(online) => Ok(local.or(online)),
+        Err(error) if local.is_some() => {
+            log::warn!("QQ 音乐在线逐字升级失败，保留本地逐行歌词: {error}");
+            Ok(local)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 /// 从注册表的缓存根目录定位 QQMusicLyricNew。
@@ -92,14 +118,18 @@ pub fn watch_cache_path_changes(on_change: Arc<dyn Fn() + Send + Sync>) -> Resul
 pub fn resolve_online(
     track: &TrackDescriptor,
     client: &Client,
+    deadline: &ResolutionDeadline,
 ) -> Result<Option<ResolvedLyrics>, LyricsError> {
     let query = format!("{} {}", track.title, track.artists.join(" "));
     let response = parse_json::<QqSearchResponse>(
-        client
-            .get("https://c.y.qq.com/soso/fcgi-bin/client_search_cp")
-            .header(USER_AGENT, API_USER_AGENT)
-            .header(REFERER, "https://y.qq.com/")
-            .query(&[("format", "json"), ("p", "1"), ("n", "10"), ("w", &query)])
+        deadline
+            .apply(
+                client
+                    .get("https://c.y.qq.com/soso/fcgi-bin/client_search_cp")
+                    .header(USER_AGENT, API_USER_AGENT)
+                    .header(REFERER, "https://y.qq.com/")
+                    .query(&[("format", "json"), ("p", "1"), ("n", "10"), ("w", &query)]),
+            )?
             .send()?
             .error_for_status()?,
     )?;
@@ -132,7 +162,7 @@ pub fn resolve_online(
 
     // QQ 的新版匿名接口可返回加密 QRC。优先尝试真实逐字数据；接口缺失、
     // 格式变化或曲目本身没有 QRC 时，继续走下方已验证的行级 LRC 兜底。
-    match online::fetch_word_lyrics(client, &song.song_mid) {
+    match online::fetch_word_lyrics(client, &song.song_mid, deadline) {
         Ok(Some(lines)) => {
             return Ok(Some(ResolvedLyrics {
                 source: LyricsSource {
@@ -148,15 +178,18 @@ pub fn resolve_online(
     }
 
     let response = parse_json::<QqLyricsResponse>(
-        client
-            .get("https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg")
-            .header(USER_AGENT, API_USER_AGENT)
-            .header(REFERER, "https://y.qq.com/")
-            .query(&[
-                ("songmid", song.song_mid.as_str()),
-                ("format", "json"),
-                ("nobase64", "0"),
-            ])
+        deadline
+            .apply(
+                client
+                    .get("https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg")
+                    .header(USER_AGENT, API_USER_AGENT)
+                    .header(REFERER, "https://y.qq.com/")
+                    .query(&[
+                        ("songmid", song.song_mid.as_str()),
+                        ("format", "json"),
+                        ("nobase64", "0"),
+                    ]),
+            )?
             .send()?
             .error_for_status()?,
     )?;
@@ -188,26 +221,16 @@ pub(super) fn resolve_local(
     if !cache_path.is_dir() {
         return Ok(None);
     }
+    let entries = LOCAL_QRC_INDEX.load(cache_path, || scan_local_qrc_files(cache_path))?;
     let mut best: Option<(u8, PathBuf)> = None;
-    for entry in fs::read_dir(cache_path)? {
-        let entry = entry?;
-        if !entry.file_type()?.is_file() {
-            continue;
-        }
-        let file_name = entry.file_name();
-        let Some(file_name) = file_name.to_str() else {
-            continue;
-        };
-        let Some(metadata) = parse_original_file_name(file_name) else {
-            continue;
-        };
-        let artists = split_artists(metadata.artist);
+    for entry in entries {
+        let artists = split_artists(&entry.artist);
         let Some(score) = accepted_score(
             track,
             SongCandidate {
-                title: metadata.title,
+                title: &entry.title,
                 artists: &artists,
-                duration_ms: Some(metadata.duration_seconds * 1_000),
+                duration_ms: Some(entry.duration_seconds * 1_000),
             },
         ) else {
             continue;
@@ -216,7 +239,7 @@ pub(super) fn resolve_local(
             .as_ref()
             .is_none_or(|(best_score, _)| score > *best_score)
         {
-            best = Some((score, entry.path()));
+            best = Some((score, entry.path));
         }
     }
     let Some((_, original_path)) = best else {
@@ -250,6 +273,57 @@ pub(super) fn resolve_local(
         },
         lines,
     }))
+}
+
+/// 扫描一次 QQ 主 QRC 文件并缓存稳定的文件名元数据。
+fn scan_local_qrc_files(cache_path: &Path) -> io::Result<Vec<IndexedQrcFile>> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(cache_path)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_file() {
+            continue;
+        }
+        let file_name = entry.file_name();
+        let Some(file_name) = file_name.to_str() else {
+            continue;
+        };
+        let Some(metadata) = parse_original_file_name(file_name) else {
+            continue;
+        };
+        files.push(IndexedQrcFile {
+            path: entry.path(),
+            artist: metadata.artist.to_owned(),
+            title: metadata.title.to_owned(),
+            duration_seconds: metadata.duration_seconds,
+        });
+    }
+    Ok(files)
+}
+
+/// 判断一组 QQ 缓存文件事件中是否包含当前歌曲的主歌词或辅助歌词。
+pub(super) fn changed_paths_affect_track(track: &TrackDescriptor, paths: &[PathBuf]) -> bool {
+    paths.iter().any(|path| {
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            return false;
+        };
+        let primary_name = name
+            .strip_suffix("_qmts.qrc")
+            .or_else(|| name.strip_suffix("_qmRoma.qrc"))
+            .map_or_else(|| name.to_owned(), |base| format!("{base}_qm.qrc"));
+        let Some(metadata) = parse_original_file_name(&primary_name) else {
+            return false;
+        };
+        let artists = split_artists(metadata.artist);
+        accepted_score(
+            track,
+            SongCandidate {
+                title: metadata.title,
+                artists: &artists,
+                duration_ms: Some(metadata.duration_seconds * 1_000),
+            },
+        )
+        .is_some()
+    })
 }
 
 #[derive(Clone, Copy)]
@@ -431,4 +505,17 @@ struct QqArtist {
 struct QqLyricsResponse {
     lyric: Option<String>,
     trans: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_original_file_name;
+
+    #[test]
+    fn filename_parser_keeps_dashes_inside_title() {
+        let metadata = parse_original_file_name("歌手 - 标题 - 副标题 - 240 - 专辑_qm.qrc")
+            .expect("当前 QQ 文件名应可解析");
+
+        assert_eq!(metadata.title, "标题 - 副标题");
+    }
 }
