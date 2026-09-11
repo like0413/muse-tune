@@ -1,6 +1,6 @@
 //! 使用 Windows Core Audio 控制当前播放器的单应用音量，绝不修改系统端点音量。
 
-use std::{collections::HashSet, sync::mpsc::Sender};
+use std::{collections::HashSet, sync::mpsc::Sender, thread, time::Duration};
 
 use windows::{
     Win32::{
@@ -19,6 +19,7 @@ use windows::{
 use super::{MediaVolumeSnapshot, monitor::WorkerMessage, process::find_process_ids};
 
 const VOLUME_EVENT_CONTEXT: GUID = GUID::from_u128(0x16c5b57c_2d31_45a5_9c9e_f97a63d20f31);
+const INITIAL_VOLUME_REBIND_DELAY: Duration = Duration::from_millis(800);
 
 /// 当前播放器跨输出设备的全部应用音频会话。
 pub(super) struct ApplicationVolumeController {
@@ -81,6 +82,23 @@ impl ApplicationVolumeController {
             .find(|registration| registration.is_active())
             .or_else(|| self.session_registrations.first())
             .and_then(VolumeSessionRegistration::snapshot)
+    }
+
+    /// 初次绑定尚无音频会话时安排一次重绑，覆盖播放器进程与 Core Audio 建立的竞态窗口。
+    pub(super) fn schedule_initial_rebind(&self) {
+        let Some(target_id) = self
+            .target_id
+            .filter(|_| self.session_registrations.is_empty())
+        else {
+            return;
+        };
+        let sender = self.sender.clone();
+        let _ = thread::Builder::new()
+            .name("media-volume-settle".to_owned())
+            .spawn(move || {
+                thread::sleep(INITIAL_VOLUME_REBIND_DELAY);
+                let _ = sender.send(WorkerMessage::VolumeSessionsChanged(target_id));
+            });
     }
 
     /// 同步设置该播放器的全部音频会话；拖动音量时自动解除静音。

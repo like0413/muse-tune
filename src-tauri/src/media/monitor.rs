@@ -535,7 +535,12 @@ fn activate_selected_player(
         .map(|value| value.to_string())
         .map_err(|error| format!("读取当前播放器来源失败: {error}"))?;
     let player = identify(&source_app_id);
-    activate_player(&source_app_id, player.executable_names())
+    activate_player(
+        &source_app_id,
+        player.executable_names(),
+        player.preferred_window_classes(),
+        player.allows_relaunch_activation(),
+    )
 }
 
 /// 获取 GSMTC 管理器并订阅当前会话与会话列表变化。
@@ -878,6 +883,7 @@ fn bind_selected_volume(
         .unwrap_or_default();
     let player = identify(&source_app_id);
     volume.bind(selected_id, &source_app_id, player.executable_names());
+    volume.schedule_initial_rebind();
 }
 
 /// Core Audio 通知会话集合变化后重新匹配当前播放器进程。

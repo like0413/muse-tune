@@ -11,6 +11,7 @@ const TASKBAR_LYRICS_KEY = 'taskbar.lyrics'
 const TASKBAR_LYRICS_CHANGED_EVENT = 'settings://taskbar-lyrics-changed'
 const TASKBAR_LYRICS_ALIGNMENTS = ['left', 'center', 'right'] as const
 const TASKBAR_LYRICS_LINE_MODES = ['single', 'double'] as const
+const TASKBAR_LYRICS_SECONDARY_LINES = ['translation', 'next'] as const
 const TASKBAR_LYRICS_ANIMATIONS = ['none', 'up'] as const
 const TASKBAR_LYRICS_COLOR_SCHEMES = ['theme', 'custom'] as const
 const MAX_FONT_FAMILY_LENGTH = 128
@@ -19,6 +20,7 @@ export const TASKBAR_LYRICS_FONT_SIZE_MAX = 18
 
 export type TaskbarLyricsAlignment = (typeof TASKBAR_LYRICS_ALIGNMENTS)[number]
 export type TaskbarLyricsLineMode = (typeof TASKBAR_LYRICS_LINE_MODES)[number]
+export type TaskbarLyricsSecondaryLine = (typeof TASKBAR_LYRICS_SECONDARY_LINES)[number]
 export type TaskbarLyricsAnimation = (typeof TASKBAR_LYRICS_ANIMATIONS)[number]
 export type TaskbarLyricsColorScheme = (typeof TASKBAR_LYRICS_COLOR_SCHEMES)[number]
 
@@ -26,6 +28,7 @@ export interface TaskbarLyricsSettings {
   enabled: boolean
   alignment: TaskbarLyricsAlignment
   lineMode: TaskbarLyricsLineMode
+  secondaryLine: TaskbarLyricsSecondaryLine
   wordHighlight: boolean
   animation: TaskbarLyricsAnimation
   fontSize: number
@@ -39,6 +42,7 @@ export const DEFAULT_TASKBAR_LYRICS_SETTINGS: TaskbarLyricsSettings = {
   enabled: true,
   alignment: 'left',
   lineMode: 'double',
+  secondaryLine: 'translation',
   wordHighlight: true,
   animation: 'up',
   fontSize: 14,
@@ -56,6 +60,11 @@ export function isTaskbarLyricsAlignment(value: unknown): value is TaskbarLyrics
 /** 判断外部值是否为支持的歌词行数模式。 */
 export function isTaskbarLyricsLineMode(value: unknown): value is TaskbarLyricsLineMode {
   return TASKBAR_LYRICS_LINE_MODES.some((mode) => mode === value)
+}
+
+/** 判断外部值是否为支持的双行次要内容。 */
+export function isTaskbarLyricsSecondaryLine(value: unknown): value is TaskbarLyricsSecondaryLine {
+  return TASKBAR_LYRICS_SECONDARY_LINES.some((secondaryLine) => secondaryLine === value)
 }
 
 /** 判断外部值是否为支持的歌词切换动画。 */
@@ -111,6 +120,9 @@ export function normalizeTaskbarLyricsSettings(value: unknown): TaskbarLyricsSet
     lineMode: isTaskbarLyricsLineMode(record.lineMode)
       ? record.lineMode
       : DEFAULT_TASKBAR_LYRICS_SETTINGS.lineMode,
+    secondaryLine: isTaskbarLyricsSecondaryLine(record.secondaryLine)
+      ? record.secondaryLine
+      : DEFAULT_TASKBAR_LYRICS_SETTINGS.secondaryLine,
     wordHighlight:
       typeof record.wordHighlight === 'boolean'
         ? record.wordHighlight

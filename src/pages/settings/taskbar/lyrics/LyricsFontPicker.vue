@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { CheckIcon, ChevronsUpDownIcon, LoaderCircleIcon } from '@lucide/vue'
-import { computed, shallowRef } from 'vue'
+import { CheckIcon, ChevronsUpDownIcon } from '@lucide/vue'
+import { computed, onMounted, shallowRef } from 'vue'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -15,7 +15,7 @@ import {
   ComboboxTrigger,
   ComboboxViewport,
 } from '@/components/ui/combobox'
-import { listSystemFonts } from '@/features/system/fonts'
+import { getCachedSystemFonts, refreshSystemFonts } from '@/features/system/fonts'
 
 interface FontOption {
   value: string
@@ -34,8 +34,7 @@ const emit = defineEmits<{
   'update:modelValue': [fontFamily: string]
 }>()
 
-const systemFonts = shallowRef<readonly string[]>([])
-const loading = shallowRef(false)
+const systemFonts = shallowRef(getCachedSystemFonts())
 const loadFailed = shallowRef(false)
 
 const fontOptions = computed<FontOption[]>(() => {
@@ -64,25 +63,23 @@ function displayFontValue(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
-/** 下拉框每次打开时刷新字体集合，使新安装字体无需重启应用即可出现。 */
-async function loadFonts() {
-  if (loading.value) return
-  loading.value = true
+/** 后台刷新字体集合；保留旧列表，避免选择器出现加载闪烁。 */
+async function refreshFonts() {
   loadFailed.value = false
   try {
-    systemFonts.value = await listSystemFonts()
+    systemFonts.value = await refreshSystemFonts()
   } catch (error) {
     loadFailed.value = true
     console.error('读取系统字体失败', error)
-  } finally {
-    loading.value = false
   }
 }
 
-/** 仅响应用户打开动作，不在任务栏或设置页后台轮询字体。 */
+/** 每次展开时后台刷新一次，不使用持续轮询。 */
 function refreshFontsWhenOpened(open: boolean) {
-  if (open) void loadFonts()
+  if (open) void refreshFonts()
 }
+
+onMounted(refreshFonts)
 </script>
 
 <template>
@@ -101,8 +98,7 @@ function refreshFontsWhenOpened(open: boolean) {
           aria-label="歌词字体"
         >
           <span class="truncate">{{ selectedFont.label }}</span>
-          <LoaderCircleIcon v-if="loading" data-icon="inline-end" class="animate-spin" />
-          <ChevronsUpDownIcon v-else data-icon="inline-end" class="opacity-50" />
+          <ChevronsUpDownIcon data-icon="inline-end" class="opacity-50" />
         </Button>
       </ComboboxTrigger>
     </ComboboxAnchor>

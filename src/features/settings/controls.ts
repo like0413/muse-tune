@@ -5,6 +5,9 @@ import { settingsStore } from './store'
 
 const TASKBAR_CONTROLS_VISIBILITY_KEY = 'taskbar.controls.visibility'
 const TASKBAR_CONTROLS_VISIBILITY_CHANGED_EVENT = 'settings://taskbar-controls-visibility-changed'
+export const TASKBAR_CONTROL_BUTTONS = ['previous', 'playPause', 'next', 'volume'] as const
+
+export type TaskbarControlButton = (typeof TASKBAR_CONTROL_BUTTONS)[number]
 
 export interface TaskbarControlsVisibility {
   visible: boolean
@@ -12,6 +15,7 @@ export interface TaskbarControlsVisibility {
   playPause: boolean
   next: boolean
   volume: boolean
+  order: TaskbarControlButton[]
 }
 
 export const DEFAULT_TASKBAR_CONTROLS_VISIBILITY: TaskbarControlsVisibility = {
@@ -20,6 +24,17 @@ export const DEFAULT_TASKBAR_CONTROLS_VISIBILITY: TaskbarControlsVisibility = {
   playPause: true,
   next: true,
   volume: true,
+  order: [...TASKBAR_CONTROL_BUTTONS],
+}
+
+/** 判断外部值是否包含全部控制按钮且不存在重复项。 */
+function isTaskbarControlButtonOrder(value: unknown): value is TaskbarControlButton[] {
+  if (!Array.isArray(value) || value.length !== TASKBAR_CONTROL_BUTTONS.length) return false
+  const buttons = new Set(value)
+  return (
+    buttons.size === TASKBAR_CONTROL_BUTTONS.length &&
+    TASKBAR_CONTROL_BUTTONS.every((button) => buttons.has(button))
+  )
 }
 
 /** 将外部值规范为完整控制按钮配置，损坏字段单独回退默认值。 */
@@ -44,6 +59,9 @@ export function normalizeTaskbarControlsVisibility(value: unknown): TaskbarContr
       typeof record.volume === 'boolean'
         ? record.volume
         : DEFAULT_TASKBAR_CONTROLS_VISIBILITY.volume,
+    order: isTaskbarControlButtonOrder(record.order)
+      ? [...record.order]
+      : [...DEFAULT_TASKBAR_CONTROLS_VISIBILITY.order],
   }
 }
 

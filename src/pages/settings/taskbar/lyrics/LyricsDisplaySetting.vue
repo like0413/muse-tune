@@ -29,6 +29,7 @@ import {
   isTaskbarLyricsAlignment,
   isTaskbarLyricsAnimation,
   isTaskbarLyricsLineMode,
+  isTaskbarLyricsSecondaryLine,
   normalizeTaskbarLyricsSettings,
   setTaskbarLyricsSettings,
   TASKBAR_LYRICS_FONT_SIZE_MAX,
@@ -46,6 +47,10 @@ const alignmentOptions = [
 const lineModeOptions = [
   { value: 'single', label: '单行' },
   { value: 'double', label: '双行' },
+] as const
+const secondaryLineOptions = [
+  { value: 'translation', label: '翻译' },
+  { value: 'next', label: '下一句' },
 ] as const
 const animationOptions = [
   { value: 'none', label: '无' },
@@ -96,6 +101,11 @@ function selectAlignment(value: unknown) {
 /** 接收单选组件的行数模式。 */
 function selectLineMode(value: unknown) {
   if (isTaskbarLyricsLineMode(value)) void updateSettings({ lineMode: value })
+}
+
+/** 接收双行次要内容的优先选择。 */
+function selectSecondaryLine(value: unknown) {
+  if (isTaskbarLyricsSecondaryLine(value)) void updateSettings({ secondaryLine: value })
 }
 
 /** 接收下拉框的歌词动画值。 */
@@ -224,7 +234,7 @@ onMounted(loadSettings)
         <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
           <FieldContent>
             <FieldTitle>显示行数</FieldTitle>
-            <FieldDescription>双行时优先在第二行显示翻译，否则显示下一句</FieldDescription>
+            <FieldDescription>双行时可指定第二行优先显示的内容</FieldDescription>
           </FieldContent>
           <Tabs :model-value="selectedSettings.lineMode" @update:model-value="selectLineMode">
             <TabsList aria-label="歌词显示行数">
@@ -233,6 +243,35 @@ onMounted(loadSettings)
                 :key="option.value"
                 :value="option.value"
                 :disabled="settingsSaving || !selectedSettings.enabled"
+              >
+                {{ option.label }}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </Field>
+
+        <Field
+          orientation="horizontal"
+          :data-disabled="!selectedSettings.enabled || selectedSettings.lineMode !== 'double'"
+        >
+          <FieldContent>
+            <FieldTitle>第二行优先显示</FieldTitle>
+            <FieldDescription>首选内容不存在时自动显示另一项</FieldDescription>
+          </FieldContent>
+          <Tabs
+            :model-value="selectedSettings.secondaryLine"
+            @update:model-value="selectSecondaryLine"
+          >
+            <TabsList aria-label="双行歌词第二行优先内容">
+              <TabsTrigger
+                v-for="option in secondaryLineOptions"
+                :key="option.value"
+                :value="option.value"
+                :disabled="
+                  settingsSaving ||
+                  !selectedSettings.enabled ||
+                  selectedSettings.lineMode !== 'double'
+                "
               >
                 {{ option.label }}
               </TabsTrigger>

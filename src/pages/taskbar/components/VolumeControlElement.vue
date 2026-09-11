@@ -28,7 +28,8 @@ let disposed = false
 
 const percentage = computed(() => Math.round((volume.value?.level ?? 0) * 100))
 const volumeIcon = computed(() => {
-  if (!volume.value || volume.value.muted || percentage.value === 0) return VolumeX
+  if (!volume.value) return Volume2
+  if (volume.value.muted || percentage.value === 0) return VolumeX
   return percentage.value < 50 ? Volume1 : Volume2
 })
 
@@ -120,7 +121,7 @@ onUnmounted(() => {
       class="taskbar-volume-control"
       type="button"
       aria-label="调节播放器音量"
-      :aria-disabled="!volume"
+      :disabled="!volume"
       @click="toggleMuted"
     >
       <component :is="volumeIcon" data-icon="inline-start" />

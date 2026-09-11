@@ -9,6 +9,7 @@ import {
   DEFAULT_TASKBAR_CONTROLS_VISIBILITY,
   getTaskbarControlsVisibility,
   listenTaskbarControlsVisibilityChange,
+  type TaskbarControlButton,
   type TaskbarControlsVisibility,
 } from '@/features/settings/controls'
 
@@ -33,6 +34,68 @@ const canTogglePlayback = computed(() => {
   )
 })
 
+type StandardControlButton = Exclude<TaskbarControlButton, 'volume'>
+
+interface StandardControlItem {
+  key: StandardControlButton
+  kind: 'button'
+  label: string
+  icon: typeof Play
+  action: MediaControlAction
+  disabled: boolean
+}
+
+interface VolumeControlItem {
+  key: 'volume'
+  kind: 'volume'
+}
+
+type ControlItem = StandardControlItem | VolumeControlItem
+
+/** 按已保存顺序生成当前可见按钮，并集中派生禁用状态与图标。 */
+const controlItems = computed<ControlItem[]>(() =>
+  visibility.value.order.flatMap((button) => {
+    if (!visibility.value[button]) return []
+    switch (button) {
+      case 'previous':
+        return [
+          {
+            key: button,
+            kind: 'button',
+            label: '上一曲',
+            icon: SkipBack,
+            action: 'skip_previous',
+            disabled: props.pending || !props.session?.playback.controls.canSkipPrevious,
+          },
+        ]
+      case 'playPause':
+        return [
+          {
+            key: button,
+            kind: 'button',
+            label: '播放或暂停',
+            icon: isPlaying.value ? Pause : Play,
+            action: 'toggle_play_pause',
+            disabled: props.pending || !canTogglePlayback.value,
+          },
+        ]
+      case 'next':
+        return [
+          {
+            key: button,
+            kind: 'button',
+            label: '下一曲',
+            icon: SkipForward,
+            action: 'skip_next',
+            disabled: props.pending || !props.session?.playback.controls.canSkipNext,
+          },
+        ]
+      case 'volume':
+        return [{ key: button, kind: 'volume' }]
+    }
+  }),
+)
+
 /** 恢复按钮显示配置，并接收设置窗口的实时更新。 */
 async function initializeVisibility() {
   try {
@@ -51,44 +114,21 @@ onUnmounted(() => unlistenVisibilityChange?.())
 
 <template>
   <div v-if="visibility.visible" class="flex shrink-0" aria-label="播放控制">
-    <Button
-      v-if="visibility.previous"
-      variant="ghost"
-      size="icon-sm"
-      class="taskbar-control"
-      type="button"
-      aria-label="上一曲"
-      :disabled="pending || !session?.playback.controls.canSkipPrevious"
-      @click="emit('control', 'skip_previous')"
-    >
-      <SkipBack class="fill-current" data-icon="inline-start" />
-    </Button>
-    <Button
-      v-if="visibility.playPause"
-      variant="ghost"
-      size="icon-sm"
-      class="taskbar-control"
-      type="button"
-      aria-label="播放或暂停"
-      :disabled="pending || !canTogglePlayback"
-      @click="emit('control', 'toggle_play_pause')"
-    >
-      <Pause v-if="isPlaying" class="fill-current" data-icon="inline-start" />
-      <Play v-else class="fill-current" data-icon="inline-start" />
-    </Button>
-    <Button
-      v-if="visibility.next"
-      variant="ghost"
-      size="icon-sm"
-      class="taskbar-control"
-      type="button"
-      aria-label="下一曲"
-      :disabled="pending || !session?.playback.controls.canSkipNext"
-      @click="emit('control', 'skip_next')"
-    >
-      <SkipForward class="fill-current" data-icon="inline-start" />
-    </Button>
-    <VolumeControlElement v-if="visibility.volume" :theme-color="themeColor" />
+    <template v-for="item in controlItems" :key="item.key">
+      <VolumeControlElement v-if="item.kind === 'volume'" :theme-color="themeColor" />
+      <Button
+        v-else
+        variant="ghost"
+        size="icon-sm"
+        class="taskbar-control"
+        type="button"
+        :aria-label="item.label"
+        :disabled="item.disabled"
+        @click="emit('control', item.action)"
+      >
+        <component :is="item.icon" class="fill-current" data-icon="inline-start" />
+      </Button>
+    </template>
   </div>
 </template>
 

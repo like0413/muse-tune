@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { Gamepad2 } from '@lucide/vue'
-import { onMounted, shallowRef } from 'vue'
+import { Gamepad2, GripVertical } from '@lucide/vue'
+import { moveArrayElement, useSortable } from '@vueuse/integrations/useSortable'
+import type { SortableEvent } from 'sortablejs'
+import { nextTick, onMounted, shallowRef, useTemplateRef } from 'vue'
 
 import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -19,17 +21,16 @@ import {
   DEFAULT_TASKBAR_CONTROLS_VISIBILITY,
   getTaskbarControlsVisibility,
   setTaskbarControlsVisibility,
+  type TaskbarControlButton,
   type TaskbarControlsVisibility,
 } from '@/features/settings/controls'
 
-const buttonOptions = [
-  { key: 'previous', label: '上一曲' },
-  { key: 'playPause', label: '播放 / 暂停' },
-  { key: 'next', label: '下一曲' },
-  { key: 'volume', label: '音量' },
-] as const
-
-type ControlButtonKey = (typeof buttonOptions)[number]['key']
+const buttonOptions: Record<TaskbarControlButton, { label: string }> = {
+  previous: { label: '上一曲' },
+  playPause: { label: '播放 / 暂停' },
+  next: { label: '下一曲' },
+  volume: { label: '音量' },
+}
 
 const selectedVisibility = shallowRef<TaskbarControlsVisibility>({
   ...DEFAULT_TASKBAR_CONTROLS_VISIBILITY,
@@ -38,12 +39,28 @@ const committedVisibility = shallowRef<TaskbarControlsVisibility>({
   ...DEFAULT_TASKBAR_CONTROLS_VISIBILITY,
 })
 const visibilitySaving = shallowRef(false)
+const selectedOrder = shallowRef<TaskbarControlButton[]>([
+  ...DEFAULT_TASKBAR_CONTROLS_VISIBILITY.order,
+])
+const orderContainer = useTemplateRef<HTMLElement>('orderContainer')
+
+const { option } = useSortable(orderContainer, selectedOrder, {
+  animation: 160,
+  direction: 'horizontal',
+  forceFallback: true,
+  fallbackTolerance: 3,
+  handle: '[data-drag-handle]',
+  ghostClass: 'opacity-40',
+  onUpdate: handleSortUpdate,
+  watchElement: true,
+})
 
 /** 恢复已保存的控制按钮配置。 */
 async function loadVisibility() {
   try {
     const visibility = await getTaskbarControlsVisibility()
     selectedVisibility.value = visibility
+    selectedOrder.value = [...visibility.order]
     committedVisibility.value = { ...visibility }
   } catch (error) {
     console.error('读取控制按钮配置失败', error)
@@ -69,8 +86,37 @@ async function updateVisibility(patch: Partial<TaskbarControlsVisibility>) {
 }
 
 /** 将 Checkbox 值规范为布尔值并更新单个按钮。 */
-function updateButton(key: ControlButtonKey, value: boolean | 'indeterminate') {
+function updateButton(key: TaskbarControlButton, value: boolean | 'indeterminate') {
   void updateVisibility({ [key]: value === true })
+}
+
+/** 拖动结束后一次性保存完整按钮顺序。 */
+function handleSortUpdate(event: SortableEvent) {
+  if (event.oldIndex === undefined || event.newIndex === undefined || visibilitySaving.value) return
+
+  visibilitySaving.value = true
+  option('disabled', true)
+  moveArrayElement(selectedOrder, event.oldIndex, event.newIndex, event)
+  void nextTick(() => saveOrder([...selectedOrder.value]))
+}
+
+/** 保存按钮顺序，失败时恢复最后一次成功的排列。 */
+async function saveOrder(order: TaskbarControlButton[]) {
+  const next = { ...selectedVisibility.value, order }
+  selectedVisibility.value = next
+  try {
+    await setTaskbarControlsVisibility(next)
+    committedVisibility.value = { ...next, order: [...order] }
+  } catch (error) {
+    const restoredOrder = [...committedVisibility.value.order]
+    selectedOrder.value = restoredOrder
+    selectedVisibility.value = { ...committedVisibility.value, order: restoredOrder }
+    console.error('保存控制按钮顺序失败', error)
+  } finally {
+    visibilitySaving.value = false
+    await nextTick()
+    option('disabled', false)
+  }
 }
 
 onMounted(loadVisibility)
@@ -105,21 +151,31 @@ onMounted(loadVisibility)
           <FieldContent>
             <FieldTitle>显示的按钮</FieldTitle>
           </FieldContent>
-          <div class="grid grid-cols-4 gap-2">
-            <Label
-              v-for="option in buttonOptions"
-              :key="option.key"
-              :for="`taskbar-control-${option.key}`"
-              class="bg-muted/50 flex items-center gap-2 rounded-md border p-3"
+          <div ref="orderContainer" class="grid grid-cols-4 gap-2">
+            <div
+              v-for="button in selectedOrder"
+              :key="button"
+              class="bg-muted/50 flex min-w-0 items-center gap-2 rounded-md border p-3"
             >
               <Checkbox
-                :id="`taskbar-control-${option.key}`"
-                :model-value="selectedVisibility[option.key]"
+                :id="`taskbar-control-${button}`"
+                :model-value="selectedVisibility[button]"
                 :disabled="visibilitySaving || !selectedVisibility.visible"
-                @update:model-value="updateButton(option.key, $event)"
+                @update:model-value="updateButton(button, $event)"
               />
-              <span class="truncate text-sm">{{ option.label }}</span>
-            </Label>
+              <Label :for="`taskbar-control-${button}`" class="min-w-0 flex-1">
+                <span class="block truncate text-sm">{{ buttonOptions[button].label }}</span>
+              </Label>
+              <button
+                class="text-muted-foreground hover:text-foreground focus-visible:ring-ring grid shrink-0 cursor-grab place-items-center rounded-sm outline-none focus-visible:ring-2 active:cursor-grabbing"
+                type="button"
+                data-drag-handle
+                :disabled="visibilitySaving || !selectedVisibility.visible"
+                :aria-label="`拖动${buttonOptions[button].label}`"
+              >
+                <GripVertical class="size-4" aria-hidden="true" />
+              </button>
+            </div>
           </div>
         </Field>
       </FieldGroup>

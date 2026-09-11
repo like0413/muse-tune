@@ -155,7 +155,10 @@ const displayWords = computed<DisplayWord[]>(() => {
 }
 
 .lyric-row-animated {
-  transition: font-size 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    height 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    line-height 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    font-size 320ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .lyric-word {

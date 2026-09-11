@@ -54,8 +54,22 @@ const hasSecondaryLine = computed(() => {
   if (props.settings.lineMode !== 'double') return false
   const index = currentLineIndex.value
   const current = props.lyrics.lines[index]
-  return Boolean(current?.translation || props.lyrics.lines[index + 1])
+  return Boolean(current && selectSecondaryContent(current, props.lyrics.lines[index + 1]))
 })
+
+/** 按设置选择第二行内容，首选缺失时自动回退到另一种内容。 */
+function selectSecondaryContent(
+  current: DeepReadonly<LyricLine>,
+  next: DeepReadonly<LyricLine> | undefined,
+) {
+  const translation = current.translation
+    ? { kind: 'translation' as const, line: current, text: current.translation }
+    : undefined
+  const nextLine = next ? { kind: 'next' as const, line: next, text: next.text } : undefined
+  return props.settings.secondaryLine === 'translation'
+    ? (translation ?? nextLine)
+    : (nextLine ?? translation)
+}
 
 /** 14px 严格复用普通歌曲信息的两种行高，其余字号采用紧凑且不会裁切的行高。 */
 const layoutMetrics = computed(() => {
@@ -94,25 +108,16 @@ const displayLines = computed<DisplayLine[]>(() => {
   ]
   if (props.settings.lineMode === 'single') return lines
 
-  if (current.translation) {
-    lines.push({
-      key: `${trackKey}:${index}:translation`,
-      line: current,
-      text: current.translation,
-      primary: false,
-      fontSize: Math.max(10, props.settings.fontSize - 2),
-      lineHeight: layoutMetrics.value.secondaryLineHeight,
-      rowTop: layoutMetrics.value.blockTop + layoutMetrics.value.primaryLineHeight,
-    })
-    return lines
-  }
-
   const next = props.lyrics.lines[index + 1]
-  if (next) {
+  const secondary = selectSecondaryContent(current, next)
+  if (secondary) {
     lines.push({
-      key: `${trackKey}:${index + 1}:original`,
-      line: next,
-      text: next.text,
+      key:
+        secondary.kind === 'translation'
+          ? `${trackKey}:${index}:translation`
+          : `${trackKey}:${index + 1}:original`,
+      line: secondary.line,
+      text: secondary.text,
       primary: false,
       fontSize: Math.max(10, props.settings.fontSize - 2),
       lineHeight: layoutMetrics.value.secondaryLineHeight,

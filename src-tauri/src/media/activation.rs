@@ -5,9 +5,9 @@ use std::{collections::HashSet, process::Command};
 use windows::Win32::{
     Foundation::{HWND, LPARAM, RECT},
     UI::WindowsAndMessaging::{
-        EnumWindows, GWL_EXSTYLE, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId,
-        IsIconic, IsWindowVisible, SW_RESTORE, SW_SHOW, SetForegroundWindow, ShowWindowAsync,
-        WS_EX_TOOLWINDOW,
+        EnumWindows, GWL_EXSTYLE, GetClassNameW, GetWindowLongPtrW, GetWindowRect,
+        GetWindowThreadProcessId, IsIconic, IsWindowVisible, SW_RESTORE, SW_SHOW,
+        SetForegroundWindow, ShowWindowAsync, WS_EX_TOOLWINDOW,
     },
 };
 use windows_core::BOOL;
@@ -18,15 +18,21 @@ use super::process::{find_process_executable, find_process_ids};
 pub(super) fn activate_player(
     source_app_id: &str,
     executable_names: &[&str],
+    preferred_window_classes: &[&str],
+    allows_relaunch: bool,
 ) -> Result<(), String> {
     let process_ids = find_process_ids(source_app_id, executable_names);
     if process_ids.is_empty() {
         return Err("未找到当前播放器进程".to_owned());
     }
 
-    if let Some(window) = find_main_window(&process_ids)? {
+    if let Some(window) = find_main_window(&process_ids, preferred_window_classes)? {
         show_and_activate_window(window);
         return Ok(());
+    }
+
+    if !allows_relaunch {
+        return Err("当前播放器没有可恢复的窗口，已跳过重新启动以避免多实例冲突".to_owned());
     }
 
     let executable = find_process_executable(&process_ids)
@@ -41,10 +47,14 @@ pub(super) fn activate_player(
         .map_err(|error| format!("通过播放器自身入口打开窗口失败: {error}"))
 }
 
-/// 枚举目标进程的可见顶层窗口，并用有效显示面积选出最可能的主窗口。
-fn find_main_window(process_ids: &HashSet<u32>) -> Result<Option<HWND>, String> {
+/// 枚举目标进程的顶层窗口，优先匹配播放器声明的稳定主窗口类名。
+fn find_main_window(
+    process_ids: &HashSet<u32>,
+    preferred_window_classes: &[&str],
+) -> Result<Option<HWND>, String> {
     let mut search = WindowSearch {
         process_ids,
+        preferred_window_classes,
         best: None,
     };
 
@@ -80,10 +90,13 @@ fn show_and_activate_window(window: HWND) {
 struct WindowCandidate {
     window: HWND,
     area: i64,
+    visible: bool,
+    preferred: bool,
 }
 
 struct WindowSearch<'a> {
     process_ids: &'a HashSet<u32>,
+    preferred_window_classes: &'a [&'a str],
     best: Option<WindowCandidate>,
 }
 
@@ -99,10 +112,8 @@ unsafe extern "system" fn enumerate_player_window(window: HWND, parameter: LPARA
     }
 
     // SAFETY: window 由 Windows 枚举提供，读取其可见性和扩展样式不会转移所有权。
-    let is_eligible = unsafe {
-        IsWindowVisible(window).as_bool()
-            && (GetWindowLongPtrW(window, GWL_EXSTYLE) as u32 & WS_EX_TOOLWINDOW.0) == 0
-    };
+    let is_eligible =
+        unsafe { (GetWindowLongPtrW(window, GWL_EXSTYLE) as u32 & WS_EX_TOOLWINDOW.0) == 0 };
     if !is_eligible {
         return BOOL::from(true);
     }
@@ -115,9 +126,36 @@ unsafe extern "system" fn enumerate_player_window(window: HWND, parameter: LPARA
     let width = i64::from((bounds.right - bounds.left).max(0));
     let height = i64::from((bounds.bottom - bounds.top).max(0));
     let area = width * height;
-    if area > 0 && search.best.as_ref().is_none_or(|best| area > best.area) {
-        search.best = Some(WindowCandidate { window, area });
+    let visible = unsafe { IsWindowVisible(window).as_bool() };
+    let preferred = window_class_name(window).is_some_and(|class_name| {
+        search
+            .preferred_window_classes
+            .contains(&class_name.as_str())
+    });
+    if (preferred || area > 0)
+        && search.best.as_ref().is_none_or(|best| {
+            (preferred, visible, area) > (best.preferred, best.visible, best.area)
+        })
+    {
+        search.best = Some(WindowCandidate {
+            window,
+            area,
+            visible,
+            preferred,
+        });
     }
 
     BOOL::from(true)
+}
+
+/// 读取顶层窗口类名，用于区分播放器主宿主与同进程的辅助窗口。
+fn window_class_name(window: HWND) -> Option<String> {
+    let mut buffer = [0_u16; 256];
+    // SAFETY: buffer 的完整长度均可写，window 来自当前 EnumWindows 回调。
+    let length = unsafe { GetClassNameW(window, &mut buffer) };
+    if length <= 0 {
+        return None;
+    }
+
+    String::from_utf16(&buffer[..length as usize]).ok()
 }
