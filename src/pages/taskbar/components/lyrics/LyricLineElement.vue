@@ -75,7 +75,7 @@ const trackClass = computed(() => [
   overflowDistance.value > 0 ? 'w-max will-change-transform' : 'w-full',
 ])
 
-/** 生成随播放位置单调变亮的逐字渐变，进入和结束单字时不会发生亮度跳变。 */
+/** 生成仅在未播放色和已播放色之间变化的逐字渐变。 */
 const displayWords = computed<DisplayWord[]>(() => {
   if (!props.primary || !props.wordHighlight || props.text !== props.line.text) return []
   return props.line.words.map((word) => {
@@ -160,14 +160,17 @@ const displayWords = computed<DisplayWord[]>(() => {
 
 .lyric-word {
   white-space: pre;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .lyric-word-pending {
-  color: var(--lyric-unplayed-color);
+  background-image: linear-gradient(var(--lyric-unplayed-color), var(--lyric-unplayed-color));
 }
 
 .lyric-word-completed {
-  color: var(--lyric-played-color);
+  background-image: linear-gradient(var(--lyric-played-color), var(--lyric-played-color));
 }
 
 .lyric-word-active {
@@ -179,9 +182,6 @@ const displayWords = computed<DisplayWord[]>(() => {
     var(--lyric-word-gradient-end-color) var(--lyric-word-gradient-end),
     var(--lyric-word-gradient-end-color) 100%
   );
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {
