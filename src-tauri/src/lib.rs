@@ -32,7 +32,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::diagnostics::get_diagnostics,
             commands::settings::open_settings_window,
-            commands::media::activate_current_media_player,
             commands::media::control_media_session,
             commands::media::get_current_media_volume,
             commands::media::get_current_media_session,

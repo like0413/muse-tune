@@ -1,11 +1,8 @@
 //! 集中维护桌面播放器进程识别，供图标与应用音量共同复用。
 
-use std::{
-    collections::HashSet,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashSet, path::Path};
 
-use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
 
 /// 找出来源标识或播放器适配器所对应的全部进程，避免遗漏多进程音频会话。
 pub(super) fn find_process_ids(source_app_id: &str, executable_names: &[&str]) -> HashSet<u32> {
@@ -35,30 +32,4 @@ pub(super) fn find_process_ids(source_app_id: &str, executable_names: &[&str]) -
             (matches_source || matches_adapter).then(|| pid.as_u32())
         })
         .collect()
-}
-
-/// 优先读取进程树根节点的可执行文件，避免把多进程客户端的渲染子进程当作启动入口。
-pub(super) fn find_process_executable(process_ids: &HashSet<u32>) -> Option<PathBuf> {
-    if process_ids.is_empty() {
-        return None;
-    }
-
-    let mut system = System::new();
-    system.refresh_processes_specifics(
-        ProcessesToUpdate::All,
-        true,
-        ProcessRefreshKind::nothing().with_exe(UpdateKind::OnlyIfNotSet),
-    );
-    process_ids
-        .iter()
-        .filter_map(|process_id| {
-            let process = system.process(Pid::from_u32(*process_id))?;
-            let executable = process.exe()?.to_path_buf();
-            let is_child = process
-                .parent()
-                .is_some_and(|parent| process_ids.contains(&parent.as_u32()));
-            Some((is_child, executable))
-        })
-        .min_by_key(|(is_child, executable)| (*is_child, executable.components().count()))
-        .map(|(_, executable)| executable)
 }

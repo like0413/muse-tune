@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { useElementBounding, useElementHover, useMutationObserver } from '@vueuse/core'
 import type { CSSProperties } from 'vue'
@@ -190,15 +189,6 @@ async function initializeElementOrder() {
   }
 }
 
-/** 打开或唤醒当前媒体会话所属的原播放器窗口。 */
-async function activateCurrentPlayer() {
-  try {
-    await invoke('activate_current_media_player')
-  } catch (error) {
-    console.error('打开当前播放器失败', error)
-  }
-}
-
 onMounted(initializeBackgroundTransparency)
 onMounted(initializeProgressStyle)
 onMounted(initializeElementOrder)
@@ -217,7 +207,6 @@ onUnmounted(() => {
     class="text-taskbar-foreground relative flex size-full items-center gap-2 overflow-hidden px-2 py-1 shadow-sm select-none"
     :style="[backgroundStyle, progressColorStyle]"
     aria-label="Muse Tune 任务栏播放器"
-    @contextmenu.prevent="activateCurrentPlayer"
   >
     <AudioSpectrumElement
       :theme-color="progressColor"

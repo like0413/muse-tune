@@ -20,16 +20,6 @@ trait PlayerAdapter: Sync {
     /// 返回传统桌面客户端可能使用的进程文件名。
     fn executable_names(&self) -> &'static [&'static str];
 
-    /// 返回激活播放器时优先选择的顶层窗口类名。
-    fn preferred_window_classes(&self) -> &'static [&'static str] {
-        &[]
-    }
-
-    /// 指示隐藏窗口无法恢复时，是否允许再次启动客户端入口进行唤醒。
-    fn allows_relaunch_activation(&self) -> bool {
-        true
-    }
-
     /// 返回歌曲标题变化后保持当前会话的播放器专属稳定窗口。
     fn selection_hold_after_title_change(&self) -> Option<Duration> {
         None
@@ -53,18 +43,6 @@ impl IdentifiedPlayer {
     /// 返回当前播放器隔离维护的进程文件名。
     pub(super) fn executable_names(&self) -> &'static [&'static str] {
         self.adapter.map_or(&[], PlayerAdapter::executable_names)
-    }
-
-    /// 返回当前播放器主窗口的稳定类名。
-    pub(super) fn preferred_window_classes(&self) -> &'static [&'static str] {
-        self.adapter
-            .map_or(&[], PlayerAdapter::preferred_window_classes)
-    }
-
-    /// 返回播放器是否支持通过单实例入口安全唤醒。
-    pub(super) fn allows_relaunch_activation(&self) -> bool {
-        self.adapter
-            .is_none_or(PlayerAdapter::allows_relaunch_activation)
     }
 }
 

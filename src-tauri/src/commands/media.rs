@@ -23,15 +23,6 @@ pub async fn control_media_session(
         .map_err(|error| format!("等待媒体控制结果失败: {error}"))?
 }
 
-/// 打开或唤醒当前选中媒体会话所属的原播放器窗口。
-#[tauri::command]
-pub async fn activate_current_media_player(service: State<'_, MediaService>) -> Result<(), String> {
-    let service = service.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || service.activate_current_player())
-        .await
-        .map_err(|error| format!("等待播放器窗口激活结果失败: {error}"))?
-}
-
 /// 更新多播放器会话选择策略，并在媒体线程内串行应用。
 #[tauri::command]
 pub async fn set_media_session_selection_policy(

@@ -1,6 +1,5 @@
 //! 通过 Windows GSMTC 事件提供当前歌曲信息和基础播放控制。
 
-mod activation;
 mod model;
 mod monitor;
 mod players;

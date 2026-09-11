@@ -66,6 +66,9 @@ const trackStyle = computed<CSSProperties>(() => ({
 const rowStyle = computed<CSSProperties>(() => ({
   '--lyric-row-top': `${props.rowTop}px`,
   color: props.primary ? 'var(--lyric-played-color)' : 'var(--lyric-unplayed-color)',
+  height: `${props.lineHeight}px`,
+}))
+const contentStyle = computed<CSSProperties>(() => ({
   fontSize: `${props.fontSize}px`,
   height: `${props.lineHeight}px`,
   lineHeight: `${props.lineHeight}px`,
@@ -77,8 +80,9 @@ const trackClass = computed(() => [
 
 /** 生成仅在未播放色和已播放色之间变化的逐字渐变。 */
 const displayWords = computed<DisplayWord[]>(() => {
-  if (!props.primary || !props.wordHighlight || props.text !== props.line.text) return []
+  if (!props.wordHighlight || props.text !== props.line.text) return []
   return props.line.words.map((word) => {
+    if (!props.primary) return { ...word, state: 'pending' }
     if (props.positionMs >= word.endMs) return { ...word, state: 'completed' }
     if (props.positionMs <= word.startMs) return { ...word, state: 'pending' }
 
@@ -119,12 +123,16 @@ const displayWords = computed<DisplayWord[]>(() => {
 
 <template>
   <div
-    class="lyric-row w-full min-w-0 overflow-hidden"
-    :class="[primary ? 'font-medium' : 'font-normal', { 'lyric-row-animated': animated }]"
+    class="lyric-row w-full min-w-0 overflow-hidden font-medium"
     :style="rowStyle"
     aria-hidden="true"
   >
-    <div ref="viewport" class="relative w-full overflow-hidden">
+    <div
+      ref="viewport"
+      class="relative w-full overflow-hidden"
+      :class="{ 'lyric-content-animated': animated }"
+      :style="contentStyle"
+    >
       <span
         ref="textMeasure"
         class="pointer-events-none invisible absolute top-0 left-0 w-max whitespace-pre"
@@ -154,7 +162,7 @@ const displayWords = computed<DisplayWord[]>(() => {
   align-items: center;
 }
 
-.lyric-row-animated {
+.lyric-content-animated {
   transition:
     height 320ms cubic-bezier(0.22, 1, 0.36, 1),
     line-height 320ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -188,7 +196,7 @@ const displayWords = computed<DisplayWord[]>(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lyric-row-animated {
+  .lyric-content-animated {
     transition-duration: 0s;
   }
 }
