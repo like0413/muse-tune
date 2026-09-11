@@ -3,6 +3,8 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::media::{MediaPlayer, MediaSessionSnapshot};
 
+const TRACK_KEY_SCHEMA_VERSION: &str = "v2";
+
 /// 歌词解析所需的稳定歌曲描述，不携带封面和播放状态。
 #[derive(Clone, Debug)]
 pub struct TrackDescriptor {
@@ -52,7 +54,7 @@ impl TrackDescriptor {
         normalized_artists.sort_unstable();
         normalized_artists.dedup();
         let key_input = format!(
-            "v1|{:?}|{}|{}|{}",
+            "{TRACK_KEY_SCHEMA_VERSION}|{:?}|{}|{}|{}",
             snapshot.player,
             normalized_title,
             normalized_artists.join("/"),

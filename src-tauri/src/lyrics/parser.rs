@@ -71,6 +71,15 @@ pub fn normalize_parsed_lines(data: LyricsData) -> Vec<LyricLine> {
     lines
 }
 
+/// 拒绝空文本和歌词源用于排版的纯斜杠分隔行。
+fn is_content_text(value: &str) -> bool {
+    let value = value.trim();
+    !value.is_empty()
+        && !value
+            .chars()
+            .all(|character| matches!(character, '/' | '／'))
+}
+
 /// 按时间戳把翻译或音译行合并到原文，避免平台适配器复制双指针逻辑。
 pub fn merge_auxiliary_lines(
     original: &mut [LyricLine],
@@ -94,7 +103,7 @@ pub fn merge_auxiliary_lines(
             .min_by_key(|candidate| candidate.start_ms.abs_diff(line.start_ms))
             .filter(|candidate| {
                 candidate.start_ms.abs_diff(line.start_ms) <= AUXILIARY_TIME_TOLERANCE_MS
-                    && !candidate.text.trim().is_empty()
+                    && is_content_text(&candidate.text)
             })
         else {
             continue;
@@ -120,7 +129,7 @@ fn convert_line(line: LineInfo) -> Option<LyricLine> {
         .and_then(|value| u64::try_from(value).ok())
         .unwrap_or(start_ms);
     let text = line.text_from_any();
-    if text.trim().is_empty() {
+    if !is_content_text(&text) {
         return None;
     }
     let (words, translation, romanization) = match &line {
@@ -133,9 +142,7 @@ fn convert_line(line: LineInfo) -> Option<LyricLine> {
         } => (
             convert_words(syllables),
             select_translation(translations),
-            pronunciation
-                .clone()
-                .filter(|value| !value.trim().is_empty()),
+            pronunciation.clone().filter(|value| is_content_text(value)),
         ),
         LineInfo::FullLine {
             translations,
@@ -144,9 +151,7 @@ fn convert_line(line: LineInfo) -> Option<LyricLine> {
         } => (
             Vec::new(),
             select_translation(translations),
-            pronunciation
-                .clone()
-                .filter(|value| !value.trim().is_empty()),
+            pronunciation.clone().filter(|value| is_content_text(value)),
         ),
         LineInfo::Line { .. } => (Vec::new(), None, None),
     };
@@ -178,8 +183,8 @@ fn convert_words(syllables: &[SyllableInfo]) -> Vec<LyricWord> {
 fn select_translation(translations: &std::collections::HashMap<String, String>) -> Option<String> {
     translations
         .get("zh")
-        .filter(|value| !value.trim().is_empty())
-        .or_else(|| translations.values().find(|value| !value.trim().is_empty()))
+        .filter(|value| is_content_text(value))
+        .or_else(|| translations.values().find(|value| is_content_text(value)))
         .cloned()
 }
 
@@ -194,6 +199,21 @@ mod tests {
 
         assert_eq!(lines.first().map(|line| line.text.as_str()), Some("第一句"));
         assert!(lines.last().is_some_and(|line| line.end_ms > line.start_ms));
+    }
+
+    #[test]
+    fn lrc_parser_discards_slash_only_separator_lines() {
+        let lines =
+            parse_lrc_lines("[00:01.00]Written by: Someone\n[00:02.00] // \n[00:03.00]First lyric")
+                .expect("测试 LRC 应可解析");
+
+        assert_eq!(
+            lines
+                .iter()
+                .map(|line| line.text.as_str())
+                .collect::<Vec<_>>(),
+            ["Written by: Someone", "First lyric"]
+        );
     }
 
     #[test]

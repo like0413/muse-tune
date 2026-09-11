@@ -48,7 +48,7 @@ export const DEFAULT_TASKBAR_LYRICS_SETTINGS: TaskbarLyricsSettings = {
   fontSize: 14,
   colorScheme: 'theme',
   playedColor: '#1677ff',
-  unplayedColor: '#b0b0b0',
+  unplayedColor: '#adb1b3',
   fontFamily: '',
 }
 

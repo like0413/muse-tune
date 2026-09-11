@@ -72,7 +72,11 @@ onUnmounted(() => {
     class="flex min-w-7 flex-1 flex-col justify-center leading-tight"
     :class="alignment === 'right' ? 'items-end text-right' : 'items-start text-left'"
   >
-    <ScrollingTrackTitle class="text-sm font-medium" :text="title" :scrolling="scrolling" />
+    <ScrollingTrackTitle
+      class="text-sm font-medium text-white"
+      :text="title"
+      :scrolling="scrolling"
+    />
     <span class="text-taskbar-secondary-foreground max-w-full truncate text-xs">{{ artist }}</span>
   </div>
 </template>

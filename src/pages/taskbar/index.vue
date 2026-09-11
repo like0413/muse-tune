@@ -121,8 +121,7 @@ watch([elementOrder, () => coverAppearance.value.visible], refreshCoverAnchors)
 const backgroundStyle = computed(() => ({
   backgroundColor: `color-mix(in srgb, var(--taskbar-background) ${100 - backgroundTransparency.value}%, transparent)`,
   color: foregroundColor.value,
-  '--taskbar-current-foreground': foregroundColor.value,
-  '--taskbar-secondary-foreground': `color-mix(in srgb, ${foregroundColor.value} 85%, var(--taskbar-background))`,
+  '--taskbar-secondary-foreground': '#adb1b3',
 }))
 
 /** 仅把解析后的主题色暴露给进度条，避免影响全局 primary 色。 */
