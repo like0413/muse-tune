@@ -12,7 +12,6 @@ import IssuesDiagnosticsCard from './IssuesDiagnosticsCard.vue'
 import LyricsDiagnosticsCard from './LyricsDiagnosticsCard.vue'
 import MediaDiagnosticsCard from './MediaDiagnosticsCard.vue'
 import PlayerAdaptersDiagnosticsCard from './PlayerAdaptersDiagnosticsCard.vue'
-import StorageDiagnosticsCard from './StorageDiagnosticsCard.vue'
 import TaskbarDiagnosticsCard from './TaskbarDiagnosticsCard.vue'
 
 const { diagnostics, refreshing, errorMessage, updatedAt, reportCopied, refresh, copyReport } =
@@ -51,13 +50,9 @@ const updatedAtLabel = computed(() => updatedAt.value?.toLocaleTimeString() ?? '
       <AudioDiagnosticsCard :diagnostics="diagnostics.media" />
       <PlayerAdaptersDiagnosticsCard :adapters="diagnostics.lyrics.adapters" />
       <LyricsDiagnosticsCard :diagnostics="diagnostics.lyrics" />
-      <StorageDiagnosticsCard
-        :diagnostics="diagnostics.storage"
-        :lyrics-cache="diagnostics.lyrics.cache"
-      />
     </template>
     <template v-else>
-      <Skeleton v-for="index in 8" :key="index" class="h-44 w-full rounded-xl" />
+      <Skeleton v-for="index in 7" :key="index" class="h-44 w-full rounded-xl" />
     </template>
   </div>
 </template>

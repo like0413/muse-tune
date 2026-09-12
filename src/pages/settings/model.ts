@@ -1,6 +1,6 @@
 import type { Component } from 'vue'
 
-export type SettingsSection = 'general' | 'taskbar' | 'appearance' | 'diagnostics' | 'about'
+export type SettingsSection = 'general' | 'taskbar' | 'data' | 'diagnostics' | 'about'
 
 export type NavigationItem = {
   id: SettingsSection
@@ -23,9 +23,9 @@ export const SETTINGS_SECTION_META: Record<SettingsSection, SettingsSectionMeta>
     title: '任务栏',
     description: '调整任务栏播放器的位置与显示内容',
   },
-  appearance: {
-    title: '外观',
-    description: '选择界面的主题与视觉风格',
+  data: {
+    title: '数据',
+    description: '管理歌词缓存、配置和运行日志',
   },
   diagnostics: {
     title: '诊断',

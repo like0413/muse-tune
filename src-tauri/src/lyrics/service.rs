@@ -21,9 +21,9 @@ use super::{
     cache::ParsedLyricsCache,
     error::LyricsError,
     model::{
-        LyricsAdapterDiagnostics, LyricsDiagnostics, LyricsResolutionMethod,
-        LyricsResolutionOutcome, LyricsResolutionStep, LyricsSnapshot, LyricsSnapshotDiagnostics,
-        LyricsSourceKind, LyricsStatus, ResolvedLyrics, has_word_timing,
+        LyricsAdapterDiagnostics, LyricsCacheDiagnostics, LyricsDiagnostics,
+        LyricsResolutionMethod, LyricsResolutionOutcome, LyricsResolutionStep, LyricsSnapshot,
+        LyricsSnapshotDiagnostics, LyricsSourceKind, LyricsStatus, ResolvedLyrics, has_word_timing,
     },
     network::ResolutionDeadline,
     players,
@@ -245,6 +245,31 @@ impl LyricsService {
                 .diagnostics(current_track.as_ref().map(|track| track.key.as_str())),
             adapters,
         }
+    }
+
+    /// 返回缓存容量与占用摘要，供数据页独立读取。
+    pub fn cache_diagnostics(&self) -> LyricsCacheDiagnostics {
+        let current_track = self
+            .inner
+            .current_track
+            .lock()
+            .ok()
+            .and_then(|track| track.clone());
+        self.inner
+            .cache
+            .diagnostics(current_track.as_ref().map(|track| track.key.as_str()))
+    }
+
+    /// 返回当前歌词缓存版本目录，例如 `lyrics/v3`。
+    pub fn cache_directory(&self) -> &std::path::Path {
+        self.inner.cache.directory()
+    }
+
+    /// 清空应用管理的歌词缓存，并通知诊断页刷新缓存状态。
+    pub fn clear_cache(&self) -> Result<(), io::Error> {
+        self.inner.cache.clear()?;
+        (self.inner.diagnostics_notifier)();
+        Ok(())
     }
 
     /// 更新歌词总开关；关闭时取消解析，开启时立即解析当前歌曲。

@@ -1,4 +1,5 @@
 mod commands;
+mod data;
 mod diagnostics;
 mod lyrics;
 mod media;
@@ -30,6 +31,10 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
+            commands::data::clear_lyrics_cache,
+            commands::data::get_data_overview,
+            commands::data::open_data_directory,
+            commands::data::reset_configuration,
             commands::diagnostics::get_diagnostics,
             commands::settings::open_settings_window,
             commands::media::control_media_session,

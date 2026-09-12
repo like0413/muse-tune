@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Activity, Info, Music2, Palette, PanelLeft, Settings2 } from '@lucide/vue'
+import { Activity, Database, Info, Music2, PanelLeft, Settings2 } from '@lucide/vue'
 import type { Component } from 'vue'
 import { computed, shallowRef } from 'vue'
 
@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/sidebar'
 
 import AboutSettingsPanel from './about/index.vue'
-import AppearanceSettingsPanel from './appearance/index.vue'
+import DataSettingsPanel from './data/index.vue'
 import DiagnosticsSettingsPanel from './diagnostics/index.vue'
 import GeneralSettingsPanel from './general/index.vue'
 import type { NavigationItem, SettingsSection } from './model'
@@ -33,7 +33,7 @@ const activeSection = shallowRef<SettingsSection>('general')
 const navigationItems: Array<NavigationItem> = [
   { id: 'general', label: '常规', icon: Settings2 },
   { id: 'taskbar', label: '任务栏', icon: PanelLeft },
-  { id: 'appearance', label: '外观', icon: Palette },
+  { id: 'data', label: '数据', icon: Database },
   { id: 'diagnostics', label: '诊断', icon: Activity },
   { id: 'about', label: '关于', icon: Info },
 ]
@@ -41,7 +41,7 @@ const navigationItems: Array<NavigationItem> = [
 const panels: Record<SettingsSection, Component> = {
   general: GeneralSettingsPanel,
   taskbar: TaskbarSettingsPanel,
-  appearance: AppearanceSettingsPanel,
+  data: DataSettingsPanel,
   diagnostics: DiagnosticsSettingsPanel,
   about: AboutSettingsPanel,
 }

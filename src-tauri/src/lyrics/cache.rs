@@ -17,7 +17,7 @@ use super::{
 };
 
 const MAX_CACHE_ENTRY_BYTES: u64 = 2 * 1024 * 1024;
-const MAX_CACHE_TOTAL_BYTES: u64 = 128 * 1024 * 1024;
+const MAX_CACHE_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
 const WORD_REFRESH_INTERVAL: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 const LINE_REFRESH_INTERVAL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 const UNAVAILABLE_REFRESH_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
@@ -71,6 +71,13 @@ impl ParsedLyricsCache {
             entries_path,
             diagnostics: Mutex::new(CacheDiagnosticsState::default()),
         })
+    }
+
+    /// 返回当前歌词缓存版本目录，供数据页直接打开。
+    pub fn directory(&self) -> &Path {
+        self.entries_path
+            .parent()
+            .unwrap_or(self.entries_path.as_path())
     }
 
     /// 读取并校验单个缓存条目，损坏条目按未命中处理。
@@ -174,6 +181,18 @@ impl ParsedLyricsCache {
             }
             Err(error) => Err(error),
         }
+    }
+
+    /// 清空全部规范化歌词缓存，同时保留版本目录供后续写入复用。
+    pub fn clear(&self) -> Result<(), std::io::Error> {
+        for entry in fs::read_dir(&self.entries_path)? {
+            let entry = entry?;
+            if entry.file_type()?.is_file() {
+                fs::remove_file(entry.path())?;
+            }
+        }
+        self.invalidate_diagnostics();
+        Ok(())
     }
 
     /// 只删除依赖指定播放器本地目录的结果，在线结果与其他播放器缓存继续保留。

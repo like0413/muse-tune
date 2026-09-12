@@ -1,3 +1,4 @@
+pub mod data;
 pub mod diagnostics;
 pub mod lyrics;
 pub mod media;
