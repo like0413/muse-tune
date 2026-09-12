@@ -1,6 +1,12 @@
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::system::SystemThemeService;
+
+/// 通过 Tauri 的正常退出流程重启应用。
+#[tauri::command]
+pub fn restart_application(app: AppHandle) {
+    app.request_restart();
+}
 
 /// 枚举 Windows 当前安装的字体族，供歌词字体搜索选择器使用。
 #[tauri::command]

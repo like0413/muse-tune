@@ -48,6 +48,7 @@ pub fn run() {
             commands::system::list_system_fonts,
             commands::system::get_system_accent_color,
             commands::system::get_system_foreground_color,
+            commands::system::restart_application,
             commands::taskbar::list_taskbar_displays,
             commands::taskbar::set_taskbar_display_target,
             commands::taskbar::set_taskbar_content_visibility,

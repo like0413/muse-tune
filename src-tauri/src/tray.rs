@@ -35,7 +35,7 @@ pub(super) fn initialize(app: &App) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             SETTINGS_MENU_ID => open_settings(app.clone()),
-            RESTART_MENU_ID => app.request_restart(),
+            RESTART_MENU_ID => commands::system::restart_application(app.clone()),
             EXIT_MENU_ID => app.exit(0),
             _ => {}
         });

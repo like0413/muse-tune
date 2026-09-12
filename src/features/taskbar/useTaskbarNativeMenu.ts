@@ -30,6 +30,7 @@ interface NativeMenuResources {
   spectrum: CheckMenuItem
   separator: PredefinedMenuItem
   settings: MenuItem
+  restart: MenuItem
   quit: PredefinedMenuItem
 }
 
@@ -70,7 +71,7 @@ export function useTaskbarNativeMenu() {
   /** 创建一个窗口内复用的原生菜单，避免每次右键重复分配系统资源。 */
   async function createResources(): Promise<NativeMenuResources> {
     const createCheckItem = (options: CheckMenuItemOptions) => CheckMenuItem.new(options)
-    const [normalCover, lyricsCover, lyrics, spectrum, separator, settings, quit] =
+    const [normalCover, lyricsCover, lyrics, spectrum, separator, settings, restart, quit] =
       await Promise.all([
         createCheckItem({
           id: 'taskbar-toggle-normal-cover',
@@ -99,12 +100,19 @@ export function useTaskbarNativeMenu() {
           action: () =>
             runAction(() => invoke<void>('open_settings_window'), '从任务栏菜单打开设置失败'),
         }),
+        MenuItem.new({
+          id: 'taskbar-restart-application',
+          text: import.meta.env.PROD ? '重启应用' : '重启应用（正式版可用）',
+          enabled: import.meta.env.PROD,
+          action: () =>
+            runAction(() => invoke<void>('restart_application'), '从任务栏菜单重启应用失败'),
+        }),
         PredefinedMenuItem.new({ item: 'Quit', text: '退出应用' }),
       ])
     const menu = await Menu.new({
-      items: [normalCover, lyricsCover, lyrics, spectrum, separator, settings, quit],
+      items: [normalCover, lyricsCover, lyrics, spectrum, separator, settings, restart, quit],
     })
-    return { menu, normalCover, lyricsCover, lyrics, spectrum, separator, settings, quit }
+    return { menu, normalCover, lyricsCover, lyrics, spectrum, separator, settings, restart, quit }
   }
 
   /** 获取当前窗口唯一的菜单实例，并合并并发初始化。 */
@@ -160,6 +168,7 @@ export function useTaskbarNativeMenu() {
       current.spectrum.close(),
       current.separator.close(),
       current.settings.close(),
+      current.restart.close(),
       current.quit.close(),
     ])
   }

@@ -210,7 +210,8 @@ onMounted(loadSettings)
           <FieldContent>
             <FieldLabel for="taskbar-lyrics-animation-pre-roll">动画提前完成</FieldLabel>
             <FieldDescription>
-              开启：人声前完成动画，更跟拍，但连续演唱时上一句会提前离场；关闭：按时间戳切换，不提前上一句，但动画会与人声同时开始
+              <div>开启：人声前完成动画，更跟拍，但连续演唱时上一句会提前离场；</div>
+              <div>关闭：按时间戳切换，不提前上一句，但动画会与人声同时开始</div>
             </FieldDescription>
           </FieldContent>
           <Switch
