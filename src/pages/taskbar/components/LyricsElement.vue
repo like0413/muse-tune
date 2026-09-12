@@ -11,6 +11,8 @@ import LyricLineElement from './lyrics/LyricLineElement.vue'
 const AVAILABLE_HEIGHT_PX = 40
 const TRACK_INFO_TITLE_LINE_HEIGHT_PX = 17.5
 const TRACK_INFO_ARTIST_LINE_HEIGHT_PX = 15
+// 320ms 动画加 40ms 刷新余量，使切换在人声时间戳前完成。
+const LINE_TRANSITION_LEAD_MS = 360
 
 const props = defineProps<{
   lyrics: DeepReadonly<LyricsSnapshot>
@@ -29,16 +31,20 @@ interface DisplayLine {
   rowTop: number
 }
 
-/** 使用二分查找定位当前行，避免每个动画帧线性扫描整首歌词。 */
+/** 使用二分查找定位当前行；启用动画时把切行触发点整体提前。 */
 const currentLineIndex = computed(() => {
   const lines = props.lyrics.lines
   if (lines.length === 0) return -1
+  const transitionLeadMs =
+    props.settings.animation !== 'none' && props.settings.animationPreRoll
+      ? LINE_TRANSITION_LEAD_MS
+      : 0
   let left = 0
   let right = lines.length - 1
   let matched = -1
   while (left <= right) {
     const middle = Math.floor((left + right) / 2)
-    if (lines[middle]!.startMs <= props.positionMs) {
+    if (lines[middle]!.startMs <= props.positionMs + transitionLeadMs) {
       matched = middle
       left = middle + 1
     } else {

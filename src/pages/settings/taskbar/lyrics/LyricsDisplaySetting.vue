@@ -203,6 +203,26 @@ onMounted(loadSettings)
           </Select>
         </Field>
 
+        <Field
+          orientation="horizontal"
+          :data-disabled="!selectedSettings.enabled || selectedSettings.animation === 'none'"
+        >
+          <FieldContent>
+            <FieldLabel for="taskbar-lyrics-animation-pre-roll">动画提前完成</FieldLabel>
+            <FieldDescription>
+              开启：人声前完成动画，更跟拍，但连续演唱时上一句会提前离场；关闭：按时间戳切换，不提前上一句，但动画会与人声同时开始
+            </FieldDescription>
+          </FieldContent>
+          <Switch
+            id="taskbar-lyrics-animation-pre-roll"
+            :model-value="selectedSettings.animationPreRoll"
+            :disabled="
+              settingsSaving || !selectedSettings.enabled || selectedSettings.animation === 'none'
+            "
+            @update:model-value="updateSettings({ animationPreRoll: $event })"
+          />
+        </Field>
+
         <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
           <FieldContent>
             <FieldTitle>歌词大小</FieldTitle>

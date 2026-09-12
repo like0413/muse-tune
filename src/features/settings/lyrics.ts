@@ -31,6 +31,7 @@ export interface TaskbarLyricsSettings {
   secondaryLine: TaskbarLyricsSecondaryLine
   wordHighlight: boolean
   animation: TaskbarLyricsAnimation
+  animationPreRoll: boolean
   fontSize: number
   colorScheme: TaskbarLyricsColorScheme
   playedColor: string
@@ -45,6 +46,7 @@ export const DEFAULT_TASKBAR_LYRICS_SETTINGS: TaskbarLyricsSettings = {
   secondaryLine: 'translation',
   wordHighlight: true,
   animation: 'up',
+  animationPreRoll: true,
   fontSize: 14,
   colorScheme: 'theme',
   playedColor: '#1677ff',
@@ -130,6 +132,10 @@ export function normalizeTaskbarLyricsSettings(value: unknown): TaskbarLyricsSet
     animation: isTaskbarLyricsAnimation(record.animation)
       ? record.animation
       : DEFAULT_TASKBAR_LYRICS_SETTINGS.animation,
+    animationPreRoll:
+      typeof record.animationPreRoll === 'boolean'
+        ? record.animationPreRoll
+        : DEFAULT_TASKBAR_LYRICS_SETTINGS.animationPreRoll,
     fontSize: normalizeTaskbarLyricsFontSize(record.fontSize),
     colorScheme: normalizeTaskbarLyricsColorScheme(record.colorScheme),
     playedColor:
