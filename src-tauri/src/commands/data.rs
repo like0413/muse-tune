@@ -57,3 +57,14 @@ pub async fn clear_lyrics_cache(
     .await
     .map_err(|error| format!("等待缓存清理结果失败: {error}"))?
 }
+
+/// 清空日志文件，并重启应用以重新建立日志写入句柄。
+#[tauri::command]
+pub async fn clear_logs(app: AppHandle) -> Result<(), String> {
+    let clear_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || data::clear_logs(&clear_app))
+        .await
+        .map_err(|error| format!("等待日志清理结果失败: {error}"))??;
+    app.request_restart();
+    Ok(())
+}

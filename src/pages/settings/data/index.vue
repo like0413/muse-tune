@@ -17,12 +17,13 @@ const {
   overview,
   clearing,
   resetting,
+  clearingLogs,
   openingDirectory,
   cacheCleared,
-  refresh,
   openDirectory,
   clearCache,
   resetConfig,
+  clearLogFiles,
 } = useDataManagement()
 
 const configDetail = computed(() => {
@@ -34,10 +35,6 @@ const configDetail = computed(() => {
 const logsDetail = computed(() => {
   const logs = overview.value?.logs
   return logs ? `${logs.fileCount} 个文件 · ${formatBytes(logs.totalBytes)}` : '暂无'
-})
-
-onMounted(() => {
-  refresh()
 })
 </script>
 
@@ -64,6 +61,8 @@ onMounted(() => {
         <LogsDataItem
           :detail="logsDetail"
           :opening="openingDirectory === 'logs'"
+          :clearing="clearingLogs"
+          @clear="clearLogFiles"
           @open="openDirectory('logs')"
         />
       </ItemGroup>

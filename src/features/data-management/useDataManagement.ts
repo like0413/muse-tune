@@ -1,6 +1,12 @@
 import { onActivated, onUnmounted, readonly, shallowRef } from 'vue'
 
-import { clearLyricsCache, getDataOverview, openDataDirectory, resetConfiguration } from './api'
+import {
+  clearLogs,
+  clearLyricsCache,
+  getDataOverview,
+  openDataDirectory,
+  resetConfiguration,
+} from './api'
 import type { DataDirectoryKind, DataOverview } from './types'
 
 /** 管理数据页的读取和用户操作状态。 */
@@ -9,6 +15,7 @@ export function useDataManagement() {
   const loading = shallowRef(false)
   const clearing = shallowRef(false)
   const resetting = shallowRef(false)
+  const clearingLogs = shallowRef(false)
   const openingDirectory = shallowRef<DataDirectoryKind | null>(null)
   const cacheCleared = shallowRef(false)
   const errorMessage = shallowRef<string | null>(null)
@@ -75,6 +82,18 @@ export function useDataManagement() {
     }
   }
 
+  /** 清空日志；成功后由后端重启应用以恢复正常日志写入。 */
+  async function clearLogFiles() {
+    clearingLogs.value = true
+    try {
+      await clearLogs()
+      errorMessage.value = null
+    } catch (error) {
+      errorMessage.value = String(error)
+      clearingLogs.value = false
+    }
+  }
+
   onActivated(refresh)
   onUnmounted(() => {
     disposed = true
@@ -87,6 +106,7 @@ export function useDataManagement() {
     loading: readonly(loading),
     clearing: readonly(clearing),
     resetting: readonly(resetting),
+    clearingLogs: readonly(clearingLogs),
     openingDirectory: readonly(openingDirectory),
     cacheCleared: readonly(cacheCleared),
     errorMessage: readonly(errorMessage),
@@ -94,5 +114,6 @@ export function useDataManagement() {
     openDirectory,
     clearCache,
     resetConfig,
+    clearLogFiles,
   }
 }

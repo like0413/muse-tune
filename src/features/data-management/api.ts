@@ -21,3 +21,8 @@ export function clearLyricsCache(): Promise<DataOverview> {
 export function resetConfiguration(): Promise<void> {
   return invoke('reset_configuration')
 }
+
+/** 清空日志；后端随后会重启应用以重新建立日志文件。 */
+export function clearLogs(): Promise<void> {
+  return invoke('clear_logs')
+}

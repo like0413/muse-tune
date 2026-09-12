@@ -48,9 +48,8 @@ export function formatDuration(milliseconds: number | null): string {
 
 export function formatBytes(bytes: number | null): string {
   if (bytes === null) return '暂无'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KiB`
-  return `${(bytes / 1024 ** 2).toFixed(1)} MiB`
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(bytes === 0 ? 0 : 1)} kb`
+  return `${(bytes / 1024 ** 2).toFixed(1)} mb`
 }
 
 export function formatAgeSeconds(seconds: number | null): string {

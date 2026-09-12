@@ -8,9 +8,14 @@
     "core:default",
     "store:default",
     "log:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://github.com/like0413/muse-tune*" }]
+    },
     "updater:default",
     "autostart:default",
     "fs:default",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    "dialog:allow-confirm"
   ]
 }

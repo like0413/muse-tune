@@ -3,6 +3,8 @@ import { Languages } from '@lucide/vue'
 
 import { Badge } from '@/components/ui/badge'
 import {
+  formatAgeSeconds,
+  formatBytes,
   lyricsStatusLabels,
   playerLabels,
   precisionLabels,
@@ -25,6 +27,16 @@ const resolverStatus = computed(() => {
   if (props.diagnostics.pendingResolution) return '已有更新等待处理'
   if (props.diagnostics.resolverRunning) return '正在解析'
   return '空闲'
+})
+
+const currentCacheStatus = computed(() => {
+  const cache = props.diagnostics.cache
+  if (!cache.currentEntryExists) return '当前歌曲无缓存'
+  if (cache.currentEntryFresh === false) return '已到刷新时间'
+  if (cache.currentEntryFresh === null) return '状态未知'
+  return cache.currentRefreshRemainingSeconds === null
+    ? '有效'
+    : `${formatAgeSeconds(cache.currentRefreshRemainingSeconds)}后刷新`
 })
 </script>
 
@@ -56,6 +68,18 @@ const resolverStatus = computed(() => {
             : '暂无'
           : `${diagnostics.resolutionDurationMs} ms`
       "
+    />
+    <DiagnosticRow label="缓存版本" :value="diagnostics.cache.schemaVersion" />
+    <DiagnosticRow label="当前缓存" :value="currentCacheStatus" />
+    <DiagnosticRow
+      v-if="diagnostics.cache.currentEntryExists"
+      label="缓存年龄"
+      :value="formatAgeSeconds(diagnostics.cache.currentEntryAgeSeconds)"
+    />
+    <DiagnosticRow
+      v-if="diagnostics.cache.currentEntryExists"
+      label="条目大小"
+      :value="formatBytes(diagnostics.cache.currentEntryBytes)"
     />
     <DiagnosticRow
       label="当前播放器"

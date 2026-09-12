@@ -126,6 +126,32 @@ pub fn reset_configuration<R: Runtime>(app: &AppHandle<R>) -> Result<(), String>
         .map_err(|error| format!("无法保存默认配置: {error}"))
 }
 
+/// 删除应用日志目录中的文件；调用方应随后重启以重新建立日志文件句柄。
+pub fn clear_logs<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    let log_directory = app
+        .path()
+        .app_log_dir()
+        .map_err(|error| format!("无法定位日志目录: {error}"))?;
+    let entries = match fs::read_dir(&log_directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(format!("无法读取日志目录: {error}")),
+    };
+
+    log::logger().flush();
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("无法读取日志文件: {error}"))?;
+        if entry
+            .file_type()
+            .map_err(|error| format!("无法识别日志文件: {error}"))?
+            .is_file()
+        {
+            fs::remove_file(entry.path()).map_err(|error| format!("无法删除日志文件: {error}"))?;
+        }
+    }
+    Ok(())
+}
+
 fn directory_file_totals(path: &Path) -> (usize, u64) {
     fs::read_dir(path)
         .ok()

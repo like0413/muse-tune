@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Activity, Database, Info, Music2, PanelLeft, Settings2 } from '@lucide/vue'
+import { Activity, Database, Info, PanelLeft, Settings2 } from '@lucide/vue'
+import { getVersion } from '@tauri-apps/api/app'
 import type { Component } from 'vue'
-import { computed, shallowRef } from 'vue'
+import { computed, onMounted, shallowRef } from 'vue'
 
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -20,6 +21,7 @@ import {
   SidebarProvider,
 } from '@/components/ui/sidebar'
 
+import appIconUrl from '../../../src-tauri/icons/icon.png'
 import AboutSettingsPanel from './about/index.vue'
 import DataSettingsPanel from './data/index.vue'
 import DiagnosticsSettingsPanel from './diagnostics/index.vue'
@@ -29,6 +31,7 @@ import { SETTINGS_SECTION_META } from './model'
 import TaskbarSettingsPanel from './taskbar/index.vue'
 
 const activeSection = shallowRef<SettingsSection>('general')
+const applicationVersion = shallowRef('—')
 
 const navigationItems: Array<NavigationItem> = [
   { id: 'general', label: '常规', icon: Settings2 },
@@ -52,6 +55,15 @@ const activeSectionMeta = computed(() => SETTINGS_SECTION_META[activeSection.val
 function selectSection(section: SettingsSection) {
   activeSection.value = section
 }
+
+/** 读取 Tauri 配置中的应用版本，供侧边栏品牌区展示。 */
+onMounted(async () => {
+  try {
+    applicationVersion.value = await getVersion()
+  } catch (error) {
+    console.debug('读取应用版本失败', error)
+  }
+})
 </script>
 
 <template>
@@ -62,13 +74,15 @@ function selectSection(section: SettingsSection) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" class="pointer-events-none">
               <div
-                class="icon-tone-pink-500 flex aspect-square size-8 items-center justify-center rounded-lg border"
+                class="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg"
               >
-                <Music2 />
+                <img :src="appIconUrl" alt="" class="size-full object-contain" />
               </div>
               <span class="grid flex-1 text-left leading-tight">
                 <span class="truncate font-semibold">Muse Tune</span>
-                <span class="text-muted-foreground truncate text-xs">设置</span>
+                <span class="text-muted-foreground truncate text-xs"
+                  >v{{ applicationVersion }}</span
+                >
               </span>
             </SidebarMenuButton>
           </SidebarMenuItem>

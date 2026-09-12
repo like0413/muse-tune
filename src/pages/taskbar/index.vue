@@ -33,6 +33,7 @@ import { useTaskbarAutoHide } from '@/features/taskbar/useTaskbarAutoHide'
 import { useTaskbarCoverAppearance } from '@/features/taskbar/useTaskbarCoverAppearance'
 import { useTaskbarForegroundColor } from '@/features/theme/useTaskbarForegroundColor'
 import { useTaskbarProgressColor } from '@/features/theme/useTaskbarProgressColor'
+import { useAutomaticUpdateMonitor } from '@/features/updater/useAutomaticUpdateMonitor'
 
 import AudioSpectrumElement from './components/AudioSpectrumElement.vue'
 import CoverElement from './components/CoverElement.vue'
@@ -71,6 +72,7 @@ const normalCoverBounds = useElementBounding(normalCoverAnchor)
 const lyricsCoverBounds = useElementBounding(lyricsCoverAnchor)
 useMediaSessionSelectionPolicy()
 useTaskbarAutoHide(mediaSession)
+useAutomaticUpdateMonitor()
 const thumbnailDataUrl = computed(() => mediaSession.value?.metadata.thumbnailDataUrl ?? null)
 const { progressColor } = useTaskbarProgressColor(thumbnailDataUrl)
 
