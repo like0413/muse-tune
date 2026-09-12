@@ -260,7 +260,7 @@ impl LyricsService {
             .diagnostics(current_track.as_ref().map(|track| track.key.as_str()))
     }
 
-    /// 返回当前歌词缓存版本目录，例如 `lyrics/v3`。
+    /// 返回歌词缓存根目录，例如 `lyrics`。
     pub fn cache_directory(&self) -> &std::path::Path {
         self.inner.cache.directory()
     }

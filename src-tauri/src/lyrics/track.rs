@@ -3,7 +3,7 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::media::{MediaPlayer, MediaSessionSnapshot};
 
-const TRACK_KEY_SCHEMA_VERSION: &str = "v3";
+use super::schema::LYRICS_CACHE_SCHEMA_VERSION;
 
 /// 歌词解析所需的稳定歌曲描述，不携带封面和播放状态。
 #[derive(Clone, Debug)]
@@ -56,7 +56,7 @@ impl TrackDescriptor {
         // GSMTC 在同一首歌的不同快照中可能轻微修正时长，不能让它改变缓存身份。
         // 时长仍保留在描述中，用于候选匹配和歌词时间轴校验。
         let key_input = format!(
-            "{TRACK_KEY_SCHEMA_VERSION}|{:?}|{}|{}",
+            "v{LYRICS_CACHE_SCHEMA_VERSION}|{:?}|{}|{}",
             snapshot.player,
             normalized_title,
             normalized_artists.join("/")

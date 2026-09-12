@@ -7,6 +7,7 @@ mod model;
 mod network;
 mod parser;
 mod players;
+mod schema;
 mod service;
 pub(crate) mod settings;
 mod track;
