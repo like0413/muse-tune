@@ -26,7 +26,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::Builder::new().build())
-        .plugin(logging::plugin())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
@@ -59,6 +58,7 @@ pub fn run() {
             commands::taskbar::hide_volume_popup
         ])
         .setup(|app| {
+            logging::initialize(app.handle())?;
             let lyrics_service = lyrics::initialize(app)?;
             app.manage(lyrics_service);
             let media_service = media::initialize(app.handle().clone())?;
