@@ -1,31 +1,37 @@
-import { getColor, getSwatches, type Color, type ExtractionOptions } from 'colorthief'
+import {
+  createColor,
+  getColor,
+  getSwatches,
+  type Color,
+  type ExtractionOptions,
+  type SwatchMap,
+  type SwatchRole,
+} from 'colorthief'
+import { maxBy, minBy } from 'es-toolkit'
 
-type RgbColor = readonly [number, number, number]
+import { TASKBAR_THEME_PRESET_COLORS } from '@/features/settings/theme-color'
 
-interface CoverColorOptions {
-  background: RgbColor
-  fallback: string
-}
+const MINIMUM_DOMINANT_CHROMA = 0.05
+const MINIMUM_MUTED_CHROMA = 0.01
+const COVER_COLOR_FALLBACK = TASKBAR_THEME_PRESET_COLORS[10]
 
-const MINIMUM_GRAPHIC_CONTRAST_RATIO = 3
-const CONTRAST_SEARCH_STEPS = 12
-const ACHROMATIC_OKLCH_CHROMA = 0.05
-
-const DOMINANT_COLOR_OPTIONS = {
+const EXTRACTION_OPTIONS = {
   colorSpace: 'oklch',
   quality: 8,
-  ignoreWhite: false,
+  ignoreWhite: true,
   minSaturation: 0,
   gamut: 'srgb',
 } satisfies ExtractionOptions
 
-const VIBRANT_COLOR_OPTIONS = {
-  ...DOMINANT_COLOR_OPTIONS,
-  ignoreWhite: true,
-  minSaturation: 0.25,
-} satisfies ExtractionOptions
+const PRESET_COLORS = TASKBAR_THEME_PRESET_COLORS.map((hex) => {
+  const value = Number.parseInt(hex.slice(1), 16)
+  const color = createColor((value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff, 0)
+  return { hex, hue: color.oklch().h }
+})
+const VIBRANT_SWATCH_ROLES: SwatchRole[] = ['Vibrant', 'LightVibrant', 'DarkVibrant']
+const MUTED_SWATCH_ROLES: SwatchRole[] = ['Muted', 'LightMuted', 'DarkMuted']
 
-/** 加载封面图片，并等待浏览器完成解码后再交给 Color Thief。 */
+/** 加载并解码封面，避免 Color Thief 读取尚未就绪的图片。 */
 async function loadCoverImage(source: string): Promise<HTMLImageElement> {
   const image = new Image()
   image.decoding = 'async'
@@ -34,109 +40,52 @@ async function loadCoverImage(source: string): Promise<HTMLImageElement> {
   return image
 }
 
-/** 按 WCAG 相对亮度公式计算单个 sRGB 分量。 */
-function linearizeSrgb(component: number): number {
-  const value = component / 255
-  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+/** 计算两个色相在色环上的最短距离。 */
+function hueDistance(first: number, second: number): number {
+  const difference = Math.abs(first - second)
+  return Math.min(difference, 360 - difference)
 }
 
-/** 计算 RGB 颜色的相对亮度。 */
-function relativeLuminance(color: RgbColor): number {
-  return (
-    0.2126 * linearizeSrgb(color[0]) +
-    0.7152 * linearizeSrgb(color[1]) +
-    0.0722 * linearizeSrgb(color[2])
+/** 读取有足够色度的色相，避免将纯黑白灰的无意义色相映射到色板。 */
+function getUsableHue(color: Color | null | undefined, minimumChroma: number): number | null {
+  if (!color) return null
+  const { c, h } = color.oklch()
+  return c >= minimumChroma && Number.isFinite(h) ? h : null
+}
+
+/** 从同类语义色中选择覆盖像素最多的颜色，避免小面积高饱和点缀抢占主色。 */
+function getSwatchHue(
+  swatches: SwatchMap,
+  roles: SwatchRole[],
+  minimumChroma: number,
+): number | null {
+  const color = maxBy(
+    roles
+      .map((role) => swatches[role]?.color)
+      .filter((candidate): candidate is Color => getUsableHue(candidate, minimumChroma) !== null),
+    (candidate) => candidate.population,
   )
+  return getUsableHue(color, minimumChroma)
 }
 
-/** 判断候选色与任务栏背景是否达到非文本图形建议的 3:1 对比度。 */
-function hasClearContrast(color: RgbColor, background: RgbColor): boolean {
-  const colorLuminance = relativeLuminance(color)
-  const backgroundLuminance = relativeLuminance(background)
-  const lighter = Math.max(colorLuminance, backgroundLuminance)
-  const darker = Math.min(colorLuminance, backgroundLuminance)
-  return (lighter + 0.05) / (darker + 0.05) >= MINIMUM_GRAPHIC_CONTRAST_RATIO
+/** 将封面主色相映射到最接近的固定明亮主题色。 */
+function matchPresetColor(hue: number): string {
+  return minBy(PRESET_COLORS, (preset) => hueDistance(hue, preset.hue))?.hex ?? COVER_COLOR_FALLBACK
 }
 
-/** 将 HSL 颜色转换为 RGB，供对比度修正时保持原主题色相。 */
-function hslToRgb(hue: number, saturation: number, lightness: number): RgbColor {
-  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation
-  const hueSection = (((hue % 1) + 1) % 1) * 6
-  const secondComponent = chroma * (1 - Math.abs((hueSection % 2) - 1))
-  const [redBase, greenBase, blueBase] =
-    hueSection < 1
-      ? [chroma, secondComponent, 0]
-      : hueSection < 2
-        ? [secondComponent, chroma, 0]
-        : hueSection < 3
-          ? [0, chroma, secondComponent]
-          : hueSection < 4
-            ? [0, secondComponent, chroma]
-            : hueSection < 5
-              ? [secondComponent, 0, chroma]
-              : [chroma, 0, secondComponent]
-  const offset = lightness - chroma / 2
-  return [
-    Math.round((redBase + offset) * 255),
-    Math.round((greenBase + offset) * 255),
-    Math.round((blueBase + offset) * 255),
-  ]
-}
+/** 识别封面主色系，并输出固定色板中最接近的明亮颜色。 */
+export async function extractTaskbarCoverColor(source: string): Promise<string> {
+  const image = await loadCoverImage(source)
+  const dominantHue = getUsableHue(
+    await getColor(image, EXTRACTION_OPTIONS),
+    MINIMUM_DOMINANT_CHROMA,
+  )
+  if (dominantHue !== null) return matchPresetColor(dominantHue)
 
-/**
- * 在 HSL 中只调整亮度，以最小改动满足对比度；不会因任务栏明暗改选其他色相。
- */
-function ensureContrast(color: Color, background: RgbColor): RgbColor {
-  const rgb = color.rgb()
-  const original: RgbColor = [rgb.r, rgb.g, rgb.b]
-  if (hasClearContrast(original, background)) return original
-
-  const hsl = color.hsl()
-  const hue = hsl.h / 360
-  const saturation = hsl.s / 100
-  const lightness = hsl.l / 100
-  const darken = relativeLuminance(background) > relativeLuminance(original)
-  let lower = darken ? 0 : lightness
-  let upper = darken ? lightness : 1
-  let result = hslToRgb(hue, saturation, darken ? lower : upper)
-
-  for (let step = 0; step < CONTRAST_SEARCH_STEPS; step += 1) {
-    const candidateLightness = (lower + upper) / 2
-    const candidate = hslToRgb(hue, saturation, candidateLightness)
-    if (hasClearContrast(candidate, background)) {
-      result = candidate
-      if (darken) lower = candidateLightness
-      else upper = candidateLightness
-    } else if (darken) {
-      upper = candidateLightness
-    } else {
-      lower = candidateLightness
-    }
-  }
-
-  return result
-}
-
-/** 把 RGB 颜色转换为 CSS 十六进制颜色。 */
-function toHex(color: RgbColor): string {
-  return `#${color.map((component) => component.toString(16).padStart(2, '0')).join('')}`
-}
-
-/** 优先返回统计主色；当主色接近黑白灰时，才从同一封面中寻找鲜艳色。 */
-async function selectCoverColor(image: HTMLImageElement): Promise<Color | null> {
-  const dominantColor = await getColor(image, DOMINANT_COLOR_OPTIONS)
-  if (!dominantColor) return null
-  if (dominantColor.oklch().c >= ACHROMATIC_OKLCH_CHROMA) return dominantColor
-
-  const swatches = await getSwatches(image, VIBRANT_COLOR_OPTIONS)
-  return swatches.Vibrant?.color ?? null
-}
-
-/** 提取适合任务栏进度条的封面色；没有可靠彩色候选时返回主题兜底色。 */
-export async function extractTaskbarCoverColor(
-  source: string,
-  { background, fallback }: CoverColorOptions,
-): Promise<string> {
-  const themeColor = await selectCoverColor(await loadCoverImage(source))
-  return themeColor ? toHex(ensureContrast(themeColor, background)) : fallback
+  // 主色接近黑白灰时，先找彩色点缀；没有彩色点缀再保留整体的冷暖倾向。
+  const swatches = await getSwatches(image, EXTRACTION_OPTIONS)
+  const hue =
+    getSwatchHue(swatches, VIBRANT_SWATCH_ROLES, MINIMUM_DOMINANT_CHROMA) ??
+    getSwatchHue(swatches, MUTED_SWATCH_ROLES, MINIMUM_MUTED_CHROMA)
+  return hue === null ? COVER_COLOR_FALLBACK : matchPresetColor(hue)
 }

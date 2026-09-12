@@ -7,6 +7,7 @@ import {
   FieldTitle,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { TASKBAR_THEME_PRESET_COLORS } from '@/features/settings/theme-color'
 
 defineProps<{
   selectedColor: string
@@ -20,23 +21,6 @@ const emit = defineEmits<{
   updateDraft: [value: string | number]
   commit: []
 }>()
-
-const presetColors = [
-  '#ef4444',
-  '#f97316',
-  '#f59e0b',
-  '#eab308',
-  '#84cc16',
-  '#22c55e',
-  '#10b981',
-  '#14b8a6',
-  '#06b6d4',
-  '#0ea5e9',
-  '#3b82f6',
-  '#6366f1',
-  '#8b5cf6',
-  '#ec4899',
-] as const
 
 /** 从原生颜色输入事件中读取颜色值。 */
 function selectNativeColor(event: Event) {
@@ -52,7 +36,7 @@ function selectNativeColor(event: Event) {
     </FieldContent>
     <div class="flex w-56 flex-nowrap justify-end gap-1" aria-label="候选主题色">
       <button
-        v-for="color in presetColors"
+        v-for="color in TASKBAR_THEME_PRESET_COLORS"
         :key="color"
         type="button"
         class="ring-offset-background size-4 shrink-0 rounded-full border transition-transform hover:scale-125 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none"

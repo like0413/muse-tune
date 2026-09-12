@@ -207,6 +207,7 @@ onUnmounted(() => {
     class="text-taskbar-foreground relative flex size-full items-center gap-2 overflow-hidden px-2 py-1 shadow-sm select-none"
     :style="[backgroundStyle, progressColorStyle]"
     aria-label="Muse Tune 任务栏播放器"
+    @contextmenu.prevent
   >
     <AudioSpectrumElement
       :theme-color="progressColor"

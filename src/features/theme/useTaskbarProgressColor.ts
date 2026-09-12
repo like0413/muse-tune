@@ -9,15 +9,10 @@ import {
   type TaskbarThemeColor,
 } from '@/features/settings/theme-color'
 import { getSystemAccentColor, listenSystemAccentColorChange } from '@/features/system/accent-color'
-import { colorMode } from '@/lib/color-mode'
 
 import { extractTaskbarCoverColor } from './cover-color'
 
 const FALLBACK_PROGRESS_COLOR = '#1677ff'
-const COVER_COLOR_FALLBACK = {
-  dark: { background: [32, 32, 32], hex: '#8ab4f8' },
-  light: { background: [243, 243, 243], hex: '#1677ff' },
-} as const
 
 /** 按设置来源解析进度条颜色，并只在封面变化时重新取色。 */
 export function useTaskbarProgressColor(thumbnailDataUrl: ComputedRef<string | null>) {
@@ -38,12 +33,7 @@ export function useTaskbarProgressColor(thumbnailDataUrl: ComputedRef<string | n
     if (setting.value.source !== 'cover' || !thumbnail) return
 
     try {
-      const darkBar = colorMode.state.value === 'dark'
-      const fallback = darkBar ? COVER_COLOR_FALLBACK.dark : COVER_COLOR_FALLBACK.light
-      const extractedColor = await extractTaskbarCoverColor(thumbnail, {
-        background: fallback.background,
-        fallback: fallback.hex,
-      })
+      const extractedColor = await extractTaskbarCoverColor(thumbnail)
       if (requestId === extractionRequestId) coverColor.value = extractedColor
     } catch (error) {
       if (requestId === extractionRequestId) {
@@ -103,7 +93,6 @@ export function useTaskbarProgressColor(thumbnailDataUrl: ComputedRef<string | n
   })
 
   watch(thumbnailDataUrl, () => void extractCoverColor())
-  watch(colorMode.state, () => void extractCoverColor())
   onMounted(initialize)
   onUnmounted(() => {
     disposed = true
