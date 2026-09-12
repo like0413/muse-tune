@@ -75,6 +75,7 @@ reqwest = { version = "0.12", default-features = false, features = [
 ] }
 md5 = "0.8.1"
 tauri-plugin-opener = "2"
+tauri-plugin-notification = "2"
 
 [profile.dev]
 incremental = true

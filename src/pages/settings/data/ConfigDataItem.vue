@@ -40,7 +40,7 @@ const emit = defineEmits<{
       <FileCog />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>配置</ItemTitle>
+      <ItemTitle>应用配置</ItemTitle>
       <ItemDescription>应用设置和用户偏好 · {{ detail }}</ItemDescription>
     </ItemContent>
     <ItemActions>

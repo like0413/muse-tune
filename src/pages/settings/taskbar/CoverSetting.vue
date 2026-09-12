@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Image } from '@lucide/vue'
-import { onMounted, shallowRef } from 'vue'
+import { computed, onMounted, shallowRef } from 'vue'
 
 import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import {
@@ -18,6 +18,7 @@ import {
   DEFAULT_TASKBAR_COVER_APPEARANCE,
   getTaskbarCoverAppearance,
   isTaskbarCoverShape,
+  isTaskbarCoverVisibility,
   setTaskbarCoverAppearance,
   type TaskbarCoverAppearance,
 } from '@/features/settings/cover'
@@ -28,6 +29,13 @@ const shapeOptions = [
   { value: 'circle', label: '圆形' },
 ] as const
 
+const visibilityOptions = [
+  { value: 'always', label: '始终显示' },
+  { value: 'normal', label: '仅普通' },
+  { value: 'lyrics', label: '仅歌词' },
+  { value: 'hidden', label: '始终隐藏' },
+] as const
+
 const selectedAppearance = shallowRef<TaskbarCoverAppearance>({
   ...DEFAULT_TASKBAR_COVER_APPEARANCE,
 })
@@ -35,6 +43,7 @@ const committedAppearance = shallowRef<TaskbarCoverAppearance>({
   ...DEFAULT_TASKBAR_COVER_APPEARANCE,
 })
 const appearanceSaving = shallowRef(false)
+const coverAlwaysHidden = computed(() => selectedAppearance.value.visibility === 'hidden')
 
 /** 恢复已保存的封面配置。 */
 async function loadAppearance() {
@@ -70,6 +79,11 @@ function selectShape(value: string | number) {
   if (isTaskbarCoverShape(value)) void updateAppearance({ shape: value })
 }
 
+/** 接收 Tabs 的外部值并更新封面显示范围。 */
+function selectVisibility(value: string | number) {
+  if (isTaskbarCoverVisibility(value)) void updateAppearance({ visibility: value })
+}
+
 onMounted(loadAppearance)
 </script>
 
@@ -80,25 +94,31 @@ onMounted(loadAppearance)
     </ItemMedia>
     <ItemContent>
       <ItemTitle>封面设置</ItemTitle>
-      <ItemDescription>设置封面的显示、形状与播放时旋转</ItemDescription>
+      <ItemDescription>分别控制普通与歌词模式的封面显示</ItemDescription>
     </ItemContent>
 
     <template #content>
       <FieldGroup>
         <Field orientation="horizontal">
           <FieldContent>
-            <FieldLabel for="taskbar-cover-visible">显示封面</FieldLabel>
-            <FieldDescription>控制任务栏播放器中的封面区域</FieldDescription>
+            <FieldTitle id="taskbar-cover-visibility-label">显示封面</FieldTitle>
+            <FieldDescription>选择封面在哪些界面模式中显示</FieldDescription>
           </FieldContent>
-          <Switch
-            id="taskbar-cover-visible"
-            :model-value="selectedAppearance.visible"
-            :disabled="appearanceSaving"
-            @update:model-value="updateAppearance({ visible: $event })"
-          />
+          <Tabs :model-value="selectedAppearance.visibility" @update:model-value="selectVisibility">
+            <TabsList aria-labelledby="taskbar-cover-visibility-label">
+              <TabsTrigger
+                v-for="option in visibilityOptions"
+                :key="option.value"
+                :value="option.value"
+                :disabled="appearanceSaving"
+              >
+                {{ option.label }}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </Field>
 
-        <Field orientation="horizontal" :data-disabled="!selectedAppearance.visible">
+        <Field orientation="horizontal" :data-disabled="coverAlwaysHidden">
           <FieldContent>
             <FieldTitle>封面形状</FieldTitle>
             <FieldDescription>选择方形、圆角或圆形封面</FieldDescription>
@@ -109,7 +129,7 @@ onMounted(loadAppearance)
                 v-for="option in shapeOptions"
                 :key="option.value"
                 :value="option.value"
-                :disabled="appearanceSaving || !selectedAppearance.visible"
+                :disabled="appearanceSaving || coverAlwaysHidden"
               >
                 {{ option.label }}
               </TabsTrigger>
@@ -120,7 +140,7 @@ onMounted(loadAppearance)
         <Field
           v-if="selectedAppearance.shape === 'circle'"
           orientation="horizontal"
-          :data-disabled="!selectedAppearance.visible"
+          :data-disabled="coverAlwaysHidden"
         >
           <FieldContent>
             <FieldLabel for="taskbar-cover-rotate">播放时旋转</FieldLabel>
@@ -129,12 +149,12 @@ onMounted(loadAppearance)
           <Switch
             id="taskbar-cover-rotate"
             :model-value="selectedAppearance.rotateWhenPlaying"
-            :disabled="appearanceSaving || !selectedAppearance.visible"
+            :disabled="appearanceSaving || coverAlwaysHidden"
             @update:model-value="updateAppearance({ rotateWhenPlaying: $event })"
           />
         </Field>
 
-        <Field orientation="horizontal" :data-disabled="!selectedAppearance.visible">
+        <Field orientation="horizontal" :data-disabled="coverAlwaysHidden">
           <FieldContent>
             <FieldLabel for="taskbar-cover-player-source">显示播放器来源</FieldLabel>
             <FieldDescription>在封面右下角显示当前播放器的小图标</FieldDescription>
@@ -142,7 +162,7 @@ onMounted(loadAppearance)
           <Switch
             id="taskbar-cover-player-source"
             :model-value="selectedAppearance.showPlayerSource"
-            :disabled="appearanceSaving || !selectedAppearance.visible"
+            :disabled="appearanceSaving || coverAlwaysHidden"
             @update:model-value="updateAppearance({ showPlayerSource: $event })"
           />
         </Field>

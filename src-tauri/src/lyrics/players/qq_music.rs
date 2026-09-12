@@ -21,7 +21,7 @@ use crate::media::MediaPlayer;
 use super::super::{
     error::LyricsError,
     matcher::{SongCandidate, accepted_score},
-    model::{LyricsSource, LyricsSourceKind, ResolvedLyrics, has_word_timing},
+    model::{LyricsSource, LyricsSourceKind, ResolvedLyrics},
     network::{API_USER_AGENT, ResolutionDeadline, parse_json},
     parser::{AuxiliaryKind, merge_auxiliary_lines, parse_lrc_lines, parse_qrc_lines},
     track::{TrackDescriptor, split_artists},
@@ -40,37 +40,6 @@ struct IndexedQrcFile {
     artist: String,
     title: String,
     duration_seconds: u64,
-}
-
-/// QQ 音乐本地缓存优先，未命中后使用官方域名下的网页内部 HTTPS 接口。
-pub fn resolve(
-    track: &TrackDescriptor,
-    cache_path: Option<&Path>,
-    client: &Client,
-    deadline: &ResolutionDeadline,
-) -> Result<Option<ResolvedLyrics>, LyricsError> {
-    let local = cache_path.and_then(|path| match resolve_local(track, path) {
-        Ok(resolved) => resolved,
-        Err(error) => {
-            log::warn!("QQ 音乐本地歌词不可用，回退在线源: {error}");
-            None
-        }
-    });
-    if local
-        .as_ref()
-        .is_some_and(|resolved| has_word_timing(&resolved.lines))
-    {
-        return Ok(local);
-    }
-    match resolve_online(track, client, deadline) {
-        Ok(Some(online)) if has_word_timing(&online.lines) => Ok(Some(online)),
-        Ok(online) => Ok(local.or(online)),
-        Err(error) if local.is_some() => {
-            log::warn!("QQ 音乐在线逐字升级失败，保留本地逐行歌词: {error}");
-            Ok(local)
-        }
-        Err(error) => Err(error),
-    }
 }
 
 /// 从注册表的缓存根目录定位 QQMusicLyricNew。

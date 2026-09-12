@@ -28,24 +28,31 @@ pub const SUPPORTED_PLAYERS: [MediaPlayer; 4] = [
     MediaPlayer::KugouMusic,
 ];
 
-/// 按当前播放器进入完全隔离的平台解析入口。
-pub fn resolve_current_player(
+/// 只运行当前播放器需要联网的解析入口，本地歌词由协调器提前分层处理。
+pub fn resolve_current_online(
     track: &TrackDescriptor,
     cache_path: Option<PathBuf>,
     client: &Client,
     deadline: &ResolutionDeadline,
 ) -> Result<Option<ResolvedLyrics>, LyricsError> {
     match track.player {
-        MediaPlayer::QqMusic => qq_music::resolve(track, cache_path.as_deref(), client, deadline),
+        MediaPlayer::QqMusic => qq_music::resolve_online(track, client, deadline),
         MediaPlayer::NeteaseCloudMusic => {
-            netease_cloud_music::resolve(track, cache_path.as_deref(), client, deadline)
+            netease_cloud_music::resolve_online(track, client, deadline)
         }
         MediaPlayer::SodaMusic => {
             soda_music::resolve(track, cache_path.as_deref(), client, deadline)
         }
-        MediaPlayer::KugouMusic => kugou_music::resolve(track, cache_path.as_deref()),
-        MediaPlayer::Other => Ok(None),
+        MediaPlayer::KugouMusic | MediaPlayer::Other => Ok(None),
     }
+}
+
+/// 判断当前播放器是否存在需要联网的专用解析入口。
+pub fn supports_current_online(player: MediaPlayer) -> bool {
+    matches!(
+        player,
+        MediaPlayer::QqMusic | MediaPlayer::NeteaseCloudMusic | MediaPlayer::SodaMusic
+    )
 }
 
 /// 只读取当前播放器的本地歌词，用于新鲜持久缓存的低成本升级检查。
@@ -70,6 +77,7 @@ pub fn changed_paths_affect_track(
     cache_path: Option<&std::path::Path>,
     paths: &[PathBuf],
     current_source: Option<&LyricsSource>,
+    current_has_word_timing: bool,
 ) -> bool {
     match track.player {
         MediaPlayer::QqMusic => qq_music::changed_paths_affect_track(track, paths),
@@ -79,6 +87,7 @@ pub fn changed_paths_affect_track(
                 cache_path,
                 paths,
                 current_source,
+                current_has_word_timing,
             )
         }),
         MediaPlayer::KugouMusic => kugou_music::changed_paths_affect_track(track, paths),

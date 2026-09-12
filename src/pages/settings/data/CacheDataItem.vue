@@ -51,7 +51,7 @@ const usagePercentage = computed(() => {
       <Database />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>缓存</ItemTitle>
+      <ItemTitle>歌词缓存</ItemTitle>
       <ItemDescription>MuseTune 维护的歌词缓存数据</ItemDescription>
     </ItemContent>
     <ItemActions>

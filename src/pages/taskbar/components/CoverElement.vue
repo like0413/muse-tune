@@ -95,7 +95,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="appearance.visible" class="relative size-8 shrink-0" aria-hidden="true">
+  <div class="relative size-8 shrink-0" aria-hidden="true">
     <div
       class="bg-primary text-primary-foreground grid size-full place-items-center overflow-hidden text-base font-medium"
       :class="shapeClass"

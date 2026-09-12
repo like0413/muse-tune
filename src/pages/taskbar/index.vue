@@ -13,6 +13,7 @@ import {
   getTaskbarBackgroundTransparency,
   listenTaskbarBackgroundTransparencyChange,
 } from '@/features/settings/background-transparency'
+import { isTaskbarCoverVisibleInMode } from '@/features/settings/cover'
 import {
   DEFAULT_TASKBAR_ELEMENT_ORDER,
   getTaskbarElementOrder,
@@ -31,6 +32,7 @@ import {
 } from '@/features/settings/progress-style'
 import { useTaskbarAutoHide } from '@/features/taskbar/useTaskbarAutoHide'
 import { useTaskbarCoverAppearance } from '@/features/taskbar/useTaskbarCoverAppearance'
+import { useTaskbarNativeMenu } from '@/features/taskbar/useTaskbarNativeMenu'
 import { useTaskbarForegroundColor } from '@/features/theme/useTaskbarForegroundColor'
 import { useTaskbarProgressColor } from '@/features/theme/useTaskbarProgressColor'
 import { useAutomaticUpdateMonitor } from '@/features/updater/useAutomaticUpdateMonitor'
@@ -67,12 +69,22 @@ const showLyrics = computed(
     lyrics.value.lines.length > 0 &&
     !isTaskbarHovered.value,
 )
+const normalCoverVisible = computed(() =>
+  isTaskbarCoverVisibleInMode(coverAppearance.value.visibility, 'normal'),
+)
+const lyricsCoverVisible = computed(() =>
+  isTaskbarCoverVisibleInMode(coverAppearance.value.visibility, 'lyrics'),
+)
+const activeCoverVisible = computed(() =>
+  showLyrics.value ? lyricsCoverVisible.value : normalCoverVisible.value,
+)
 const contentBounds = useElementBounding(contentRoot)
 const normalCoverBounds = useElementBounding(normalCoverAnchor)
 const lyricsCoverBounds = useElementBounding(lyricsCoverAnchor)
 useMediaSessionSelectionPolicy()
 useTaskbarAutoHide(mediaSession)
 useAutomaticUpdateMonitor()
+const { show: showNativeMenu } = useTaskbarNativeMenu()
 const thumbnailDataUrl = computed(() => mediaSession.value?.metadata.thumbnailDataUrl ?? null)
 const { progressColor } = useTaskbarProgressColor(thumbnailDataUrl)
 
@@ -96,8 +108,7 @@ const normalElementStyle = computed<Record<TaskbarElement, CSSProperties>>(() =>
 /** 把唯一的真实封面移动到当前模式的锚点，两个内容层中不会产生封面副本。 */
 const coverMotionStyle = computed<CSSProperties>(() => {
   const target = showLyrics.value ? lyricsCoverBounds : normalCoverBounds
-  const ready =
-    coverAppearance.value.visible && contentBounds.width.value > 0 && target.width.value > 0
+  const ready = activeCoverVisible.value && contentBounds.width.value > 0 && target.width.value > 0
   if (!ready) return { opacity: 0 }
 
   return {
@@ -116,7 +127,7 @@ function refreshCoverAnchors() {
 }
 
 useMutationObserver(normalLayer, refreshCoverAnchors, { childList: true, subtree: true })
-watch([elementOrder, () => coverAppearance.value.visible], refreshCoverAnchors)
+watch([elementOrder, () => coverAppearance.value.visibility], refreshCoverAnchors)
 
 /** 仅改变页面背景 Alpha，高透明时由前景色策略保证内容对比度。 */
 const backgroundStyle = computed(() => ({
@@ -138,6 +149,17 @@ const barProgressStyle = computed(() => ({
 const progressBarPositionClass = computed(() =>
   progressPosition.value === 'top' ? 'top-0' : 'bottom-0',
 )
+
+/** 原生菜单关闭后纠正 WebView 可能遗漏 mouseleave 而残留的悬停状态。 */
+async function openNativeMenu() {
+  await showNativeMenu()
+  isTaskbarHovered.value = false
+}
+
+/** 菜单关闭时若指针仍在 bar 内，下一次移动立即恢复普通控制层。 */
+function restoreTaskbarHover() {
+  isTaskbarHovered.value = true
+}
 
 /** 计算竖线位置，并让已播放区域从起点透明渐变到当前位置的实色主题色。 */
 const verticalProgressStyle = computed(() => ({
@@ -209,7 +231,8 @@ onUnmounted(() => {
     class="text-taskbar-foreground relative flex size-full items-center gap-2 overflow-hidden px-2 py-1 shadow-sm select-none"
     :style="[backgroundStyle, progressColorStyle]"
     aria-label="Muse Tune 任务栏播放器"
-    @contextmenu.prevent
+    @contextmenu.prevent="openNativeMenu"
+    @mousemove="restoreTaskbarHover"
   >
     <AudioSpectrumElement
       :theme-color="progressColor"
@@ -227,7 +250,7 @@ onUnmounted(() => {
         :inert="showLyrics || undefined"
       >
         <div
-          v-if="coverAppearance.visible"
+          v-if="normalCoverVisible"
           ref="normalCoverAnchor"
           class="size-8 shrink-0"
           :style="normalElementStyle.cover"
@@ -249,7 +272,7 @@ onUnmounted(() => {
         :aria-hidden="!showLyrics"
       >
         <div
-          v-if="coverAppearance.visible"
+          v-if="lyricsCoverVisible"
           ref="lyricsCoverAnchor"
           class="size-8 shrink-0"
           aria-hidden="true"
@@ -263,7 +286,7 @@ onUnmounted(() => {
       </div>
 
       <div
-        v-if="coverAppearance.visible"
+        v-if="activeCoverVisible"
         class="taskbar-cover-motion pointer-events-none absolute top-0 left-0 z-20 size-8"
         :style="coverMotionStyle"
       >

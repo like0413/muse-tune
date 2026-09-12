@@ -3,6 +3,7 @@ import { check } from '@tauri-apps/plugin-updater'
 import { useIntervalFn } from '@vueuse/core'
 import { onMounted, onUnmounted } from 'vue'
 
+import { notifyUpdateAvailable } from './notifications'
 import {
   getAutomaticUpdateCheck,
   getUpdateCheckFrequency,
@@ -49,10 +50,14 @@ export function useAutomaticUpdateMonitor() {
 
         const update = await check({ timeout: 15_000 })
         try {
+          const availableVersion = update?.version ?? null
+          const shouldNotify =
+            availableVersion !== null && availableVersion !== lastResult.availableVersion
           await setUpdateCheckResult({
             checkedAt: Date.now(),
-            availableVersion: update?.version ?? null,
+            availableVersion,
           })
+          if (shouldNotify) await notifyUpdateAvailable(availableVersion)
         } finally {
           await update?.close()
         }

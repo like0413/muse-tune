@@ -16,6 +16,7 @@
     "autostart:default",
     "fs:default",
     "dialog:allow-open",
-    "dialog:allow-confirm"
+    "dialog:allow-confirm",
+    "notification:default"
   ]
 }

@@ -308,7 +308,17 @@ impl LyricsService {
             let Ok(mut current) = self.inner.current_track.lock() else {
                 return;
             };
-            if *current == track {
+            let timeline_availability_changed =
+                current
+                    .as_ref()
+                    .zip(track.as_ref())
+                    .is_some_and(|(current, next)| {
+                        current.key == next.key
+                            && current.duration_ms.is_some() != next.duration_ms.is_some()
+                    });
+            if *current == track && !timeline_availability_changed {
+                // 身份未变化时仍更新最新时长，供后续本地缓存事件重新校验歌词。
+                current.clone_from(&track);
                 return;
             }
             current.clone_from(&track);
@@ -565,13 +575,12 @@ impl LyricsService {
         }
 
         let path = self.cache_path(track.player);
-        let current_result =
-            players::resolve_current_player(&track, path, &self.inner.client, &deadline);
-        match current_result {
+        let current_local_result = players::resolve_current_local(&track, path.clone());
+        match current_local_result {
             Ok(Some(resolved)) if is_plausible_timeline(&track, &resolved.lines) => {
                 self.record_resolution_step(
                     generation,
-                    "当前播放器适配器",
+                    "当前播放器本地",
                     LyricsResolutionOutcome::Hit,
                     Some(source_summary(&resolved)),
                 );
@@ -584,15 +593,15 @@ impl LyricsService {
             Ok(Some(_)) => {
                 self.record_resolution_step(
                     generation,
-                    "当前播放器适配器",
+                    "当前播放器本地",
                     LyricsResolutionOutcome::Error,
                     Some("歌词时间轴超出歌曲有效范围".to_owned()),
                 );
-                log::warn!("当前播放器歌词时间轴超出歌曲有效范围");
+                log::warn!("当前播放器本地歌词时间轴超出歌曲有效范围");
             }
             Ok(None) => self.record_resolution_step(
                 generation,
-                "当前播放器适配器",
+                "当前播放器本地",
                 LyricsResolutionOutcome::Miss,
                 None,
             ),
@@ -600,11 +609,11 @@ impl LyricsService {
             Err(error) => {
                 self.record_resolution_step(
                     generation,
-                    "当前播放器适配器",
+                    "当前播放器本地",
                     LyricsResolutionOutcome::Error,
                     Some(error.to_string()),
                 );
-                log::warn!("当前播放器歌词适配器失败: {error}");
+                log::warn!("当前播放器本地歌词适配器失败: {error}");
             }
         }
         if !self.is_current_generation(generation) {
@@ -612,11 +621,55 @@ impl LyricsService {
         }
 
         let qq_cache_path = self.cache_path(MediaPlayer::QqMusic);
-        let (qq_local_result, qq_online_result, netease_result) = thread::scope(|scope| {
-            let qq_local = (track.player != MediaPlayer::QqMusic)
-                .then(|| scope.spawn(|| players::resolve_qq_local(&track, qq_cache_path)));
-            // 逐行候选不能阻止逐字升级：非 QQ 播放器即使已拿到本平台 LRC，
-            // 仍查询 QQ 在线 QRC；QQ 自身已在当前适配器中完成同一查询。
+        if track.player != MediaPlayer::QqMusic {
+            match players::resolve_qq_local(&track, qq_cache_path) {
+                Ok(Some(resolved)) if is_plausible_timeline(&track, &resolved.lines) => {
+                    self.record_resolution_step(
+                        generation,
+                        "QQ 本地兜底",
+                        LyricsResolutionOutcome::Hit,
+                        Some(source_summary(&resolved)),
+                    );
+                    if has_word_timing(&resolved.lines) {
+                        self.publish_resolution(&track, resolved, generation);
+                        return;
+                    }
+                    candidates.push(candidate_from_source(resolved));
+                }
+                Ok(Some(_)) => self.record_resolution_step(
+                    generation,
+                    "QQ 本地兜底",
+                    LyricsResolutionOutcome::Error,
+                    Some("歌词时间轴超出歌曲有效范围".to_owned()),
+                ),
+                Ok(None) => self.record_resolution_step(
+                    generation,
+                    "QQ 本地兜底",
+                    LyricsResolutionOutcome::Miss,
+                    None,
+                ),
+                Err(LyricsError::Cancelled) => return,
+                Err(error) => {
+                    self.record_resolution_step(
+                        generation,
+                        "QQ 本地兜底",
+                        LyricsResolutionOutcome::Error,
+                        Some(error.to_string()),
+                    );
+                    log::warn!("QQ 本地歌词兜底失败: {error}");
+                }
+            }
+        }
+        if !self.is_current_generation(generation) {
+            return;
+        }
+
+        let (current_online_result, qq_online_result, netease_result) = thread::scope(|scope| {
+            let current_online = players::supports_current_online(track.player).then(|| {
+                scope.spawn(|| {
+                    players::resolve_current_online(&track, path, &self.inner.client, &deadline)
+                })
+            });
             let qq_online = (track.player != MediaPlayer::QqMusic).then(|| {
                 scope.spawn(|| players::resolve_qq_online(&track, &self.inner.client, &deadline))
             });
@@ -626,13 +679,13 @@ impl LyricsService {
                 })
             });
             (
-                qq_local.and_then(|handle| handle.join().ok()),
+                current_online.and_then(|handle| handle.join().ok()),
                 qq_online.and_then(|handle| handle.join().ok()),
                 netease.and_then(|handle| handle.join().ok()),
             )
         });
         for (label, result) in [
-            ("QQ 本地兜底", qq_local_result.as_ref()),
+            ("当前播放器在线", current_online_result.as_ref()),
             ("QQ 在线兜底", qq_online_result.as_ref()),
             ("网易云在线兜底", netease_result.as_ref()),
         ] {
@@ -642,7 +695,7 @@ impl LyricsService {
             }
         }
         candidates.extend(
-            [qq_local_result, qq_online_result, netease_result]
+            [current_online_result, qq_online_result, netease_result]
                 .into_iter()
                 .flatten()
                 .filter_map(|result| match result {
@@ -878,20 +931,57 @@ impl LyricsService {
         let Some(track) = track else {
             return Ok(());
         };
-        let current_source = self.inner.runtime_state.read().ok().and_then(|state| {
-            (state.snapshot.track_key.as_ref() == Some(&track.key))
-                .then(|| state.snapshot.source.clone())
-                .flatten()
-        });
+        let (current_source, current_has_word_timing) = self
+            .inner
+            .runtime_state
+            .read()
+            .ok()
+            .filter(|state| state.snapshot.track_key.as_ref() == Some(&track.key))
+            .map_or((None, false), |state| {
+                (
+                    state.snapshot.source.clone(),
+                    has_word_timing(&state.snapshot.lines),
+                )
+            });
         if !watch_root_changed
             && !players::changed_paths_affect_track(
                 &track,
                 cache_path.as_deref(),
                 paths,
                 current_source.as_ref(),
+                current_has_word_timing,
             )
         {
             return Ok(());
+        }
+        let current_uses_player_local = current_source.as_ref().is_some_and(|source| {
+            source.player == player && source.kind == LyricsSourceKind::Local
+        });
+        let should_compare_local = current_uses_player_local || current_has_word_timing;
+        let local_after_change = should_compare_local
+            .then(|| players::resolve_current_local(&track, cache_path.clone()));
+        if let Some(Err(error)) = local_after_change.as_ref() {
+            log::debug!("检查播放器本地歌词变化失败: {error}");
+        }
+        if current_uses_player_local
+            && local_after_change
+                .as_ref()
+                .and_then(|result| result.as_ref().ok().and_then(Option::as_ref))
+                .is_some_and(|local| self.current_snapshot_matches(&track.key, local))
+        {
+            return Ok(());
+        }
+        // 播放器切歌会改写队列和行级歌词缓存，不能因此淘汰其他来源的逐字结果。
+        if current_has_word_timing && !current_uses_player_local {
+            let local_can_replace_word_timing = local_after_change
+                .as_ref()
+                .and_then(|result| result.as_ref().ok().and_then(Option::as_ref))
+                .is_some_and(|local| {
+                    is_plausible_timeline(&track, &local.lines) && has_word_timing(&local.lines)
+                });
+            if !local_can_replace_word_timing {
+                return Ok(());
+            }
         }
         let pending = self.prepare_track_resolution(player, &track.key)?;
         let Some((track, generation)) = pending else {
@@ -902,6 +992,15 @@ impl LyricsService {
         }
         self.start_resolution(Some(track), generation, true);
         Ok(())
+    }
+
+    /// 比较播放器事件后的本地结果与当前快照，忽略仅触碰文件但内容未变的事件。
+    fn current_snapshot_matches(&self, track_key: &str, local: &ResolvedLyrics) -> bool {
+        self.inner.runtime_state.read().is_ok_and(|state| {
+            state.snapshot.track_key.as_deref() == Some(track_key)
+                && state.snapshot.source.as_ref() == Some(&local.source)
+                && state.snapshot.lines == local.lines
+        })
     }
 
     fn cache_path(&self, player: MediaPlayer) -> Option<PathBuf> {

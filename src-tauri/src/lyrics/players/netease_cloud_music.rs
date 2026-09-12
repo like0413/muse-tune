@@ -14,7 +14,7 @@ use crate::media::MediaPlayer;
 use super::super::{
     error::LyricsError,
     matcher::{SongCandidate, accepted_score},
-    model::{LyricLine, LyricsSource, LyricsSourceKind, ResolvedLyrics, has_word_timing},
+    model::{LyricLine, LyricsSource, LyricsSourceKind, ResolvedLyrics},
     network::{API_USER_AGENT, ResolutionDeadline, parse_json},
     parser::{AuxiliaryKind, merge_auxiliary_lines, parse_lrc_lines, parse_yrc_lines},
     track::TrackDescriptor,
@@ -23,37 +23,6 @@ use super::super::{
 const MAX_LOCAL_LYRICS_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_PLAYING_LIST_BYTES: u64 = 16 * 1024 * 1024;
 const NETEASE_COOKIE: &str = "os=pc; appver=3.1.39; channel=netease;";
-
-/// 网易云 3.1.39 本地缓存优先，未命中后使用官方域名下的网页内部 HTTPS 接口。
-pub fn resolve(
-    track: &TrackDescriptor,
-    cache_path: Option<&Path>,
-    client: &Client,
-    deadline: &ResolutionDeadline,
-) -> Result<Option<ResolvedLyrics>, LyricsError> {
-    let local = cache_path.and_then(|path| match resolve_local(track, path) {
-        Ok(resolved) => resolved,
-        Err(error) => {
-            log::warn!("网易云音乐本地歌词不可用，回退在线源: {error}");
-            None
-        }
-    });
-    if local
-        .as_ref()
-        .is_some_and(|resolved| has_word_timing(&resolved.lines))
-    {
-        return Ok(local);
-    }
-    match resolve_online(track, client, deadline) {
-        Ok(Some(online)) if has_word_timing(&online.lines) => Ok(Some(online)),
-        Ok(online) => Ok(local.or(online)),
-        Err(error) if local.is_some() => {
-            log::warn!("网易云音乐在线逐字升级失败，保留本地逐行歌词: {error}");
-            Ok(local)
-        }
-        Err(error) => Err(error),
-    }
-}
 
 /// 返回网易云 3.1.39 无扩展名歌词响应所在的临时目录。
 pub fn automatic_cache_path() -> Option<PathBuf> {
@@ -197,6 +166,7 @@ pub(super) fn changed_paths_affect_track(
     cache_path: &Path,
     paths: &[PathBuf],
     current_source: Option<&LyricsSource>,
+    current_has_word_timing: bool,
 ) -> bool {
     let playing_list_changed = paths.iter().any(|path| {
         path.file_name()
@@ -220,12 +190,25 @@ pub(super) fn changed_paths_affect_track(
     if lyrics_file_changed {
         return true;
     }
-    let already_uses_same_local_song = current_source.is_some_and(|source| {
+    playing_list_changed
+        && can_upgrade_from_playing_list(current_source, current_has_word_timing, &song.id)
+        && cache_path.join(expected).is_file()
+}
+
+/// 播放队列变化只用于补齐或提升行级歌词，不能淘汰已经取得的逐字结果。
+fn can_upgrade_from_playing_list(
+    current_source: Option<&LyricsSource>,
+    current_has_word_timing: bool,
+    song_id: &str,
+) -> bool {
+    if current_has_word_timing {
+        return false;
+    }
+    !current_source.is_some_and(|source| {
         source.player == MediaPlayer::NeteaseCloudMusic
             && source.kind == LyricsSourceKind::Local
-            && source.song_id.as_deref() == Some(song.id.as_str())
-    });
-    playing_list_changed && !already_uses_same_local_song && cache_path.join(expected).is_file()
+            && source.song_id.as_deref() == Some(song_id)
+    })
 }
 
 /// 网易云 3.1.39 使用歌曲 ID 的小写 MD5 作为 Temp 歌词文件名。
@@ -370,7 +353,12 @@ struct NeteaseCachedTrack {
 
 #[cfg(test)]
 mod tests {
-    use super::cache_file_name;
+    use crate::{
+        lyrics::model::{LyricsSource, LyricsSourceKind},
+        media::MediaPlayer,
+    };
+
+    use super::{cache_file_name, can_upgrade_from_playing_list};
 
     #[test]
     fn cache_file_name_matches_current_client_contract() {
@@ -378,5 +366,27 @@ mod tests {
             cache_file_name("2612982142"),
             "a23e95de276b45a445f5fe9c87c33f6a"
         );
+    }
+
+    #[test]
+    fn playing_list_change_keeps_existing_word_timing() {
+        let source = LyricsSource {
+            player: MediaPlayer::QqMusic,
+            kind: LyricsSourceKind::Local,
+            song_id: None,
+        };
+
+        assert!(!can_upgrade_from_playing_list(Some(&source), true, "42"));
+    }
+
+    #[test]
+    fn playing_list_change_can_upgrade_line_timing_from_another_source() {
+        let source = LyricsSource {
+            player: MediaPlayer::QqMusic,
+            kind: LyricsSourceKind::Local,
+            song_id: None,
+        };
+
+        assert!(can_upgrade_from_playing_list(Some(&source), false, "42"));
     }
 }
