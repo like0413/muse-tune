@@ -22,7 +22,7 @@ export function resetConfiguration(): Promise<void> {
   return invoke('reset_configuration')
 }
 
-/** 清空日志；后端随后会重启应用以重新建立日志文件。 */
-export function clearLogs(): Promise<void> {
-  return invoke('clear_logs')
+/** 清空轮转历史日志并返回最新占用，活动日志继续写入。 */
+export function clearLogHistory(): Promise<DataOverview> {
+  return invoke<DataOverview>('clear_log_history')
 }

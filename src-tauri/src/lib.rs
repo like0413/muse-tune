@@ -1,6 +1,7 @@
 mod commands;
 mod data;
 mod diagnostics;
+mod logging;
 mod lyrics;
 mod media;
 mod settings_store;
@@ -25,16 +26,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::Builder::new().build())
-        .plugin(
-            tauri_plugin_log::Builder::new()
-                .level(tauri_plugin_log::log::LevelFilter::Info)
-                .build(),
-        )
+        .plugin(logging::plugin())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::data::clear_lyrics_cache,
-            commands::data::clear_logs,
+            commands::data::clear_log_history,
             commands::data::get_data_overview,
             commands::data::open_data_directory,
             commands::data::reset_configuration,

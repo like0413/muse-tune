@@ -26,6 +26,8 @@ defineProps<{
   detail: string
   opening: boolean
   clearing: boolean
+  cleared: boolean
+  hasHistory: boolean
 }>()
 
 const emit = defineEmits<{
@@ -46,17 +48,17 @@ const emit = defineEmits<{
     <ItemActions>
       <AlertDialog>
         <AlertDialogTrigger as-child>
-          <Button variant="outline" size="sm" :disabled="clearing">
+          <Button variant="outline" size="sm" :disabled="clearing || !hasHistory">
             <LoaderCircle v-if="clearing" data-icon="inline-start" class="animate-spin" />
             <Trash2 v-else data-icon="inline-start" />
-            清理日志
+            {{ cleared ? '已清理' : '清理历史日志' }}
           </Button>
         </AlertDialogTrigger>
         <AlertDialogContent class="w-100">
           <AlertDialogHeader>
-            <AlertDialogTitle>清理全部日志？</AlertDialogTitle>
+            <AlertDialogTitle>清理历史日志？</AlertDialogTitle>
             <AlertDialogDescription>
-              日志文件将被删除，Muse Tune 随后会自动重启并创建新的日志文件。
+              已轮转的历史日志将被删除；当前日志会保留并继续写入，无需重启应用。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -65,7 +67,7 @@ const emit = defineEmits<{
               class="bg-destructive hover:bg-destructive/90 text-white"
               @click="emit('clear')"
             >
-              清理并重启
+              清理历史日志
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

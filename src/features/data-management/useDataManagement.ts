@@ -1,7 +1,7 @@
 import { onActivated, onUnmounted, readonly, shallowRef } from 'vue'
 
 import {
-  clearLogs,
+  clearLogHistory,
   clearLyricsCache,
   getDataOverview,
   openDataDirectory,
@@ -21,6 +21,8 @@ export function useDataManagement() {
   const errorMessage = shallowRef<string | null>(null)
   let refreshRequestId = 0
   let clearStatusTimer: number | undefined
+  let logClearStatusTimer: number | undefined
+  const logsCleared = shallowRef(false)
   let disposed = false
 
   /** 刷新三个数据板块的磁盘状态。 */
@@ -82,14 +84,19 @@ export function useDataManagement() {
     }
   }
 
-  /** 清空日志；成功后由后端重启应用以恢复正常日志写入。 */
-  async function clearLogFiles() {
+  /** 清空历史日志并立即刷新容量，活动日志无需重启即可继续写入。 */
+  async function clearLogHistoryFiles() {
     clearingLogs.value = true
+    logsCleared.value = false
+    window.clearTimeout(logClearStatusTimer)
     try {
-      await clearLogs()
+      overview.value = await clearLogHistory()
       errorMessage.value = null
+      logsCleared.value = true
+      logClearStatusTimer = window.setTimeout(() => (logsCleared.value = false), 2_000)
     } catch (error) {
       errorMessage.value = String(error)
+    } finally {
       clearingLogs.value = false
     }
   }
@@ -99,6 +106,7 @@ export function useDataManagement() {
     disposed = true
     refreshRequestId += 1
     window.clearTimeout(clearStatusTimer)
+    window.clearTimeout(logClearStatusTimer)
   })
 
   return {
@@ -109,11 +117,12 @@ export function useDataManagement() {
     clearingLogs: readonly(clearingLogs),
     openingDirectory: readonly(openingDirectory),
     cacheCleared: readonly(cacheCleared),
+    logsCleared: readonly(logsCleared),
     errorMessage: readonly(errorMessage),
     refresh,
     openDirectory,
     clearCache,
     resetConfig,
-    clearLogFiles,
+    clearLogHistoryFiles,
   }
 }

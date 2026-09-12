@@ -20,10 +20,11 @@ const {
   clearingLogs,
   openingDirectory,
   cacheCleared,
+  logsCleared,
   openDirectory,
   clearCache,
   resetConfig,
-  clearLogFiles,
+  clearLogHistoryFiles,
 } = useDataManagement()
 
 const configDetail = computed(() => {
@@ -34,7 +35,9 @@ const configDetail = computed(() => {
 
 const logsDetail = computed(() => {
   const logs = overview.value?.logs
-  return logs ? `${logs.fileCount} 个文件 · ${formatBytes(logs.totalBytes)}` : '暂无'
+  return logs
+    ? `${logs.fileCount} 个文件 · ${formatBytes(logs.totalBytes)} / 约 ${formatBytes(logs.capacityBytes)}`
+    : '暂无'
 })
 </script>
 
@@ -62,7 +65,9 @@ const logsDetail = computed(() => {
           :detail="logsDetail"
           :opening="openingDirectory === 'logs'"
           :clearing="clearingLogs"
-          @clear="clearLogFiles"
+          :cleared="logsCleared"
+          :has-history="overview.logs.fileCount > 1"
+          @clear="clearLogHistoryFiles"
           @open="openDirectory('logs')"
         />
       </ItemGroup>

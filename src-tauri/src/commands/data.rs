@@ -2,6 +2,7 @@ use tauri::{AppHandle, State};
 
 use crate::{
     data::{self, DataDirectoryKind, DataOverview},
+    logging,
     lyrics::LyricsService,
 };
 
@@ -58,13 +59,17 @@ pub async fn clear_lyrics_cache(
     .map_err(|error| format!("等待缓存清理结果失败: {error}"))?
 }
 
-/// 清空日志文件，并重启应用以重新建立日志写入句柄。
+/// 清空轮转历史日志、保留活动日志，并返回最新容量状态。
 #[tauri::command]
-pub async fn clear_logs(app: AppHandle) -> Result<(), String> {
-    let clear_app = app.clone();
-    tauri::async_runtime::spawn_blocking(move || data::clear_logs(&clear_app))
-        .await
-        .map_err(|error| format!("等待日志清理结果失败: {error}"))??;
-    app.request_restart();
-    Ok(())
+pub async fn clear_log_history(
+    app: AppHandle,
+    lyrics: State<'_, LyricsService>,
+) -> Result<DataOverview, String> {
+    let lyrics = lyrics.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        logging::clear_history(&app)?;
+        data::overview(&app, &lyrics)
+    })
+    .await
+    .map_err(|error| format!("等待历史日志清理结果失败: {error}"))?
 }

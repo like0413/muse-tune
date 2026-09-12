@@ -14,6 +14,7 @@ export interface ConfigOverview {
 export interface LogsOverview {
   fileCount: number
   totalBytes: number
+  capacityBytes: number
 }
 
 export interface DataOverview {
