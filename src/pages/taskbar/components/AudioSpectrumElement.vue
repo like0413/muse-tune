@@ -23,6 +23,7 @@ const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
 const taskbarContainer = shallowRef<HTMLElement | null>(null)
 const { pixelRatio } = useDevicePixelRatio()
 const barHeights = new Float32Array(SOURCE_BAND_COUNT)
+const smoothedLevels = new Float32Array(SOURCE_BAND_COUNT)
 let logicalWidth = 0
 let logicalHeight = 0
 let taskbarWidth = 0
@@ -105,7 +106,12 @@ function drawSpectrum() {
     for (let sourceIndex = start; sourceIndex < end; sourceIndex += 1) {
       level = Math.max(level, (bands[sourceIndex] ?? 0) / 255)
     }
-    barHeights[index] = level <= 0 ? 0 : Math.max(1 / ratio, logicalHeight * level)
+    const targetLevel = Math.min(1, level * (currentSettings.sensitivity / 100))
+    const smoothing = currentSettings.smoothing / 100
+    const smoothedLevel = smoothedLevels[index]! * smoothing + targetLevel * (1 - smoothing)
+    smoothedLevels[index] = smoothedLevel
+    barHeights[index] =
+      smoothedLevel <= 0.002 ? 0 : Math.max(1 / ratio, logicalHeight * smoothedLevel)
   }
 
   const centered = currentSettings.alignment === 'center'
@@ -170,6 +176,8 @@ watch(
     settings.value.barCount,
     settings.value.alignment,
     settings.value.horizontalPosition,
+    settings.value.sensitivity,
+    settings.value.smoothing,
   ],
   () => nextTick(requestDraw),
   { flush: 'post' },

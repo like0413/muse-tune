@@ -35,7 +35,10 @@ async function openProjectUrl(url: string) {
   <Item>
     <ItemHeader>
       <ItemContent>
-        <ItemTitle>项目与许可</ItemTitle>
+        <ItemTitle>
+          <Globe2 class="size-4 text-violet-500" />
+          项目与许可
+        </ItemTitle>
         <ItemDescription>开源项目 · MIT License</ItemDescription>
       </ItemContent>
       <ItemActions>

@@ -11,6 +11,7 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { notifySettingSaveFailed } from '@/features/settings/feedback'
 import {
   applyTaskbarPlacement,
   getTaskbarPlacement,
@@ -51,7 +52,7 @@ async function selectPlacement(value: unknown) {
     await setTaskbarPlacement(value)
   } catch (error) {
     selectedPlacement.value = previousPlacement
-    console.error('切换播放器位置失败', error)
+    notifySettingSaveFailed('播放器位置', error)
     try {
       await applyTaskbarPlacement(previousPlacement)
     } catch (rollbackError) {

@@ -12,6 +12,7 @@ import {
   setTaskbarElementOrder,
   type TaskbarElement,
 } from '@/features/settings/element-order'
+import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const elementOptions = {
   cover: { label: '封面', icon: Disc3, widthClass: 'w-28 flex-none' },
@@ -63,7 +64,7 @@ async function saveElementOrder(order: TaskbarElement[]) {
     committedOrder.value = [...order]
   } catch (error) {
     selectedOrder.value = [...committedOrder.value]
-    console.error('保存任务栏区块顺序失败', error)
+    notifySettingSaveFailed('任务栏区块顺序', error)
     try {
       await setTaskbarElementOrder(committedOrder.value)
     } catch (rollbackError) {

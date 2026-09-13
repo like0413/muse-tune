@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { notifySettingSaveFailed } from '@/features/settings/feedback'
 import {
   DEFAULT_TASKBAR_THEME_COLOR,
   getTaskbarThemeColor,
@@ -67,7 +68,7 @@ async function updateThemeColor(patch: Partial<TaskbarThemeColor>) {
   } catch (error) {
     selectedTheme.value = { ...committedTheme.value }
     customColorDraft.value = committedTheme.value.customColor
-    console.error('保存任务栏主题色失败', error)
+    notifySettingSaveFailed('任务栏主题色', error)
   } finally {
     themeSaving.value = false
   }

@@ -152,6 +152,16 @@
   }
 }
 
+/* 应用级覆盖比单个组件优先，且不改变系统自身的辅助功能偏好。 */
+html[data-reduce-motion] *,
+html[data-reduce-motion] *::before,
+html[data-reduce-motion] *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
 /* 为设置页预留稳定滚动槽位，并用主题变量统一亮色、暗色滚动条。 */
 .settings-scrollbar {
   scrollbar-color: color-mix(in srgb, var(--muted-foreground) 45%, transparent) transparent;

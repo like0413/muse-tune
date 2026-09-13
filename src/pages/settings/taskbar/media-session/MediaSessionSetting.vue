@@ -28,6 +28,7 @@ import type {
   MediaSessionSelectionPolicy,
   MediaSessionSelectionStrategy,
 } from '@/features/media/types'
+import { notifySettingSaveFailed } from '@/features/settings/feedback'
 import {
   DEFAULT_MEDIA_SESSION_SELECTION_POLICY,
   getMediaSessionSelectionPolicy,
@@ -111,7 +112,7 @@ async function savePolicy(policy: MediaSessionSelectionPolicy) {
     }
   } catch (error) {
     applyPolicy(committedPolicy.value)
-    console.error('保存播放器抢占策略失败', error)
+    notifySettingSaveFailed('播放器抢占策略', error)
   } finally {
     policySaving.value = false
     await nextTick()

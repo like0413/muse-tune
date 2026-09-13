@@ -1,10 +1,13 @@
 import { onActivated, onUnmounted, readonly, shallowRef } from 'vue'
+import { toast } from 'vue-sonner'
 
 import {
   clearLogHistory,
+  clearCurrentLyricsCache,
   clearLyricsCache,
   getDataOverview,
   openDataDirectory,
+  refreshCurrentLyrics,
   resetConfiguration,
 } from './api'
 import type { DataDirectoryKind, DataOverview } from './types'
@@ -14,6 +17,8 @@ export function useDataManagement() {
   const overview = shallowRef<DataOverview | null>(null)
   const loading = shallowRef(false)
   const clearing = shallowRef(false)
+  const clearingCurrent = shallowRef(false)
+  const refreshingCurrent = shallowRef(false)
   const resetting = shallowRef(false)
   const clearingLogs = shallowRef(false)
   const openingDirectory = shallowRef<DataDirectoryKind | null>(null)
@@ -72,6 +77,38 @@ export function useDataManagement() {
     }
   }
 
+  /** 只删除当前歌曲缓存，不打断当前歌词展示。 */
+  async function clearCurrentCache() {
+    clearingCurrent.value = true
+    try {
+      overview.value = await clearCurrentLyricsCache()
+      errorMessage.value = null
+      toast.success('当前歌曲缓存已清理', {
+        description: '该条目已从 Muse Tune 缓存中移除',
+      })
+    } catch (error) {
+      errorMessage.value = String(error)
+    } finally {
+      clearingCurrent.value = false
+    }
+  }
+
+  /** 删除当前缓存并让后端立即重新解析当前歌曲。 */
+  async function refreshCurrentLyricsData() {
+    refreshingCurrent.value = true
+    try {
+      overview.value = await refreshCurrentLyrics()
+      errorMessage.value = null
+      toast.success('已开始重新获取当前歌词', {
+        description: '将按当前联网策略重新执行完整获取链路',
+      })
+    } catch (error) {
+      errorMessage.value = String(error)
+    } finally {
+      refreshingCurrent.value = false
+    }
+  }
+
   /** 恢复默认配置；成功后由后端按正常生命周期重启应用。 */
   async function resetConfig() {
     resetting.value = true
@@ -113,6 +150,8 @@ export function useDataManagement() {
     overview: readonly(overview),
     loading: readonly(loading),
     clearing: readonly(clearing),
+    clearingCurrent: readonly(clearingCurrent),
+    refreshingCurrent: readonly(refreshingCurrent),
     resetting: readonly(resetting),
     clearingLogs: readonly(clearingLogs),
     openingDirectory: readonly(openingDirectory),
@@ -122,6 +161,8 @@ export function useDataManagement() {
     refresh,
     openDirectory,
     clearCache,
+    clearCurrentCache,
+    refreshCurrentLyricsData,
     resetConfig,
     clearLogHistoryFiles,
   }

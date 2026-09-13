@@ -8,8 +8,10 @@ import {
   DEFAULT_TASKBAR_TRACK_INFO_SCROLLING,
   getTaskbarTrackInfoAlignment,
   getTaskbarTrackInfoScrolling,
+  getTaskbarTrackInfoVisible,
   listenTaskbarTrackInfoAlignmentChange,
   listenTaskbarTrackInfoScrollingChange,
+  listenTaskbarTrackInfoVisibleChange,
   type TaskbarTrackInfoAlignment,
   type TaskbarTrackInfoScrolling,
 } from '@/features/settings/track-info'
@@ -21,8 +23,22 @@ const alignment = shallowRef<TaskbarTrackInfoAlignment>(DEFAULT_TASKBAR_TRACK_IN
 const scrolling = shallowRef<TaskbarTrackInfoScrolling>({
   ...DEFAULT_TASKBAR_TRACK_INFO_SCROLLING,
 })
+const visible = shallowRef(true)
 let unlistenAlignmentChange: UnlistenFn | undefined
 let unlistenScrollingChange: UnlistenFn | undefined
+let unlistenVisibleChange: UnlistenFn | undefined
+
+/** 恢复并订阅歌曲信息整体显隐。 */
+async function initializeVisibility() {
+  try {
+    unlistenVisibleChange = await listenTaskbarTrackInfoVisibleChange((value) => {
+      visible.value = value
+    })
+    visible.value = await getTaskbarTrackInfoVisible()
+  } catch (error) {
+    console.error('初始化歌曲信息显隐失败', error)
+  }
+}
 
 /** 歌手字段缺失时依次使用专辑歌手与副标题，最后显示空态。 */
 const artist = computed(
@@ -61,14 +77,17 @@ async function initializeScrolling() {
 
 onMounted(initializeAlignment)
 onMounted(initializeScrolling)
+onMounted(initializeVisibility)
 onUnmounted(() => {
   unlistenAlignmentChange?.()
   unlistenScrollingChange?.()
+  unlistenVisibleChange?.()
 })
 </script>
 
 <template>
   <div
+    v-if="visible"
     class="flex min-w-7 flex-1 flex-col justify-center leading-tight"
     :class="alignment === 'right' ? 'items-end text-right' : 'items-start text-left'"
   >

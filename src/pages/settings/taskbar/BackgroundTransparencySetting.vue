@@ -20,6 +20,7 @@ import {
   TASKBAR_TRANSPARENCY_MAX,
   TASKBAR_TRANSPARENCY_MIN,
 } from '@/features/settings/background-transparency'
+import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const selectedBackgroundTransparency = shallowRef(0)
 const committedBackgroundTransparency = shallowRef(0)
@@ -77,7 +78,7 @@ async function commitBackgroundTransparency(values: number[]) {
     await setTaskbarBackgroundTransparency(transparency)
     committedBackgroundTransparency.value = transparency
   } catch (error) {
-    console.error('保存任务栏背景透明度失败', error)
+    notifySettingSaveFailed('任务栏背景透明度', error)
     const committedTransparency = committedBackgroundTransparency.value
     selectedBackgroundTransparency.value = committedTransparency
     previewTransparency(committedTransparency)

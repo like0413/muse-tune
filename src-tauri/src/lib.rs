@@ -30,10 +30,12 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::data::clear_lyrics_cache,
+            commands::data::clear_current_lyrics_cache,
             commands::data::clear_log_history,
             commands::data::get_data_overview,
             commands::data::open_data_directory,
             commands::data::reset_configuration,
+            commands::data::refresh_current_lyrics,
             commands::diagnostics::get_diagnostics,
             commands::settings::open_settings_window,
             commands::media::control_media_session,
@@ -44,7 +46,7 @@ pub fn run() {
             commands::media::set_media_session_selection_policy,
             commands::media::toggle_current_media_mute,
             commands::lyrics::get_current_lyrics,
-            commands::lyrics::set_lyrics_enabled,
+            commands::lyrics::set_lyrics_preferences,
             commands::system::list_system_fonts,
             commands::system::get_system_accent_color,
             commands::system::get_system_foreground_color,

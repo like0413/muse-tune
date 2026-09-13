@@ -17,6 +17,16 @@ export function clearLyricsCache(): Promise<DataOverview> {
   return invoke<DataOverview>('clear_lyrics_cache')
 }
 
+/** 只清理当前歌曲的规范化歌词缓存。 */
+export function clearCurrentLyricsCache(): Promise<DataOverview> {
+  return invoke<DataOverview>('clear_current_lyrics_cache')
+}
+
+/** 清理当前条目并强制重新执行歌词获取链路。 */
+export function refreshCurrentLyrics(): Promise<DataOverview> {
+  return invoke<DataOverview>('refresh_current_lyrics')
+}
+
 /** 恢复默认配置；后端保存完成后会请求重启应用。 */
 export function resetConfiguration(): Promise<void> {
   return invoke('reset_configuration')

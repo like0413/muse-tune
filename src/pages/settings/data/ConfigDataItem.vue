@@ -12,18 +12,21 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Item,
   ItemActions,
   ItemContent,
   ItemDescription,
-  ItemMedia,
+  ItemFooter,
   ItemTitle,
 } from '@/components/ui/item'
+import { formatBytes } from '@/features/data-management/format'
+import type { ConfigOverview } from '@/features/data-management/types'
 
 defineProps<{
-  detail: string
+  overview: ConfigOverview
   opening: boolean
   resetting: boolean
 }>()
@@ -36,12 +39,12 @@ const emit = defineEmits<{
 
 <template>
   <Item>
-    <ItemMedia class="icon-tone-amber-500">
-      <FileCog />
-    </ItemMedia>
     <ItemContent>
-      <ItemTitle>应用配置</ItemTitle>
-      <ItemDescription>应用设置和用户偏好 · {{ detail }}</ItemDescription>
+      <ItemTitle>
+        <FileCog class="size-4 text-amber-500" />
+        应用配置
+      </ItemTitle>
+      <ItemDescription>应用设置和用户偏好</ItemDescription>
     </ItemContent>
     <ItemActions>
       <AlertDialog>
@@ -76,5 +79,18 @@ const emit = defineEmits<{
         打开目录
       </Button>
     </ItemActions>
+    <ItemFooter>
+      <div class="flex w-full items-center justify-between gap-4">
+        <Badge variant="secondary">
+          {{ overview.settingsFileExists ? '1 个文件' : '尚未创建文件' }}
+        </Badge>
+        <div class="flex items-baseline gap-2 tabular-nums">
+          <span class="text-sm font-semibold">
+            {{ overview.settingsFileExists ? formatBytes(overview.settingsFileBytes) : '—' }}
+          </span>
+          <span class="text-muted-foreground text-xs">配置文件大小</span>
+        </div>
+      </div>
+    </ItemFooter>
   </Item>
 </template>

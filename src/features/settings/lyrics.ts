@@ -11,16 +11,20 @@ const TASKBAR_LYRICS_KEY = 'taskbar.lyrics'
 const TASKBAR_LYRICS_CHANGED_EVENT = 'settings://taskbar-lyrics-changed'
 const TASKBAR_LYRICS_ALIGNMENTS = ['left', 'center', 'right'] as const
 const TASKBAR_LYRICS_LINE_MODES = ['single', 'double'] as const
-const TASKBAR_LYRICS_SECONDARY_LINES = ['translation', 'next'] as const
+const TASKBAR_LYRICS_SECONDARY_LINES = ['translation_only', 'next', 'translation_or_next'] as const
+const TASKBAR_LYRICS_NETWORK_POLICIES = ['auto', 'local_only'] as const
 const TASKBAR_LYRICS_ANIMATIONS = ['none', 'up'] as const
 const TASKBAR_LYRICS_COLOR_SCHEMES = ['theme', 'custom'] as const
 const MAX_FONT_FAMILY_LENGTH = 128
 export const TASKBAR_LYRICS_FONT_SIZE_MIN = 10
 export const TASKBAR_LYRICS_FONT_SIZE_MAX = 18
+export const TASKBAR_LYRICS_TIMING_OFFSET_MIN = -2000
+export const TASKBAR_LYRICS_TIMING_OFFSET_MAX = 2000
 
 export type TaskbarLyricsAlignment = (typeof TASKBAR_LYRICS_ALIGNMENTS)[number]
 export type TaskbarLyricsLineMode = (typeof TASKBAR_LYRICS_LINE_MODES)[number]
 export type TaskbarLyricsSecondaryLine = (typeof TASKBAR_LYRICS_SECONDARY_LINES)[number]
+export type TaskbarLyricsNetworkPolicy = (typeof TASKBAR_LYRICS_NETWORK_POLICIES)[number]
 export type TaskbarLyricsAnimation = (typeof TASKBAR_LYRICS_ANIMATIONS)[number]
 export type TaskbarLyricsColorScheme = (typeof TASKBAR_LYRICS_COLOR_SCHEMES)[number]
 
@@ -29,6 +33,8 @@ export interface TaskbarLyricsSettings {
   alignment: TaskbarLyricsAlignment
   lineMode: TaskbarLyricsLineMode
   secondaryLine: TaskbarLyricsSecondaryLine
+  networkPolicy: TaskbarLyricsNetworkPolicy
+  timingOffsetMs: number
   wordHighlight: boolean
   animation: TaskbarLyricsAnimation
   animationPreRoll: boolean
@@ -43,7 +49,9 @@ export const DEFAULT_TASKBAR_LYRICS_SETTINGS: TaskbarLyricsSettings = {
   enabled: true,
   alignment: 'left',
   lineMode: 'double',
-  secondaryLine: 'translation',
+  secondaryLine: 'translation_or_next',
+  networkPolicy: 'auto',
+  timingOffsetMs: 0,
   wordHighlight: true,
   animation: 'up',
   animationPreRoll: true,
@@ -67,6 +75,21 @@ export function isTaskbarLyricsLineMode(value: unknown): value is TaskbarLyricsL
 /** 判断外部值是否为支持的双行次要内容。 */
 export function isTaskbarLyricsSecondaryLine(value: unknown): value is TaskbarLyricsSecondaryLine {
   return TASKBAR_LYRICS_SECONDARY_LINES.some((secondaryLine) => secondaryLine === value)
+}
+
+/** 判断外部值是否为支持的联网策略。 */
+export function isTaskbarLyricsNetworkPolicy(value: unknown): value is TaskbarLyricsNetworkPolicy {
+  return TASKBAR_LYRICS_NETWORK_POLICIES.some((policy) => policy === value)
+}
+
+/** 将时间偏移限制到可校准的范围；正值表示延后显示。 */
+export function normalizeTaskbarLyricsTimingOffset(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_TASKBAR_LYRICS_SETTINGS.timingOffsetMs
+  }
+  return Math.round(
+    clamp(value, TASKBAR_LYRICS_TIMING_OFFSET_MIN, TASKBAR_LYRICS_TIMING_OFFSET_MAX),
+  )
 }
 
 /** 判断外部值是否为支持的歌词切换动画。 */
@@ -122,9 +145,16 @@ export function normalizeTaskbarLyricsSettings(value: unknown): TaskbarLyricsSet
     lineMode: isTaskbarLyricsLineMode(record.lineMode)
       ? record.lineMode
       : DEFAULT_TASKBAR_LYRICS_SETTINGS.lineMode,
-    secondaryLine: isTaskbarLyricsSecondaryLine(record.secondaryLine)
-      ? record.secondaryLine
-      : DEFAULT_TASKBAR_LYRICS_SETTINGS.secondaryLine,
+    secondaryLine:
+      record.secondaryLine === 'translation'
+        ? 'translation_or_next'
+        : isTaskbarLyricsSecondaryLine(record.secondaryLine)
+          ? record.secondaryLine
+          : DEFAULT_TASKBAR_LYRICS_SETTINGS.secondaryLine,
+    networkPolicy: isTaskbarLyricsNetworkPolicy(record.networkPolicy)
+      ? record.networkPolicy
+      : DEFAULT_TASKBAR_LYRICS_SETTINGS.networkPolicy,
+    timingOffsetMs: normalizeTaskbarLyricsTimingOffset(record.timingOffsetMs),
     wordHighlight:
       typeof record.wordHighlight === 'boolean'
         ? record.wordHighlight
@@ -162,9 +192,12 @@ export function getTaskbarLyricsSettings(): Promise<TaskbarLyricsSettings> {
 export async function setTaskbarLyricsSettings(value: TaskbarLyricsSettings): Promise<void> {
   const previous = await getTaskbarLyricsSettings()
   const saved = await setVersionedSetting(lyricsStorage, value)
-  if (saved.enabled !== previous.enabled) {
+  if (saved.enabled !== previous.enabled || saved.networkPolicy !== previous.networkPolicy) {
     try {
-      await invoke('set_lyrics_enabled', { enabled: saved.enabled })
+      await invoke('set_lyrics_preferences', {
+        enabled: saved.enabled,
+        allowOnline: saved.networkPolicy === 'auto',
+      })
     } catch (error) {
       await setVersionedSetting(lyricsStorage, previous)
       throw error

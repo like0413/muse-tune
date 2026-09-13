@@ -56,6 +56,7 @@ struct LyricsServiceInner {
     current_track: Mutex<Option<TrackDescriptor>>,
     generation: AtomicU64,
     enabled: AtomicBool,
+    allow_online: AtomicBool,
     publisher: Arc<SnapshotPublisher>,
     diagnostics_notifier: Arc<DiagnosticsNotifier>,
     runtime_state: RwLock<LyricsRuntimeState>,
@@ -121,13 +122,15 @@ impl LyricsService {
                 log::warn!("广播歌词诊断变化失败: {error}");
             }
         });
+        let (enabled, allow_online) = super::settings::restore_lyrics_preferences(app);
         let service = Self {
             inner: Arc::new(LyricsServiceInner {
                 cache,
                 client,
                 current_track: Mutex::new(None),
                 generation: AtomicU64::new(0),
-                enabled: AtomicBool::new(super::settings::restore_lyrics_enabled(app)),
+                enabled: AtomicBool::new(enabled),
+                allow_online: AtomicBool::new(allow_online),
                 publisher,
                 diagnostics_notifier,
                 runtime_state: RwLock::new(LyricsRuntimeState::default()),
@@ -272,14 +275,54 @@ impl LyricsService {
         Ok(())
     }
 
-    /// 更新歌词总开关；关闭时取消解析，开启时立即解析当前歌曲。
-    pub fn set_enabled(&self, enabled: bool) -> Result<(), String> {
-        if self.inner.enabled.swap(enabled, Ordering::AcqRel) == enabled {
+    /// 只删除当前歌曲的应用歌词缓存，不改变正在展示的歌词快照。
+    pub fn clear_current_cache(&self) -> Result<(), String> {
+        let (track, _) = self.prepare_current_cache_mutation()?;
+        self.cancel_resolution();
+        self.inner
+            .cache
+            .remove(&track.key)
+            .map_err(|error| format!("清理当前歌曲缓存失败: {error}"))?;
+        (self.inner.diagnostics_notifier)();
+        Ok(())
+    }
+
+    /// 删除当前歌曲缓存并立即启动一次完整解析。
+    pub fn refresh_current(&self) -> Result<(), String> {
+        let (track, generation) = self.prepare_current_cache_mutation()?;
+        self.cancel_resolution();
+        self.inner
+            .cache
+            .remove(&track.key)
+            .map_err(|error| format!("清理当前歌曲缓存失败: {error}"))?;
+        (self.inner.diagnostics_notifier)();
+        self.start_resolution(Some(track), generation, false);
+        Ok(())
+    }
+
+    /// 在当前歌曲锁内提升解析代数，确保旧任务不能在删除之后回写缓存。
+    fn prepare_current_cache_mutation(&self) -> Result<(TrackDescriptor, u64), String> {
+        let current = self
+            .inner
+            .current_track
+            .lock()
+            .map_err(|_| "当前歌曲状态不可用".to_owned())?;
+        let track = current
+            .clone()
+            .ok_or_else(|| "当前没有可清理的歌曲".to_owned())?;
+        let generation = self.inner.generation.fetch_add(1, Ordering::AcqRel) + 1;
+        Ok((track, generation))
+    }
+
+    /// 原子更新歌词开关与联网能力，并只触发一次必要的重新解析。
+    pub fn set_preferences(&self, enabled: bool, allow_online: bool) -> Result<(), String> {
+        let enabled_changed = self.inner.enabled.swap(enabled, Ordering::AcqRel) != enabled;
+        let online_changed =
+            self.inner.allow_online.swap(allow_online, Ordering::AcqRel) != allow_online;
+        if !enabled_changed && !online_changed {
             return Ok(());
         }
-        if enabled {
-            self.force_resolve_current(false)
-        } else {
+        if !enabled {
             let (track_key, generation) = {
                 let current = self
                     .inner
@@ -294,8 +337,9 @@ impl LyricsService {
                 LyricsSnapshot::unavailable(track_key, "歌词显示已关闭"),
                 generation,
             );
-            Ok(())
+            return Ok(());
         }
+        self.force_resolve_current(online_changed && allow_online)
     }
 
     /// 接收媒体模块的完整快照变化，时间线轻量事件不会触发此入口。
@@ -661,6 +705,19 @@ impl LyricsService {
             }
         }
         if !self.is_current_generation(generation) {
+            return;
+        }
+
+        if !self.inner.allow_online.load(Ordering::Acquire) {
+            if let Some(candidate) = select_best_candidate(&track, candidates) {
+                self.publish_candidate(&track, candidate, generation);
+            } else {
+                self.store_and_publish_if_current(
+                    LyricsSnapshot::unavailable(Some(track.key), "联网策略仅允许本地与缓存"),
+                    generation,
+                    LyricsResolutionMethod::None,
+                );
+            }
             return;
         }
 

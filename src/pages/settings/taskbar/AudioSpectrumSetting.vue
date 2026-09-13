@@ -27,10 +27,15 @@ import {
   TASKBAR_SPECTRUM_BAR_COUNT_MIN,
   TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MAX,
   TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MIN,
+  TASKBAR_SPECTRUM_SENSITIVITY_MAX,
+  TASKBAR_SPECTRUM_SENSITIVITY_MIN,
+  TASKBAR_SPECTRUM_SMOOTHING_MAX,
+  TASKBAR_SPECTRUM_SMOOTHING_MIN,
   TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MAX,
   TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MIN,
   type TaskbarAudioSpectrumSettings,
 } from '@/features/settings/audio-spectrum'
+import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const alignmentOptions = [
   { value: 'center', label: '居中' },
@@ -79,7 +84,7 @@ async function updateSettings(patch: Partial<TaskbarAudioSpectrumSettings>) {
     committedSettings.value = { ...next }
   } catch (error) {
     selectedSettings.value = { ...committedSettings.value }
-    console.error('保存任务栏频谱配置失败', error)
+    notifySettingSaveFailed('频谱设置', error)
   } finally {
     settingsSaving.value = false
   }
@@ -105,9 +110,19 @@ function updateHorizontalPosition(values: number[] | undefined) {
   updateSliderPreview('horizontalPosition', values?.[0])
 }
 
+/** 更新频谱输入增益草稿并实时预览。 */
+function updateSensitivity(values: number[] | undefined) {
+  updateSliderPreview('sensitivity', values?.[0])
+}
+
+/** 更新频谱动态平滑草稿并实时预览。 */
+function updateSmoothing(values: number[] | undefined) {
+  updateSliderPreview('smoothing', values?.[0])
+}
+
 /** 规范单个滑块值并广播完整配置。 */
 function updateSliderPreview(
-  key: 'barCount' | 'widthPercentage' | 'horizontalPosition',
+  key: 'barCount' | 'widthPercentage' | 'horizontalPosition' | 'sensitivity' | 'smoothing',
   value: number | undefined,
 ) {
   if (settingsSaving.value || value === undefined) return
@@ -150,6 +165,50 @@ onMounted(loadSettings)
             :disabled="settingsSaving"
             @update:model-value="updateSettings({ visible: $event })"
           />
+        </Field>
+
+        <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
+          <FieldContent>
+            <FieldTitle>灵敏度</FieldTitle>
+            <FieldDescription>放大或压低频谱对输入音量的响应</FieldDescription>
+          </FieldContent>
+          <div class="flex w-56 items-center gap-3">
+            <Slider
+              :model-value="[selectedSettings.sensitivity]"
+              :min="TASKBAR_SPECTRUM_SENSITIVITY_MIN"
+              :max="TASKBAR_SPECTRUM_SENSITIVITY_MAX"
+              :step="5"
+              :disabled="settingsSaving || !selectedSettings.visible"
+              aria-label="频谱灵敏度"
+              @update:model-value="updateSensitivity"
+              @value-commit="commitSlider"
+            />
+            <output class="text-muted-foreground w-14 text-right text-xs tabular-nums">
+              {{ selectedSettings.sensitivity }}%
+            </output>
+          </div>
+        </Field>
+
+        <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
+          <FieldContent>
+            <FieldTitle>动态平滑</FieldTitle>
+            <FieldDescription>数值越高越稳定，但快速变化的响应会更慢</FieldDescription>
+          </FieldContent>
+          <div class="flex w-56 items-center gap-3">
+            <Slider
+              :model-value="[selectedSettings.smoothing]"
+              :min="TASKBAR_SPECTRUM_SMOOTHING_MIN"
+              :max="TASKBAR_SPECTRUM_SMOOTHING_MAX"
+              :step="5"
+              :disabled="settingsSaving || !selectedSettings.visible"
+              aria-label="频谱动态平滑"
+              @update:model-value="updateSmoothing"
+              @value-commit="commitSlider"
+            />
+            <output class="text-muted-foreground w-14 text-right text-xs tabular-nums">
+              {{ selectedSettings.smoothing }}%
+            </output>
+          </div>
         </Field>
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">

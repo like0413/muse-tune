@@ -12,6 +12,7 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
+import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const autostartEnabled = shallowRef(false)
 
@@ -23,14 +24,16 @@ async function loadAutostartState() {
 /** 更新 Windows 开机自启注册，并仅在成功后提交界面状态。 */
 async function setAutostart(enabledValue: boolean) {
   if (enabledValue === autostartEnabled.value) return
-
-  if (enabledValue) {
-    await enable()
-  } else {
-    await disable()
+  try {
+    if (enabledValue) {
+      await enable()
+    } else {
+      await disable()
+    }
+    autostartEnabled.value = enabledValue
+  } catch (error) {
+    notifySettingSaveFailed('开机自启', error)
   }
-
-  autostartEnabled.value = enabledValue
 }
 
 onMounted(loadAutostartState)

@@ -83,7 +83,10 @@ function selectUpdateCheckFrequency(value: unknown) {
     <ItemHeader>
       <ItemContent>
         <div class="flex flex-wrap items-center gap-2">
-          <ItemTitle>应用更新</ItemTitle>
+          <ItemTitle>
+            <RefreshCw class="size-4 text-sky-500" />
+            应用更新
+          </ItemTitle>
           <Badge v-if="statusLabel" :variant="statusVariant">{{ statusLabel }}</Badge>
           <p v-if="errorMessage" class="text-destructive text-xs">{{ errorMessage }}</p>
         </div>

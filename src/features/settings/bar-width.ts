@@ -5,9 +5,22 @@ import { settingsStore } from './store'
 
 export const TASKBAR_WIDTH_MIN = 200
 export const TASKBAR_WIDTH_MAX = 360
+export const TASKBAR_WIDTH_PRESETS = {
+  compact: 200,
+  standard: 280,
+  wide: 360,
+} as const
+
+export type TaskbarWidthPreset = keyof typeof TASKBAR_WIDTH_PRESETS | 'custom'
 
 const TASKBAR_WIDTH_KEY = 'taskbar.width'
 const DEFAULT_TASKBAR_WIDTH = TASKBAR_WIDTH_MAX
+
+/** 根据已保存宽度还原预设；非精确预设值归入自由调整。 */
+export function getTaskbarWidthPreset(width: number): TaskbarWidthPreset {
+  const preset = Object.entries(TASKBAR_WIDTH_PRESETS).find(([, value]) => value === width)?.[0]
+  return (preset as keyof typeof TASKBAR_WIDTH_PRESETS | undefined) ?? 'custom'
+}
 
 /** 将外部宽度值规范到受支持的整数 DIP 范围。 */
 export function normalizeTaskbarWidth(value: unknown): number | undefined {

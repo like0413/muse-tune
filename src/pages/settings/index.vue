@@ -20,6 +20,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from '@/components/ui/sidebar'
+import { Toaster } from '@/components/ui/sonner'
 
 import appIconUrl from '../../../src-tauri/icons/icon.png'
 import AboutSettingsPanel from './about/index.vue'
@@ -124,4 +125,5 @@ onMounted(async () => {
       </div>
     </SidebarInset>
   </SidebarProvider>
+  <Toaster position="bottom-right" rich-colors />
 </template>

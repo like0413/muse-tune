@@ -1,12 +1,7 @@
 <script setup lang="ts">
-import { RefreshCw } from '@lucide/vue'
-import { computed } from 'vue'
-
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 import { ItemGroup } from '@/components/ui/item'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatBytes } from '@/features/data-management/format'
 import { useDataManagement } from '@/features/data-management/useDataManagement'
 
 import CacheDataItem from './CacheDataItem.vue'
@@ -16,6 +11,8 @@ import LogsDataItem from './LogsDataItem.vue'
 const {
   overview,
   clearing,
+  clearingCurrent,
+  refreshingCurrent,
   resetting,
   clearingLogs,
   openingDirectory,
@@ -23,26 +20,20 @@ const {
   logsCleared,
   openDirectory,
   clearCache,
+  clearCurrentCache,
+  refreshCurrentLyricsData,
   resetConfig,
   clearLogHistoryFiles,
+  errorMessage,
 } = useDataManagement()
-
-const configDetail = computed(() => {
-  const config = overview.value?.config
-  if (!config) return '暂无'
-  return config.settingsFileExists ? formatBytes(config.settingsFileBytes) : '尚未创建'
-})
-
-const logsDetail = computed(() => {
-  const logs = overview.value?.logs
-  return logs
-    ? `${logs.fileCount} 个文件 · ${formatBytes(logs.totalBytes)} / 约 ${formatBytes(logs.capacityBytes)}`
-    : '暂无'
-})
 </script>
 
 <template>
   <div class="flex w-full flex-col gap-3">
+    <Alert v-if="errorMessage" variant="destructive">
+      <AlertTitle>操作失败</AlertTitle>
+      <AlertDescription>{{ errorMessage }}</AlertDescription>
+    </Alert>
     <template v-if="overview">
       <ItemGroup class="gap-3">
         <CacheDataItem
@@ -50,11 +41,15 @@ const logsDetail = computed(() => {
           :clearing="clearing"
           :opening="openingDirectory === 'cache'"
           :cleared="cacheCleared"
+          :clearing-current="clearingCurrent"
+          :refreshing-current="refreshingCurrent"
           @clear="clearCache"
           @open="openDirectory('cache')"
+          @clear-current="clearCurrentCache"
+          @refresh-current="refreshCurrentLyricsData"
         />
         <ConfigDataItem
-          :detail="configDetail"
+          :overview="overview.config"
           :opening="openingDirectory === 'config'"
           :resetting="resetting"
           @open="openDirectory('config')"
@@ -62,7 +57,7 @@ const logsDetail = computed(() => {
         />
 
         <LogsDataItem
-          :detail="logsDetail"
+          :overview="overview.logs"
           :opening="openingDirectory === 'logs'"
           :clearing="clearingLogs"
           :cleared="logsCleared"

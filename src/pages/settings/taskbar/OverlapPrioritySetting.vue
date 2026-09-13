@@ -11,6 +11,7 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { notifySettingSaveFailed } from '@/features/settings/feedback'
 import {
   applyTaskbarOverlapPriority,
   getTaskbarOverlapPriority,
@@ -54,7 +55,7 @@ async function selectOverlapPriority(value: unknown) {
     await setTaskbarOverlapPriority(value)
   } catch (error) {
     selectedOverlapPriority.value = previousPriority
-    console.error('切换遮挡优先级失败', error)
+    notifySettingSaveFailed('遮挡优先级', error)
     try {
       await applyTaskbarOverlapPriority(previousPriority)
     } catch (rollbackError) {

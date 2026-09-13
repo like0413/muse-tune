@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { notifySettingSaveFailed } from '@/features/settings/feedback'
 import {
   DEFAULT_TASKBAR_PROGRESS_POSITION,
   DEFAULT_TASKBAR_PROGRESS_STYLE,
@@ -70,7 +71,7 @@ async function selectProgressPosition(value: unknown) {
     await setTaskbarProgressPosition(value)
   } catch (error) {
     selectedProgressPosition.value = previousPosition
-    console.error('保存横条进度位置失败', error)
+    notifySettingSaveFailed('横条进度位置', error)
   } finally {
     progressPositionSaving.value = false
   }
@@ -94,7 +95,7 @@ async function selectProgressStyle(value: unknown) {
     await setTaskbarProgressStyle(value)
   } catch (error) {
     selectedProgressStyle.value = previousStyle
-    console.error('保存播放进度样式失败', error)
+    notifySettingSaveFailed('播放进度样式', error)
     try {
       await setTaskbarProgressStyle(previousStyle)
     } catch (rollbackError) {

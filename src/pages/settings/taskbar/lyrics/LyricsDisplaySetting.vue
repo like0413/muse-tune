@@ -23,17 +23,21 @@ import {
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { notifySettingSaveFailed } from '@/features/settings/feedback'
 import {
   DEFAULT_TASKBAR_LYRICS_SETTINGS,
   getTaskbarLyricsSettings,
   isTaskbarLyricsAlignment,
   isTaskbarLyricsAnimation,
   isTaskbarLyricsLineMode,
+  isTaskbarLyricsNetworkPolicy,
   isTaskbarLyricsSecondaryLine,
   normalizeTaskbarLyricsSettings,
   setTaskbarLyricsSettings,
   TASKBAR_LYRICS_FONT_SIZE_MAX,
   TASKBAR_LYRICS_FONT_SIZE_MIN,
+  TASKBAR_LYRICS_TIMING_OFFSET_MAX,
+  TASKBAR_LYRICS_TIMING_OFFSET_MIN,
   type TaskbarLyricsSettings,
 } from '@/features/settings/lyrics'
 
@@ -49,8 +53,13 @@ const lineModeOptions = [
   { value: 'double', label: '双行' },
 ] as const
 const secondaryLineOptions = [
-  { value: 'translation', label: '翻译' },
+  { value: 'translation_only', label: '仅翻译' },
   { value: 'next', label: '下一句' },
+  { value: 'translation_or_next', label: '翻译优先' },
+] as const
+const networkPolicyOptions = [
+  { value: 'auto', label: '自动' },
+  { value: 'local_only', label: '仅本地与缓存' },
 ] as const
 const animationOptions = [
   { value: 'none', label: '无' },
@@ -87,7 +96,7 @@ async function updateSettings(patch: Partial<TaskbarLyricsSettings>) {
     committedSettings.value = { ...next }
   } catch (error) {
     selectedSettings.value = { ...committedSettings.value }
-    console.error('保存歌词显示配置失败', error)
+    notifySettingSaveFailed('歌词设置', error)
   } finally {
     settingsSaving.value = false
   }
@@ -106,6 +115,27 @@ function selectLineMode(value: unknown) {
 /** 接收双行次要内容的优先选择。 */
 function selectSecondaryLine(value: unknown) {
   if (isTaskbarLyricsSecondaryLine(value)) void updateSettings({ secondaryLine: value })
+}
+
+/** 接收联网策略选项。 */
+function selectNetworkPolicy(value: unknown) {
+  if (isTaskbarLyricsNetworkPolicy(value)) void updateSettings({ networkPolicy: value })
+}
+
+/** 拖动歌词时间偏移时只更新草稿。 */
+function previewTimingOffset(values: number[] | undefined) {
+  const timingOffsetMs = values?.[0]
+  if (timingOffsetMs === undefined) return
+  selectedSettings.value = normalizeTaskbarLyricsSettings({
+    ...selectedSettings.value,
+    timingOffsetMs,
+  })
+}
+
+/** 释放滑块后持久化歌词时间偏移。 */
+function commitTimingOffset(values: number[] | undefined) {
+  const timingOffsetMs = values?.[0]
+  if (timingOffsetMs !== undefined) void updateSettings({ timingOffsetMs })
 }
 
 /** 接收下拉框的歌词动画值。 */
@@ -155,6 +185,53 @@ onMounted(loadSettings)
             :disabled="settingsSaving"
             @update:model-value="updateSettings({ enabled: $event })"
           />
+        </Field>
+
+        <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
+          <FieldContent>
+            <FieldTitle>联网策略</FieldTitle>
+            <FieldDescription>仅本地与缓存不会发起新的歌词网络请求</FieldDescription>
+          </FieldContent>
+          <Tabs
+            :model-value="selectedSettings.networkPolicy"
+            @update:model-value="selectNetworkPolicy"
+          >
+            <TabsList aria-label="歌词联网策略">
+              <TabsTrigger
+                v-for="option in networkPolicyOptions"
+                :key="option.value"
+                :value="option.value"
+                :disabled="settingsSaving || !selectedSettings.enabled"
+              >
+                {{ option.label }}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </Field>
+
+        <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
+          <FieldContent>
+            <FieldTitle>时间偏移</FieldTitle>
+            <FieldDescription
+              >校准歌词源时间；正值延后、负值提前，不改变动画提前完成</FieldDescription
+            >
+          </FieldContent>
+          <div class="flex w-56 items-center gap-3">
+            <Slider
+              :model-value="[selectedSettings.timingOffsetMs]"
+              :min="TASKBAR_LYRICS_TIMING_OFFSET_MIN"
+              :max="TASKBAR_LYRICS_TIMING_OFFSET_MAX"
+              :step="50"
+              :disabled="settingsSaving || !selectedSettings.enabled"
+              aria-label="歌词时间偏移"
+              @update:model-value="previewTimingOffset"
+              @value-commit="commitTimingOffset"
+            />
+            <output class="text-muted-foreground w-16 text-right text-xs tabular-nums">
+              {{ selectedSettings.timingOffsetMs > 0 ? '+' : ''
+              }}{{ selectedSettings.timingOffsetMs }}ms
+            </output>
+          </div>
         </Field>
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
@@ -276,8 +353,8 @@ onMounted(loadSettings)
           :data-disabled="!selectedSettings.enabled || selectedSettings.lineMode !== 'double'"
         >
           <FieldContent>
-            <FieldTitle>第二行优先显示</FieldTitle>
-            <FieldDescription>首选内容不存在时自动显示另一项</FieldDescription>
+            <FieldTitle>第二行回退规则</FieldTitle>
+            <FieldDescription>仅“翻译优先”会在没有翻译时显示下一句</FieldDescription>
           </FieldContent>
           <Tabs
             :model-value="selectedSettings.secondaryLine"

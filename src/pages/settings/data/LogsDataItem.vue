@@ -12,18 +12,21 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Item,
   ItemActions,
   ItemContent,
   ItemDescription,
-  ItemMedia,
+  ItemFooter,
   ItemTitle,
 } from '@/components/ui/item'
+import { formatBytes } from '@/features/data-management/format'
+import type { LogsOverview } from '@/features/data-management/types'
 
 defineProps<{
-  detail: string
+  overview: LogsOverview
   opening: boolean
   clearing: boolean
   cleared: boolean
@@ -38,12 +41,12 @@ const emit = defineEmits<{
 
 <template>
   <Item>
-    <ItemMedia class="icon-tone-sky-500">
-      <ScrollText />
-    </ItemMedia>
     <ItemContent>
-      <ItemTitle>日志</ItemTitle>
-      <ItemDescription>运行日志与错误记录 · {{ detail }}</ItemDescription>
+      <ItemTitle>
+        <ScrollText class="size-4 text-sky-500" />
+        日志
+      </ItemTitle>
+      <ItemDescription>运行日志与错误记录</ItemDescription>
     </ItemContent>
     <ItemActions>
       <AlertDialog>
@@ -78,5 +81,19 @@ const emit = defineEmits<{
         打开目录
       </Button>
     </ItemActions>
+    <ItemFooter>
+      <div class="flex w-full items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <Badge variant="secondary">{{ overview.fileCount }} 个文件</Badge>
+          <span class="text-muted-foreground text-xs">含当前日志与轮转历史</span>
+        </div>
+        <div class="flex items-baseline gap-2 tabular-nums">
+          <span class="text-sm font-semibold">{{ formatBytes(overview.totalBytes) }}</span>
+          <span class="text-muted-foreground text-xs">
+            已用 / 约 {{ formatBytes(overview.capacityBytes) }} 上限
+          </span>
+        </div>
+      </div>
+    </ItemFooter>
   </Item>
 </template>

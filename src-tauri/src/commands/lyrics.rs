@@ -8,8 +8,12 @@ pub fn get_current_lyrics(service: State<'_, LyricsService>) -> LyricsSnapshot {
     service.snapshot()
 }
 
-/// 同步歌词总开关到后端解析生命周期。
+/// 同步歌词总开关与联网能力到后端解析生命周期。
 #[tauri::command]
-pub fn set_lyrics_enabled(enabled: bool, service: State<'_, LyricsService>) -> Result<(), String> {
-    service.set_enabled(enabled)
+pub fn set_lyrics_preferences(
+    enabled: bool,
+    allow_online: bool,
+    service: State<'_, LyricsService>,
+) -> Result<(), String> {
+    service.set_preferences(enabled, allow_online)
 }

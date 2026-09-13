@@ -12,6 +12,8 @@ const TASKBAR_TRACK_INFO_ALIGNMENT_KEY = 'taskbar.trackInfo.alignment'
 const TASKBAR_TRACK_INFO_ALIGNMENT_CHANGED_EVENT = 'settings://taskbar-track-info-alignment-changed'
 const TASKBAR_TRACK_INFO_SCROLLING_KEY = 'taskbar.trackInfo.scrolling'
 const TASKBAR_TRACK_INFO_SCROLLING_CHANGED_EVENT = 'settings://taskbar-track-info-scrolling-changed'
+const TASKBAR_TRACK_INFO_VISIBLE_KEY = 'taskbar.trackInfo.visible'
+const TASKBAR_TRACK_INFO_VISIBLE_CHANGED_EVENT = 'settings://taskbar-track-info-visible-changed'
 
 export type TaskbarTrackInfoAlignment = (typeof TASKBAR_TRACK_INFO_ALIGNMENTS)[number]
 export type TaskbarTrackInfoScrollMode = (typeof TASKBAR_TRACK_INFO_SCROLL_MODES)[number]
@@ -23,10 +25,32 @@ export interface TaskbarTrackInfoScrolling {
 }
 
 export const DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT: TaskbarTrackInfoAlignment = 'left'
+export const DEFAULT_TASKBAR_TRACK_INFO_VISIBLE = true
 export const DEFAULT_TASKBAR_TRACK_INFO_SCROLLING: TaskbarTrackInfoScrolling = {
   enabled: true,
   speed: 30,
   mode: 'loop',
+}
+
+/** 读取歌曲信息整体显隐。 */
+export async function getTaskbarTrackInfoVisible(): Promise<boolean> {
+  const value = await settingsStore.get<unknown>(TASKBAR_TRACK_INFO_VISIBLE_KEY)
+  return typeof value === 'boolean' ? value : DEFAULT_TASKBAR_TRACK_INFO_VISIBLE
+}
+
+/** 保存歌曲信息整体显隐，并通知任务栏窗口。 */
+export async function setTaskbarTrackInfoVisible(visible: boolean): Promise<void> {
+  await settingsStore.set(TASKBAR_TRACK_INFO_VISIBLE_KEY, visible)
+  await emit(TASKBAR_TRACK_INFO_VISIBLE_CHANGED_EVENT, visible)
+}
+
+/** 监听歌曲信息整体显隐变化。 */
+export async function listenTaskbarTrackInfoVisibleChange(
+  handler: (visible: boolean) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(TASKBAR_TRACK_INFO_VISIBLE_CHANGED_EVENT, ({ payload }) => {
+    if (typeof payload === 'boolean') handler(payload)
+  })
 }
 
 /** 判断外部值是否为受支持的歌曲信息对齐方式。 */

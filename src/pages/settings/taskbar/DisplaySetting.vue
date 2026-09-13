@@ -26,6 +26,7 @@ import {
   setTaskbarDisplayTarget,
   type TaskbarDisplay,
 } from '@/features/settings/display'
+import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const taskbarDisplays = shallowRef<TaskbarDisplay[]>([])
 const selectedDisplayTarget = shallowRef(ALL_TASKBAR_DISPLAYS)
@@ -82,7 +83,7 @@ async function selectDisplayTarget(value: unknown) {
     await setTaskbarDisplayTarget(value)
   } catch (error) {
     selectedDisplayTarget.value = previousTarget
-    console.error('切换目标显示器失败', error)
+    notifySettingSaveFailed('目标显示器', error)
     try {
       await applyTaskbarDisplayTarget(previousTarget)
     } catch (rollbackError) {

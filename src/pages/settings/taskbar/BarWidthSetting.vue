@@ -12,19 +12,31 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { Slider } from '@/components/ui/slider'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   applyTaskbarWidth,
   getTaskbarWidth,
+  getTaskbarWidthPreset,
   normalizeTaskbarWidth,
   setTaskbarWidth,
   TASKBAR_WIDTH_MAX,
   TASKBAR_WIDTH_MIN,
+  TASKBAR_WIDTH_PRESETS,
+  type TaskbarWidthPreset,
 } from '@/features/settings/bar-width'
+import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const WIDTH_PREVIEW_INTERVAL_MS = 50
 const selectedWidth = shallowRef(TASKBAR_WIDTH_MAX)
 const committedWidth = shallowRef(TASKBAR_WIDTH_MAX)
 const widthSaving = shallowRef(false)
+const selectedPreset = shallowRef<TaskbarWidthPreset>('wide')
+const widthPresetOptions = [
+  { value: 'compact', label: '紧凑' },
+  { value: 'standard', label: '标准' },
+  { value: 'wide', label: '宽' },
+  { value: 'custom', label: '自由调整' },
+] as const
 
 /** 恢复已保存的 bar 基准宽度。 */
 async function loadWidth() {
@@ -32,9 +44,22 @@ async function loadWidth() {
     const width = await getTaskbarWidth()
     selectedWidth.value = width
     committedWidth.value = width
+    selectedPreset.value = getTaskbarWidthPreset(width)
   } catch (error) {
     console.error('读取 bar 宽度失败', error)
   }
+}
+
+/** 切换宽度预设；自由调整只展开滑块，不主动改变当前宽度。 */
+async function selectPreset(value: string | number) {
+  if (!(typeof value === 'string' && widthPresetOptions.some((item) => item.value === value)))
+    return
+  const preset = value as TaskbarWidthPreset
+  selectedPreset.value = preset
+  if (preset === 'custom') return
+  const width = TASKBAR_WIDTH_PRESETS[preset]
+  selectedWidth.value = width
+  await commitWidth([width])
 }
 
 /** 读取 Slider 的单个有效宽度值。 */
@@ -62,6 +87,7 @@ function updateWidth(values: number[] | undefined) {
   if (width === undefined) return
 
   selectedWidth.value = width
+  selectedPreset.value = 'custom'
   previewWidth(width)
 }
 
@@ -77,9 +103,10 @@ async function commitWidth(values: number[]) {
     await setTaskbarWidth(width)
     committedWidth.value = width
   } catch (error) {
-    console.error('保存 bar 宽度失败', error)
+    notifySettingSaveFailed('组件宽度', error)
     const previousWidth = committedWidth.value
     selectedWidth.value = previousWidth
+    selectedPreset.value = getTaskbarWidthPreset(previousWidth)
     try {
       await applyTaskbarWidth(previousWidth)
     } catch (rollbackError) {
@@ -102,20 +129,34 @@ onMounted(loadWidth)
       <ItemTitle>组件宽度</ItemTitle>
       <ItemDescription>设置未被任务栏元素裁剪时的完整宽度</ItemDescription>
     </ItemContent>
-    <ItemActions class="w-56">
-      <Slider
-        :model-value="[selectedWidth]"
-        :min="TASKBAR_WIDTH_MIN"
-        :max="TASKBAR_WIDTH_MAX"
-        :step="1"
-        :disabled="widthSaving"
-        aria-label="Bar 宽度"
-        @update:model-value="updateWidth"
-        @value-commit="commitWidth"
-      />
-      <output class="text-muted-foreground w-14 text-right text-xs tabular-nums">
-        {{ selectedWidth }}px
-      </output>
+    <ItemActions class="flex-col items-end gap-2">
+      <Tabs :model-value="selectedPreset" @update:model-value="selectPreset">
+        <TabsList aria-label="组件宽度预设">
+          <TabsTrigger
+            v-for="option in widthPresetOptions"
+            :key="option.value"
+            :value="option.value"
+            :disabled="widthSaving"
+          >
+            {{ option.label }}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+      <div v-if="selectedPreset === 'custom'" class="flex w-72 items-center gap-3">
+        <Slider
+          :model-value="[selectedWidth]"
+          :min="TASKBAR_WIDTH_MIN"
+          :max="TASKBAR_WIDTH_MAX"
+          :step="1"
+          :disabled="widthSaving"
+          aria-label="Bar 自由宽度"
+          @update:model-value="updateWidth"
+          @value-commit="commitWidth"
+        />
+        <output class="text-muted-foreground w-14 text-right text-xs tabular-nums">
+          {{ selectedWidth }}px
+        </output>
+      </div>
     </ItemActions>
   </Item>
 </template>

@@ -22,6 +22,7 @@ import {
   setTaskbarCoverAppearance,
   type TaskbarCoverAppearance,
 } from '@/features/settings/cover'
+import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const shapeOptions = [
   { value: 'square', label: '方形' },
@@ -68,7 +69,7 @@ async function updateAppearance(patch: Partial<TaskbarCoverAppearance>) {
     committedAppearance.value = { ...nextAppearance }
   } catch (error) {
     selectedAppearance.value = { ...committedAppearance.value }
-    console.error('保存封面配置失败', error)
+    notifySettingSaveFailed('封面设置', error)
   } finally {
     appearanceSaving.value = false
   }

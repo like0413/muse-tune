@@ -46,12 +46,15 @@ import TrackInfoElement from './components/TrackInfoElement.vue'
 const { session: mediaSession, timeline, controlPending, control } = useMediaSession()
 const playbackStatus = computed(() => mediaSession.value?.playback.status ?? 'unknown')
 const { positionMs, progress } = useMediaProgress(timeline, playbackStatus)
+const { settings: lyricsSettings } = useTaskbarLyricsSettings()
 // 歌词时间轴始终以歌曲起点为零，GSMTC 对片段媒体可能提供非零起点。
 const lyricsPositionMs = computed(() =>
-  Math.max(0, positionMs.value - (timeline.value?.startTimeMs ?? 0)),
+  Math.max(
+    0,
+    positionMs.value - (timeline.value?.startTimeMs ?? 0) - lyricsSettings.value.timingOffsetMs,
+  ),
 )
 const { lyrics } = useLyrics()
-const { settings: lyricsSettings } = useTaskbarLyricsSettings()
 const { appearance: coverAppearance } = useTaskbarCoverAppearance()
 const taskbarRoot = useTemplateRef<HTMLElement>('taskbarRoot')
 const contentRoot = useTemplateRef<HTMLElement>('contentRoot')

@@ -24,6 +24,7 @@ import {
   type TaskbarControlButton,
   type TaskbarControlsVisibility,
 } from '@/features/settings/controls'
+import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const buttonOptions: Record<TaskbarControlButton, { label: string }> = {
   previous: { label: '上一曲' },
@@ -79,7 +80,7 @@ async function updateVisibility(patch: Partial<TaskbarControlsVisibility>) {
     committedVisibility.value = { ...nextVisibility }
   } catch (error) {
     selectedVisibility.value = { ...committedVisibility.value }
-    console.error('保存控制按钮配置失败', error)
+    notifySettingSaveFailed('控制按钮显隐', error)
   } finally {
     visibilitySaving.value = false
   }
@@ -111,7 +112,7 @@ async function saveOrder(order: TaskbarControlButton[]) {
     const restoredOrder = [...committedVisibility.value.order]
     selectedOrder.value = restoredOrder
     selectedVisibility.value = { ...committedVisibility.value, order: restoredOrder }
-    console.error('保存控制按钮顺序失败', error)
+    notifySettingSaveFailed('控制按钮顺序', error)
   } finally {
     visibilitySaving.value = false
     await nextTick()

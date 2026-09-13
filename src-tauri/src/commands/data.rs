@@ -59,6 +59,36 @@ pub async fn clear_lyrics_cache(
     .map_err(|error| format!("等待缓存清理结果失败: {error}"))?
 }
 
+/// 只清理当前歌曲缓存，并返回最新容量状态。
+#[tauri::command]
+pub async fn clear_current_lyrics_cache(
+    app: AppHandle,
+    lyrics: State<'_, LyricsService>,
+) -> Result<DataOverview, String> {
+    let lyrics = lyrics.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        lyrics.clear_current_cache()?;
+        data::overview(&app, &lyrics)
+    })
+    .await
+    .map_err(|error| format!("等待当前歌曲缓存清理结果失败: {error}"))?
+}
+
+/// 删除当前歌曲缓存并强制重新执行歌词解析链路。
+#[tauri::command]
+pub async fn refresh_current_lyrics(
+    app: AppHandle,
+    lyrics: State<'_, LyricsService>,
+) -> Result<DataOverview, String> {
+    let lyrics = lyrics.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        lyrics.refresh_current()?;
+        data::overview(&app, &lyrics)
+    })
+    .await
+    .map_err(|error| format!("等待当前歌词重新获取失败: {error}"))?
+}
+
 /// 清空轮转历史日志、保留活动日志，并返回最新容量状态。
 #[tauri::command]
 pub async fn clear_log_history(

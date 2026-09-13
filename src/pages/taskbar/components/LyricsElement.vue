@@ -63,7 +63,7 @@ const hasSecondaryLine = computed(() => {
   return Boolean(current && selectSecondaryContent(current, props.lyrics.lines[index + 1]))
 })
 
-/** 按设置选择第二行内容，首选缺失时自动回退到另一种内容。 */
+/** 按设置选择第二行内容，只有“翻译优先”会在缺失时回退下一句。 */
 function selectSecondaryContent(
   current: DeepReadonly<LyricLine>,
   next: DeepReadonly<LyricLine> | undefined,
@@ -72,9 +72,14 @@ function selectSecondaryContent(
     ? { kind: 'translation' as const, line: current, text: current.translation }
     : undefined
   const nextLine = next ? { kind: 'next' as const, line: next, text: next.text } : undefined
-  return props.settings.secondaryLine === 'translation'
-    ? (translation ?? nextLine)
-    : (nextLine ?? translation)
+  switch (props.settings.secondaryLine) {
+    case 'translation_only':
+      return translation
+    case 'next':
+      return nextLine
+    case 'translation_or_next':
+      return translation ?? nextLine
+  }
 }
 
 /** 14px 严格复用普通歌曲信息的两种行高，其余字号采用紧凑且不会裁切的行高。 */

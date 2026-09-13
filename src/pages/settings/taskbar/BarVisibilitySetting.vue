@@ -17,6 +17,7 @@ import {
   setTaskbarAutoHide,
   type TaskbarAutoHide,
 } from '@/features/settings/bar-visibility'
+import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const selectedPreference = shallowRef<TaskbarAutoHide>({ ...DEFAULT_TASKBAR_AUTO_HIDE })
 const committedPreference = shallowRef<TaskbarAutoHide>({ ...DEFAULT_TASKBAR_AUTO_HIDE })
@@ -44,7 +45,7 @@ async function updatePreference(patch: Partial<TaskbarAutoHide>) {
     committedPreference.value = { ...nextPreference }
   } catch (error) {
     selectedPreference.value = { ...committedPreference.value }
-    console.error('保存任务栏播放器自动隐藏配置失败', error)
+    notifySettingSaveFailed('任务栏播放器自动隐藏', error)
   } finally {
     saving.value = false
   }

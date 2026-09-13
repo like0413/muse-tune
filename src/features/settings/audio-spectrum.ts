@@ -14,6 +14,10 @@ export const TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MIN = 20
 export const TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MAX = 100
 export const TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MIN = 0
 export const TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MAX = 100
+export const TASKBAR_SPECTRUM_SENSITIVITY_MIN = 50
+export const TASKBAR_SPECTRUM_SENSITIVITY_MAX = 200
+export const TASKBAR_SPECTRUM_SMOOTHING_MIN = 0
+export const TASKBAR_SPECTRUM_SMOOTHING_MAX = 90
 
 const TASKBAR_SPECTRUM_ALIGNMENTS = ['center', 'bottom'] as const
 
@@ -25,6 +29,8 @@ export interface TaskbarAudioSpectrumSettings {
   widthPercentage: number
   alignment: TaskbarSpectrumAlignment
   horizontalPosition: number
+  sensitivity: number
+  smoothing: number
 }
 
 export const DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS: TaskbarAudioSpectrumSettings = {
@@ -33,6 +39,8 @@ export const DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS: TaskbarAudioSpectrumSettin
   widthPercentage: 72,
   alignment: 'bottom',
   horizontalPosition: 50,
+  sensitivity: 100,
+  smoothing: 55,
 }
 
 /** 判断外部值是否为支持的频谱对齐方式。 */
@@ -74,6 +82,18 @@ export function normalizeTaskbarAudioSpectrumSettings(
       TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MIN,
       TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MAX,
       DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS.horizontalPosition,
+    ),
+    sensitivity: normalizeInteger(
+      record.sensitivity,
+      TASKBAR_SPECTRUM_SENSITIVITY_MIN,
+      TASKBAR_SPECTRUM_SENSITIVITY_MAX,
+      DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS.sensitivity,
+    ),
+    smoothing: normalizeInteger(
+      record.smoothing,
+      TASKBAR_SPECTRUM_SMOOTHING_MIN,
+      TASKBAR_SPECTRUM_SMOOTHING_MAX,
+      DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS.smoothing,
     ),
   }
 }

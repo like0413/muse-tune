@@ -16,17 +16,21 @@ import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { notifySettingSaveFailed } from '@/features/settings/feedback'
 import {
   applyTaskbarTrackInfoScrolling,
   DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT,
   DEFAULT_TASKBAR_TRACK_INFO_SCROLLING,
+  DEFAULT_TASKBAR_TRACK_INFO_VISIBLE,
   getTaskbarTrackInfoAlignment,
   getTaskbarTrackInfoScrolling,
+  getTaskbarTrackInfoVisible,
   isTaskbarTrackInfoAlignment,
   isTaskbarTrackInfoScrollMode,
   normalizeTaskbarTrackInfoScrollSpeed,
   setTaskbarTrackInfoAlignment,
   setTaskbarTrackInfoScrolling,
+  setTaskbarTrackInfoVisible,
   TASKBAR_TRACK_INFO_SCROLL_SPEED_MAX,
   TASKBAR_TRACK_INFO_SCROLL_SPEED_MIN,
   type TaskbarTrackInfoAlignment,
@@ -60,20 +64,42 @@ const committedScrolling = shallowRef<TaskbarTrackInfoScrolling>({
   ...DEFAULT_TASKBAR_TRACK_INFO_SCROLLING,
 })
 const scrollingSaving = shallowRef(false)
+const selectedVisible = shallowRef(DEFAULT_TASKBAR_TRACK_INFO_VISIBLE)
+const committedVisible = shallowRef(DEFAULT_TASKBAR_TRACK_INFO_VISIBLE)
+const visibilitySaving = shallowRef(false)
 
 /** 恢复歌曲信息配置。 */
 async function loadTrackInfoSettings() {
   try {
-    const [alignment, scrolling] = await Promise.all([
+    const [visible, alignment, scrolling] = await Promise.all([
+      getTaskbarTrackInfoVisible(),
       getTaskbarTrackInfoAlignment(),
       getTaskbarTrackInfoScrolling(),
     ])
+    selectedVisible.value = visible
+    committedVisible.value = visible
     selectedAlignment.value = alignment
     committedAlignment.value = alignment
     selectedScrolling.value = scrolling
     committedScrolling.value = { ...scrolling }
   } catch (error) {
     console.error('读取歌曲信息配置失败', error)
+  }
+}
+
+/** 保存歌曲信息整体显隐，失败时恢复最近成功值。 */
+async function updateVisible(visible: boolean) {
+  if (visibilitySaving.value || visible === selectedVisible.value) return
+  selectedVisible.value = visible
+  visibilitySaving.value = true
+  try {
+    await setTaskbarTrackInfoVisible(visible)
+    committedVisible.value = visible
+  } catch (error) {
+    selectedVisible.value = committedVisible.value
+    notifySettingSaveFailed('歌曲信息显隐', error)
+  } finally {
+    visibilitySaving.value = false
   }
 }
 
@@ -94,7 +120,7 @@ async function selectAlignment(value: unknown) {
     committedAlignment.value = value
   } catch (error) {
     selectedAlignment.value = committedAlignment.value
-    console.error('保存歌曲信息对齐方式失败', error)
+    notifySettingSaveFailed('歌曲信息对齐方式', error)
   } finally {
     alignmentSaving.value = false
   }
@@ -112,7 +138,7 @@ async function updateScrolling(patch: Partial<TaskbarTrackInfoScrolling>, restor
     committedScrolling.value = { ...nextScrolling }
   } catch (error) {
     selectedScrolling.value = { ...committedScrolling.value }
-    console.error('保存歌名滚动配置失败', error)
+    notifySettingSaveFailed('歌名滚动配置', error)
     if (restorePreview) {
       try {
         await applyTaskbarTrackInfoScrolling(committedScrolling.value)
@@ -181,6 +207,19 @@ onMounted(loadTrackInfoSettings)
       <FieldGroup>
         <Field orientation="horizontal">
           <FieldContent>
+            <FieldLabel for="taskbar-track-info-visible">显示歌曲信息</FieldLabel>
+            <FieldDescription>整体隐藏歌名与歌手，并把空间留给其他组件</FieldDescription>
+          </FieldContent>
+          <Switch
+            id="taskbar-track-info-visible"
+            :model-value="selectedVisible"
+            :disabled="visibilitySaving"
+            @update:model-value="updateVisible"
+          />
+        </Field>
+
+        <Field orientation="horizontal" :data-disabled="!selectedVisible">
+          <FieldContent>
             <FieldTitle>对齐方式</FieldTitle>
             <FieldDescription>调整歌名和歌手在可用区域内的对齐方向</FieldDescription>
           </FieldContent>
@@ -190,7 +229,7 @@ onMounted(loadTrackInfoSettings)
                 v-for="option in alignmentOptions"
                 :key="option.value"
                 :value="option.value"
-                :disabled="alignmentSaving"
+                :disabled="alignmentSaving || !selectedVisible"
               >
                 {{ option.label }}
               </TabsTrigger>
@@ -198,7 +237,7 @@ onMounted(loadTrackInfoSettings)
           </Tabs>
         </Field>
 
-        <Field orientation="horizontal">
+        <Field orientation="horizontal" :data-disabled="!selectedVisible">
           <FieldContent>
             <FieldLabel for="taskbar-track-title-scroll">歌名超出时滚动</FieldLabel>
             <FieldDescription>关闭后超出部分显示为省略号</FieldDescription>
@@ -206,14 +245,14 @@ onMounted(loadTrackInfoSettings)
           <Switch
             id="taskbar-track-title-scroll"
             :model-value="selectedScrolling.enabled"
-            :disabled="scrollingSaving"
+            :disabled="scrollingSaving || !selectedVisible"
             @update:model-value="updateScrolling({ enabled: $event })"
           />
         </Field>
 
         <Field
           orientation="horizontal"
-          :data-disabled="!selectedScrolling.enabled || scrollingSaving"
+          :data-disabled="!selectedVisible || !selectedScrolling.enabled || scrollingSaving"
         >
           <FieldContent>
             <FieldTitle>滚动速度</FieldTitle>
@@ -225,7 +264,7 @@ onMounted(loadTrackInfoSettings)
               :min="TASKBAR_TRACK_INFO_SCROLL_SPEED_MIN"
               :max="TASKBAR_TRACK_INFO_SCROLL_SPEED_MAX"
               :step="1"
-              :disabled="!selectedScrolling.enabled || scrollingSaving"
+              :disabled="!selectedVisible || !selectedScrolling.enabled || scrollingSaving"
               aria-label="歌名滚动速度"
               @update:model-value="updateScrollSpeed"
               @value-commit="commitScrollSpeed"
@@ -238,7 +277,7 @@ onMounted(loadTrackInfoSettings)
 
         <Field
           orientation="horizontal"
-          :data-disabled="!selectedScrolling.enabled || scrollingSaving"
+          :data-disabled="!selectedVisible || !selectedScrolling.enabled || scrollingSaving"
         >
           <FieldContent>
             <FieldTitle>滚动方式</FieldTitle>
@@ -250,7 +289,7 @@ onMounted(loadTrackInfoSettings)
                 v-for="option in scrollModeOptions"
                 :key="option.value"
                 :value="option.value"
-                :disabled="!selectedScrolling.enabled || scrollingSaving"
+                :disabled="!selectedVisible || !selectedScrolling.enabled || scrollingSaving"
               >
                 {{ option.label }}
               </TabsTrigger>

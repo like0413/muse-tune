@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useElementSize } from '@vueuse/core'
-import { motion, useReducedMotion } from 'motion-v'
+import { motion } from 'motion-v'
 import { computed, useTemplateRef } from 'vue'
 
+import { useReducedMotionPreference } from '@/features/motion/useReducedMotionPreference'
 import type { TaskbarTrackInfoScrolling } from '@/features/settings/track-info'
 
 const props = defineProps<{
@@ -14,7 +15,7 @@ const viewport = useTemplateRef<HTMLElement>('viewport')
 const titleMeasure = useTemplateRef<HTMLElement>('titleMeasure')
 const { width: viewportWidth } = useElementSize(viewport)
 const { width: titleWidth } = useElementSize(titleMeasure)
-const prefersReducedMotion = useReducedMotion()
+const prefersReducedMotion = useReducedMotionPreference()
 
 /** 计算文字末尾完整进入显示区域时需要移动的距离。 */
 const overflowDistance = computed(() => Math.max(0, titleWidth.value - viewportWidth.value))
