@@ -129,7 +129,7 @@ onMounted(loadVisibility)
       <Gamepad2 />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>按钮组设置</ItemTitle>
+      <ItemTitle>控制按钮</ItemTitle>
       <ItemDescription>控制按钮组整体及各按钮的显示状态</ItemDescription>
     </ItemContent>
 

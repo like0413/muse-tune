@@ -18,23 +18,27 @@ import TrackInfoSetting from './track-info/TrackInfoSetting.vue'
 
 <template>
   <div class="flex w-full flex-col gap-3">
-    <div class="pl-2 text-sm font-bold">基础设置</div>
+    <div class="pl-2 text-sm font-bold">位置与行为</div>
+    <DisplaySetting />
     <PlacementSetting />
+    <BarVisibilitySetting />
     <OverlapPrioritySetting />
-    <MediaSessionSetting />
-    <BackgroundTransparencySetting />
+
+    <div class="pl-2 text-sm font-bold">布局与外观</div>
     <BarWidthSetting />
-    <ThemeColorSetting />
     <ElementOrderSetting />
-    <div class="pl-2 text-sm font-bold">组件调整</div>
-    <ProgressStyleSetting />
+    <ThemeColorSetting />
+    <BackgroundTransparencySetting />
+
+    <div class="pl-2 text-sm font-bold">内容组件</div>
     <CoverSetting />
     <TrackInfoSetting />
-    <ControlsSetting />
-    <AudioSpectrumSetting />
     <LyricsDisplaySetting />
-    <div class="pl-2 text-sm font-bold">其他</div>
-    <BarVisibilitySetting />
-    <DisplaySetting />
+    <ControlsSetting />
+    <ProgressStyleSetting />
+    <AudioSpectrumSetting />
+
+    <div class="pl-2 text-sm font-bold">高级设置</div>
+    <MediaSessionSetting />
   </div>
 </template>

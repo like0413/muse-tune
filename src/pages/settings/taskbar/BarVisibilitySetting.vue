@@ -68,19 +68,6 @@ onMounted(loadPreference)
       <FieldGroup>
         <Field orientation="horizontal">
           <FieldContent>
-            <FieldLabel for="taskbar-hide-when-paused">暂停时隐藏</FieldLabel>
-            <FieldDescription>Windows 有可用媒体会话且处于暂停状态时隐藏</FieldDescription>
-          </FieldContent>
-          <Switch
-            id="taskbar-hide-when-paused"
-            :model-value="selectedPreference.whenPaused"
-            :disabled="saving"
-            @update:model-value="updatePreference({ whenPaused: $event })"
-          />
-        </Field>
-
-        <Field orientation="horizontal">
-          <FieldContent>
             <FieldLabel for="taskbar-hide-without-session">无媒体会话时隐藏</FieldLabel>
             <FieldDescription>Windows 没有任何可用媒体会话时隐藏</FieldDescription>
           </FieldContent>
@@ -89,6 +76,19 @@ onMounted(loadPreference)
             :model-value="selectedPreference.whenNoMediaSession"
             :disabled="saving"
             @update:model-value="updatePreference({ whenNoMediaSession: $event })"
+          />
+        </Field>
+
+        <Field orientation="horizontal">
+          <FieldContent>
+            <FieldLabel for="taskbar-hide-when-paused">暂停时隐藏</FieldLabel>
+            <FieldDescription>Windows 有可用媒体会话且处于暂停状态时隐藏</FieldDescription>
+          </FieldContent>
+          <Switch
+            id="taskbar-hide-when-paused"
+            :model-value="selectedPreference.whenPaused"
+            :disabled="saving"
+            @update:model-value="updatePreference({ whenPaused: $event })"
           />
         </Field>
       </FieldGroup>

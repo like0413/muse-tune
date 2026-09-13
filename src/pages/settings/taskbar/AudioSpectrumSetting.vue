@@ -148,7 +148,7 @@ onMounted(loadSettings)
       <AudioLines />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>频谱设置</ItemTitle>
+      <ItemTitle>频谱</ItemTitle>
       <ItemDescription>显示当前播放器的实时频谱</ItemDescription>
     </ItemContent>
 
@@ -165,50 +165,6 @@ onMounted(loadSettings)
             :disabled="settingsSaving"
             @update:model-value="updateSettings({ visible: $event })"
           />
-        </Field>
-
-        <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
-          <FieldContent>
-            <FieldTitle>灵敏度</FieldTitle>
-            <FieldDescription>放大或压低频谱对输入音量的响应</FieldDescription>
-          </FieldContent>
-          <div class="flex w-56 items-center gap-3">
-            <Slider
-              :model-value="[selectedSettings.sensitivity]"
-              :min="TASKBAR_SPECTRUM_SENSITIVITY_MIN"
-              :max="TASKBAR_SPECTRUM_SENSITIVITY_MAX"
-              :step="5"
-              :disabled="settingsSaving || !selectedSettings.visible"
-              aria-label="频谱灵敏度"
-              @update:model-value="updateSensitivity"
-              @value-commit="commitSlider"
-            />
-            <output class="text-muted-foreground w-14 text-right text-xs tabular-nums">
-              {{ selectedSettings.sensitivity }}%
-            </output>
-          </div>
-        </Field>
-
-        <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
-          <FieldContent>
-            <FieldTitle>动态平滑</FieldTitle>
-            <FieldDescription>数值越高越稳定，但快速变化的响应会更慢</FieldDescription>
-          </FieldContent>
-          <div class="flex w-56 items-center gap-3">
-            <Slider
-              :model-value="[selectedSettings.smoothing]"
-              :min="TASKBAR_SPECTRUM_SMOOTHING_MIN"
-              :max="TASKBAR_SPECTRUM_SMOOTHING_MAX"
-              :step="5"
-              :disabled="settingsSaving || !selectedSettings.visible"
-              aria-label="频谱动态平滑"
-              @update:model-value="updateSmoothing"
-              @value-commit="commitSlider"
-            />
-            <output class="text-muted-foreground w-14 text-right text-xs tabular-nums">
-              {{ selectedSettings.smoothing }}%
-            </output>
-          </div>
         </Field>
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
@@ -257,6 +213,28 @@ onMounted(loadSettings)
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
           <FieldContent>
+            <FieldTitle>水平位置</FieldTitle>
+            <FieldDescription>从组件左侧到右侧连续调整频谱位置</FieldDescription>
+          </FieldContent>
+          <div class="flex w-56 items-center gap-3">
+            <Slider
+              :model-value="[selectedSettings.horizontalPosition]"
+              :min="TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MIN"
+              :max="TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MAX"
+              :step="1"
+              :disabled="settingsSaving || !selectedSettings.visible"
+              aria-label="频谱水平位置"
+              @update:model-value="updateHorizontalPosition"
+              @value-commit="commitSlider"
+            />
+            <output class="text-muted-foreground w-10 text-right text-xs tabular-nums">
+              {{ selectedSettings.horizontalPosition }}%
+            </output>
+          </div>
+        </Field>
+
+        <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
+          <FieldContent>
             <FieldTitle>垂直位置</FieldTitle>
             <FieldDescription>居中时向上下扩张，底部对齐时向上生长</FieldDescription>
           </FieldContent>
@@ -276,22 +254,44 @@ onMounted(loadSettings)
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
           <FieldContent>
-            <FieldTitle>水平位置</FieldTitle>
-            <FieldDescription>从组件左侧到右侧连续调整频谱位置</FieldDescription>
+            <FieldTitle>灵敏度</FieldTitle>
+            <FieldDescription>放大或压低频谱对输入音量的响应</FieldDescription>
           </FieldContent>
           <div class="flex w-56 items-center gap-3">
             <Slider
-              :model-value="[selectedSettings.horizontalPosition]"
-              :min="TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MIN"
-              :max="TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MAX"
-              :step="1"
+              :model-value="[selectedSettings.sensitivity]"
+              :min="TASKBAR_SPECTRUM_SENSITIVITY_MIN"
+              :max="TASKBAR_SPECTRUM_SENSITIVITY_MAX"
+              :step="5"
               :disabled="settingsSaving || !selectedSettings.visible"
-              aria-label="频谱水平位置"
-              @update:model-value="updateHorizontalPosition"
+              aria-label="频谱灵敏度"
+              @update:model-value="updateSensitivity"
               @value-commit="commitSlider"
             />
-            <output class="text-muted-foreground w-10 text-right text-xs tabular-nums">
-              {{ selectedSettings.horizontalPosition }}%
+            <output class="text-muted-foreground w-14 text-right text-xs tabular-nums">
+              {{ selectedSettings.sensitivity }}%
+            </output>
+          </div>
+        </Field>
+
+        <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
+          <FieldContent>
+            <FieldTitle>动态平滑</FieldTitle>
+            <FieldDescription>数值越高越稳定，但快速变化的响应会更慢</FieldDescription>
+          </FieldContent>
+          <div class="flex w-56 items-center gap-3">
+            <Slider
+              :model-value="[selectedSettings.smoothing]"
+              :min="TASKBAR_SPECTRUM_SMOOTHING_MIN"
+              :max="TASKBAR_SPECTRUM_SMOOTHING_MAX"
+              :step="5"
+              :disabled="settingsSaving || !selectedSettings.visible"
+              aria-label="频谱动态平滑"
+              @update:model-value="updateSmoothing"
+              @value-commit="commitSlider"
+            />
+            <output class="text-muted-foreground w-14 text-right text-xs tabular-nums">
+              {{ selectedSettings.smoothing }}%
             </output>
           </div>
         </Field>

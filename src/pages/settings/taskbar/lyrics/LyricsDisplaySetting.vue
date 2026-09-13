@@ -168,7 +168,7 @@ onMounted(loadSettings)
       <Captions />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>歌词设置</ItemTitle>
+      <ItemTitle>歌词</ItemTitle>
       <ItemDescription>设置任务栏歌词的布局和显示</ItemDescription>
     </ItemContent>
 
@@ -186,148 +186,6 @@ onMounted(loadSettings)
             @update:model-value="updateSettings({ enabled: $event })"
           />
         </Field>
-
-        <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
-          <FieldContent>
-            <FieldTitle>联网策略</FieldTitle>
-            <FieldDescription>仅本地与缓存不会发起新的歌词网络请求</FieldDescription>
-          </FieldContent>
-          <Tabs
-            :model-value="selectedSettings.networkPolicy"
-            @update:model-value="selectNetworkPolicy"
-          >
-            <TabsList aria-label="歌词联网策略">
-              <TabsTrigger
-                v-for="option in networkPolicyOptions"
-                :key="option.value"
-                :value="option.value"
-                :disabled="settingsSaving || !selectedSettings.enabled"
-              >
-                {{ option.label }}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </Field>
-
-        <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
-          <FieldContent>
-            <FieldTitle>时间偏移</FieldTitle>
-            <FieldDescription
-              >校准歌词源时间；正值延后、负值提前，不改变动画提前完成</FieldDescription
-            >
-          </FieldContent>
-          <div class="flex w-56 items-center gap-3">
-            <Slider
-              :model-value="[selectedSettings.timingOffsetMs]"
-              :min="TASKBAR_LYRICS_TIMING_OFFSET_MIN"
-              :max="TASKBAR_LYRICS_TIMING_OFFSET_MAX"
-              :step="50"
-              :disabled="settingsSaving || !selectedSettings.enabled"
-              aria-label="歌词时间偏移"
-              @update:model-value="previewTimingOffset"
-              @value-commit="commitTimingOffset"
-            />
-            <output class="text-muted-foreground w-16 text-right text-xs tabular-nums">
-              {{ selectedSettings.timingOffsetMs > 0 ? '+' : ''
-              }}{{ selectedSettings.timingOffsetMs }}ms
-            </output>
-          </div>
-        </Field>
-
-        <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
-          <FieldContent>
-            <FieldTitle>对齐方式</FieldTitle>
-            <FieldDescription>歌词在空白区域内的水平位置</FieldDescription>
-          </FieldContent>
-          <Tabs :model-value="selectedSettings.alignment" @update:model-value="selectAlignment">
-            <TabsList aria-label="歌词对齐方式">
-              <TabsTrigger
-                v-for="option in alignmentOptions"
-                :key="option.value"
-                :value="option.value"
-                :disabled="settingsSaving || !selectedSettings.enabled"
-              >
-                {{ option.label }}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </Field>
-
-        <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
-          <FieldContent>
-            <FieldTitle>动画效果</FieldTitle>
-            <FieldDescription>切换到下一句时的移动和渐变方式</FieldDescription>
-          </FieldContent>
-          <Select
-            :model-value="selectedSettings.animation"
-            :disabled="settingsSaving || !selectedSettings.enabled"
-            @update:model-value="selectAnimation"
-          >
-            <SelectTrigger class="w-40" aria-label="歌词动画效果">
-              <SelectValue placeholder="选择动画" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem
-                  v-for="option in animationOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-
-        <Field
-          orientation="horizontal"
-          :data-disabled="!selectedSettings.enabled || selectedSettings.animation === 'none'"
-        >
-          <FieldContent>
-            <FieldLabel for="taskbar-lyrics-animation-pre-roll">动画提前完成</FieldLabel>
-            <FieldDescription>
-              <div>开启：人声前完成动画，更跟拍，但连续演唱时上一句会提前离场；</div>
-              <div>关闭：按时间戳切换，不提前上一句，但动画会与人声同时开始</div>
-            </FieldDescription>
-          </FieldContent>
-          <Switch
-            id="taskbar-lyrics-animation-pre-roll"
-            :model-value="selectedSettings.animationPreRoll"
-            :disabled="
-              settingsSaving || !selectedSettings.enabled || selectedSettings.animation === 'none'
-            "
-            @update:model-value="updateSettings({ animationPreRoll: $event })"
-          />
-        </Field>
-
-        <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
-          <FieldContent>
-            <FieldTitle>歌词大小</FieldTitle>
-            <FieldDescription>字号范围为 10–18px，双行时自动收紧行距</FieldDescription>
-          </FieldContent>
-          <div class="flex w-56 items-center gap-3">
-            <Slider
-              :model-value="[selectedSettings.fontSize]"
-              :min="TASKBAR_LYRICS_FONT_SIZE_MIN"
-              :max="TASKBAR_LYRICS_FONT_SIZE_MAX"
-              :step="1"
-              :disabled="settingsSaving || !selectedSettings.enabled"
-              aria-label="歌词大小"
-              @update:model-value="previewFontSize"
-              @value-commit="commitFontSize"
-            />
-            <output class="text-muted-foreground w-12 text-right text-xs tabular-nums">
-              {{ selectedSettings.fontSize }}px
-            </output>
-          </div>
-        </Field>
-
-        <LyricsAppearanceSettings
-          :settings="selectedSettings"
-          :disabled="settingsSaving || !selectedSettings.enabled"
-          @update-settings="updateSettings"
-        />
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
           <FieldContent>
@@ -388,6 +246,148 @@ onMounted(loadSettings)
             :disabled="settingsSaving || !selectedSettings.enabled"
             @update:model-value="updateSettings({ wordHighlight: $event })"
           />
+        </Field>
+
+        <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
+          <FieldContent>
+            <FieldTitle>对齐方式</FieldTitle>
+            <FieldDescription>歌词在空白区域内的水平位置</FieldDescription>
+          </FieldContent>
+          <Tabs :model-value="selectedSettings.alignment" @update:model-value="selectAlignment">
+            <TabsList aria-label="歌词对齐方式">
+              <TabsTrigger
+                v-for="option in alignmentOptions"
+                :key="option.value"
+                :value="option.value"
+                :disabled="settingsSaving || !selectedSettings.enabled"
+              >
+                {{ option.label }}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </Field>
+
+        <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
+          <FieldContent>
+            <FieldTitle>歌词大小</FieldTitle>
+            <FieldDescription>字号范围为 10–18px，双行时自动收紧行距</FieldDescription>
+          </FieldContent>
+          <div class="flex w-56 items-center gap-3">
+            <Slider
+              :model-value="[selectedSettings.fontSize]"
+              :min="TASKBAR_LYRICS_FONT_SIZE_MIN"
+              :max="TASKBAR_LYRICS_FONT_SIZE_MAX"
+              :step="1"
+              :disabled="settingsSaving || !selectedSettings.enabled"
+              aria-label="歌词大小"
+              @update:model-value="previewFontSize"
+              @value-commit="commitFontSize"
+            />
+            <output class="text-muted-foreground w-12 text-right text-xs tabular-nums">
+              {{ selectedSettings.fontSize }}px
+            </output>
+          </div>
+        </Field>
+
+        <LyricsAppearanceSettings
+          :settings="selectedSettings"
+          :disabled="settingsSaving || !selectedSettings.enabled"
+          @update-settings="updateSettings"
+        />
+
+        <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
+          <FieldContent>
+            <FieldTitle>动画效果</FieldTitle>
+            <FieldDescription>切换到下一句时的移动和渐变方式</FieldDescription>
+          </FieldContent>
+          <Select
+            :model-value="selectedSettings.animation"
+            :disabled="settingsSaving || !selectedSettings.enabled"
+            @update:model-value="selectAnimation"
+          >
+            <SelectTrigger class="w-40" aria-label="歌词动画效果">
+              <SelectValue placeholder="选择动画" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem
+                  v-for="option in animationOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+
+        <Field
+          orientation="horizontal"
+          :data-disabled="!selectedSettings.enabled || selectedSettings.animation === 'none'"
+        >
+          <FieldContent>
+            <FieldLabel for="taskbar-lyrics-animation-pre-roll">动画提前完成</FieldLabel>
+            <FieldDescription>
+              <div>开启：人声前完成动画，更跟拍，但连续演唱时上一句会提前离场；</div>
+              <div>关闭：按时间戳切换，不提前上一句，但动画会与人声同时开始</div>
+            </FieldDescription>
+          </FieldContent>
+          <Switch
+            id="taskbar-lyrics-animation-pre-roll"
+            :model-value="selectedSettings.animationPreRoll"
+            :disabled="
+              settingsSaving || !selectedSettings.enabled || selectedSettings.animation === 'none'
+            "
+            @update:model-value="updateSettings({ animationPreRoll: $event })"
+          />
+        </Field>
+
+        <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
+          <FieldContent>
+            <FieldTitle>时间偏移</FieldTitle>
+            <FieldDescription
+              >校准歌词源时间；正值延后、负值提前，不改变动画提前完成</FieldDescription
+            >
+          </FieldContent>
+          <div class="flex w-56 items-center gap-3">
+            <Slider
+              :model-value="[selectedSettings.timingOffsetMs]"
+              :min="TASKBAR_LYRICS_TIMING_OFFSET_MIN"
+              :max="TASKBAR_LYRICS_TIMING_OFFSET_MAX"
+              :step="50"
+              :disabled="settingsSaving || !selectedSettings.enabled"
+              aria-label="歌词时间偏移"
+              @update:model-value="previewTimingOffset"
+              @value-commit="commitTimingOffset"
+            />
+            <output class="text-muted-foreground w-16 text-right text-xs tabular-nums">
+              {{ selectedSettings.timingOffsetMs > 0 ? '+' : ''
+              }}{{ selectedSettings.timingOffsetMs }}ms
+            </output>
+          </div>
+        </Field>
+
+        <Field orientation="horizontal" :data-disabled="!selectedSettings.enabled">
+          <FieldContent>
+            <FieldTitle>联网策略</FieldTitle>
+            <FieldDescription>仅本地与缓存不会发起新的歌词网络请求</FieldDescription>
+          </FieldContent>
+          <Tabs
+            :model-value="selectedSettings.networkPolicy"
+            @update:model-value="selectNetworkPolicy"
+          >
+            <TabsList aria-label="歌词联网策略">
+              <TabsTrigger
+                v-for="option in networkPolicyOptions"
+                :key="option.value"
+                :value="option.value"
+                :disabled="settingsSaving || !selectedSettings.enabled"
+              >
+                {{ option.label }}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </Field>
       </FieldGroup>
     </template>

@@ -94,7 +94,7 @@ onMounted(loadAppearance)
       <Image />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>封面设置</ItemTitle>
+      <ItemTitle>封面</ItemTitle>
       <ItemDescription>分别控制普通与歌词模式的封面显示</ItemDescription>
     </ItemContent>
 

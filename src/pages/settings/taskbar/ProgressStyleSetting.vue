@@ -115,7 +115,7 @@ onMounted(loadProgressStyle)
       <Activity />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>进度条设置</ItemTitle>
+      <ItemTitle>进度条</ItemTitle>
       <ItemDescription>进度条在任务栏组件中的呈现方式</ItemDescription>
     </ItemContent>
     <template #content>

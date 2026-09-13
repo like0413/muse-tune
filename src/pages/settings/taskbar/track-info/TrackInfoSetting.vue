@@ -199,7 +199,7 @@ onMounted(loadTrackInfoSettings)
       <ListMusic />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>歌曲信息设置</ItemTitle>
+      <ItemTitle>歌曲信息</ItemTitle>
       <ItemDescription>设置歌名对齐及溢出后的滚动表现</ItemDescription>
     </ItemContent>
 
