@@ -37,7 +37,7 @@ pub fn run() {
             commands::data::open_data_directory,
             commands::data::reset_configuration,
             commands::data::refresh_current_lyrics,
-            commands::diagnostics::get_diagnostics,
+            commands::diagnostics::collect_diagnostics,
             commands::settings::open_settings_window,
             commands::media::control_media_session,
             commands::media::get_current_media_volume,

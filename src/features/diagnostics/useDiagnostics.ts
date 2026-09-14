@@ -5,7 +5,7 @@ import { useDebounceFn } from '@vueuse/core'
 import { LYRICS_DIAGNOSTICS_CHANGED_EVENT } from '@/features/lyrics/client'
 import { MEDIA_SESSION_CHANGED_EVENT } from '@/features/media/client'
 
-import { getDiagnostics } from './client'
+import { collectDiagnostics } from './client'
 import { createSanitizedDiagnosticsReport } from './report'
 import type { DiagnosticsSnapshot } from './types'
 
@@ -52,7 +52,7 @@ export function useDiagnostics() {
         storageRefreshQueued = false
         const currentLifecycle = lifecycleId
         try {
-          const next = await getDiagnostics(refreshStorage)
+          const next = await collectDiagnostics(refreshStorage)
           if (!disposed && currentLifecycle === lifecycleId) {
             diagnostics.value = next
             errorMessage.value = null

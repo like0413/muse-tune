@@ -3,7 +3,7 @@ import { emit, listen } from '@tauri-apps/api/event'
 
 import { SETTINGS_SCHEMA_VERSIONS } from '@/features/settings/storage/schema-versions'
 import {
-  getVersionedSetting,
+  loadVersionedSetting,
   setVersionedSetting,
 } from '@/features/settings/storage/versioned-setting'
 
@@ -91,7 +91,7 @@ const updateCheckResultOptions = {
 
 /** 读取是否启用应用级自动更新检测。 */
 export function getAutomaticUpdateCheck(): Promise<boolean> {
-  return getVersionedSetting(automaticUpdateCheckOptions)
+  return loadVersionedSetting(automaticUpdateCheckOptions)
 }
 
 /** 保存自动检测开关，并通知运行中的任务栏更新调度器。 */
@@ -103,7 +103,7 @@ export async function setAutomaticUpdateCheck(value: boolean): Promise<boolean> 
 
 /** 读取自动更新检测频率。 */
 export function getUpdateCheckFrequency(): Promise<UpdateCheckFrequency> {
-  return getVersionedSetting(updateCheckFrequencyOptions)
+  return loadVersionedSetting(updateCheckFrequencyOptions)
 }
 
 /** 保存自动检测频率，并通知运行中的任务栏更新调度器。 */
@@ -120,10 +120,10 @@ export function getUpdateCheckInterval(frequency: UpdateCheckFrequency): number 
 
 /** 读取最近一次成功检测的结果。 */
 export function getUpdateCheckResult(): Promise<UpdateCheckResult> {
-  return getVersionedSetting(updateCheckResultOptions)
+  return loadVersionedSetting(updateCheckResultOptions)
 }
 
-/** 保存成功检测结果，并广播给已打开的设置窗口。 */
+/** 提交成功检测结果，并广播给已打开的设置窗口。 */
 export async function setUpdateCheckResult(result: UpdateCheckResult): Promise<UpdateCheckResult> {
   const normalized = await setVersionedSetting(updateCheckResultOptions, result)
   await emit(UPDATE_CHECK_RESULT_CHANGED_EVENT, normalized)

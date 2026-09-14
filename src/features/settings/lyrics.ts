@@ -6,7 +6,7 @@ import { setLyricsPreferences } from '@/features/lyrics/client'
 import { LYRICS_ONLINE_STRATEGIES, type LyricsOnlineStrategy } from '@/features/lyrics/types'
 
 import { SETTINGS_SCHEMA_VERSIONS } from './storage/schema-versions'
-import { getVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
+import { loadVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
 import { normalizeHexColor } from './theme-color'
 
 const TASKBAR_LYRICS_KEY = 'taskbar.lyrics'
@@ -197,7 +197,7 @@ const lyricsStorage = {
 
 /** 读取版本化歌词显示配置。 */
 export function getTaskbarLyricsSettings(): Promise<TaskbarLyricsSettings> {
-  return getVersionedSetting(lyricsStorage)
+  return loadVersionedSetting(lyricsStorage)
 }
 
 /** 保存显示配置、同步后端解析开关并广播到全部任务栏窗口。 */

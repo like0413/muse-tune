@@ -3,7 +3,7 @@ import { emit, listen } from '@tauri-apps/api/event'
 import { clamp } from 'es-toolkit'
 
 import { SETTINGS_SCHEMA_VERSIONS } from './storage/schema-versions'
-import { getVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
+import { loadVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
 
 const TASKBAR_AUDIO_SPECTRUM_KEY = 'taskbar.audioSpectrum'
 const TASKBAR_AUDIO_SPECTRUM_CHANGED_EVENT = 'settings://taskbar-audio-spectrum-changed'
@@ -107,7 +107,7 @@ const audioSpectrumStorage = {
 
 /** 读取频谱配置；版本不兼容时仅恢复此项默认值。 */
 export async function getTaskbarAudioSpectrumSettings(): Promise<TaskbarAudioSpectrumSettings> {
-  return getVersionedSetting(audioSpectrumStorage)
+  return loadVersionedSetting(audioSpectrumStorage)
 }
 
 /** 仅广播频谱配置，用于设置窗口拖动时的轻量实时预览。 */

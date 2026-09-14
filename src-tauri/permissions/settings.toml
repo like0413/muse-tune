@@ -11,7 +11,7 @@ commands.allow = [
   "refresh_current_lyrics",
   "reset_configuration",
   "clear_log_history",
-  "get_diagnostics",
+  "collect_diagnostics",
   "set_lyrics_preferences",
   "list_system_fonts",
   "list_taskbar_displays",

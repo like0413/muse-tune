@@ -58,15 +58,31 @@ struct LyricsServiceInner {
     client: Client,
     current_track: Mutex<Option<TrackDescriptor>>,
     generation: AtomicU64,
-    enabled: AtomicBool,
-    allow_online: AtomicBool,
-    online_strategy: RwLock<LyricsOnlineStrategy>,
+    preferences: RwLock<LyricsPreferences>,
     publisher: Arc<SnapshotPublisher>,
     diagnostics_notifier: Arc<DiagnosticsNotifier>,
     runtime_state: RwLock<LyricsRuntimeState>,
     adapter_paths: RwLock<HashMap<MediaPlayer, Option<PathBuf>>>,
     watchers: Mutex<HashMap<MediaPlayer, RecommendedWatcher>>,
     resolver: Mutex<ResolverState>,
+}
+
+/// 需要作为一个快照提交和读取的歌词运行偏好。
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct LyricsPreferences {
+    enabled: bool,
+    allow_online: bool,
+    online_strategy: LyricsOnlineStrategy,
+}
+
+impl Default for LyricsPreferences {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            allow_online: true,
+            online_strategy: LyricsOnlineStrategy::default(),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -146,9 +162,11 @@ impl LyricsService {
                 client,
                 current_track: Mutex::new(None),
                 generation: AtomicU64::new(0),
-                enabled: AtomicBool::new(enabled),
-                allow_online: AtomicBool::new(allow_online),
-                online_strategy: RwLock::new(online_strategy),
+                preferences: RwLock::new(LyricsPreferences {
+                    enabled,
+                    allow_online,
+                    online_strategy,
+                }),
                 publisher,
                 diagnostics_notifier,
                 runtime_state: RwLock::new(LyricsRuntimeState::default()),
@@ -249,11 +267,12 @@ impl LyricsService {
                 },
             )
             .collect();
+        let preferences = self.preferences();
         LyricsDiagnostics {
             snapshot,
             current_player,
-            enabled: self.inner.enabled.load(Ordering::Acquire),
-            online_strategy: self.online_strategy(),
+            enabled: preferences.enabled,
+            online_strategy: preferences.online_strategy,
             resolution_method,
             local_cache_available,
             local_cache_path: local_cache_path.map(|path| display_path(&path)),
@@ -340,22 +359,26 @@ impl LyricsService {
         allow_online: bool,
         online_strategy: LyricsOnlineStrategy,
     ) -> Result<(), String> {
-        let enabled_changed = self.inner.enabled.swap(enabled, Ordering::AcqRel) != enabled;
-        let online_changed =
-            self.inner.allow_online.swap(allow_online, Ordering::AcqRel) != allow_online;
-        let strategy_changed = {
-            let mut strategy = self
-                .inner
-                .online_strategy
-                .write()
-                .map_err(|_| "歌词在线解析策略状态不可用".to_owned())?;
-            let changed = *strategy != online_strategy;
-            *strategy = online_strategy;
-            changed
+        let next = LyricsPreferences {
+            enabled,
+            allow_online,
+            online_strategy,
         };
-        if !enabled_changed && !online_changed && !strategy_changed {
-            return Ok(());
-        }
+        let previous = {
+            let mut current = self
+                .inner
+                .preferences
+                .write()
+                .map_err(|_| "歌词偏好状态不可用".to_owned())?;
+            if *current == next {
+                return Ok(());
+            }
+            let previous = *current;
+            *current = next;
+            previous
+        };
+        let enabled_changed = previous.enabled != enabled;
+        let online_changed = previous.allow_online != allow_online;
         if !enabled {
             let (track_key, generation) = {
                 let current = self
@@ -441,7 +464,7 @@ impl LyricsService {
             );
             return;
         };
-        if !self.inner.enabled.load(Ordering::Acquire) {
+        if !self.preferences().enabled {
             self.cancel_resolution();
             self.publish_if_current(
                 LyricsSnapshot::unavailable(Some(track.key), "歌词显示已关闭"),
@@ -847,7 +870,8 @@ impl LyricsService {
             return;
         }
 
-        if !self.inner.allow_online.load(Ordering::Acquire) {
+        let preferences = self.preferences();
+        if !preferences.allow_online {
             if let Some(candidate) = select_best_candidate(&track, candidates) {
                 self.publish_candidate(&track, candidate, generation);
             } else {
@@ -864,7 +888,7 @@ impl LyricsService {
             return;
         }
 
-        match self.online_strategy() {
+        match preferences.online_strategy {
             LyricsOnlineStrategy::Parallel => {
                 let (current_online_result, qq_online_result, netease_result) =
                     thread::scope(|scope| {
@@ -1150,12 +1174,12 @@ impl LyricsService {
         }
     }
 
-    /// 读取在线调度策略；锁损坏时回退到兼容旧版本的并行模式。
-    fn online_strategy(&self) -> LyricsOnlineStrategy {
+    /// 读取一致的歌词偏好快照；锁损坏时回退到兼容旧版本的默认值。
+    fn preferences(&self) -> LyricsPreferences {
         self.inner
-            .online_strategy
+            .preferences
             .read()
-            .map_or_else(|_| LyricsOnlineStrategy::default(), |strategy| *strategy)
+            .map_or_else(|_| LyricsPreferences::default(), |preferences| *preferences)
     }
 
     fn finish_resolution_trace(&self, generation: u64) {

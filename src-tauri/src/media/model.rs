@@ -88,7 +88,7 @@ pub enum MediaSessionSelectionStrategy {
 }
 
 /// 会话选择策略及固定优先级的完整配置。
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaSessionSelectionPolicy {
     pub strategy: MediaSessionSelectionStrategy,

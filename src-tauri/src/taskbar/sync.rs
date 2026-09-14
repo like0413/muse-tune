@@ -67,16 +67,18 @@ impl FullscreenStateMonitor {
     }
 }
 
-/// 跨线程更新定位偏好，并通过线程消息唤醒同步循环。
+/// 跨线程更新定位偏好；仅在值变化时唤醒同步循环。
 pub(super) fn set_placement(placement: TaskbarPlacement) {
-    TASKBAR_PLACEMENT.store(placement as u8, Ordering::Release);
-    super::events::request_all_layout_updates();
+    if TASKBAR_PLACEMENT.swap(placement as u8, Ordering::AcqRel) != placement as u8 {
+        super::events::request_all_layout_updates();
+    }
 }
 
-/// 跨线程更新元素遮挡优先级，并通过线程消息唤醒同步循环。
+/// 跨线程更新元素遮挡优先级；仅在值变化时唤醒同步循环。
 pub(super) fn set_overlap_priority(priority: TaskbarOverlapPriority) {
-    TASKBAR_OVERLAP_PRIORITY.store(priority as u8, Ordering::Release);
-    super::events::request_all_layout_updates();
+    if TASKBAR_OVERLAP_PRIORITY.swap(priority as u8, Ordering::AcqRel) != priority as u8 {
+        super::events::request_all_layout_updates();
+    }
 }
 
 /// 跨线程更新 bar 基准宽度；仅在值变化时唤醒全部同步线程。

@@ -71,59 +71,103 @@ export function useTaskbarNativeMenu() {
 
   /** 创建一个窗口内复用的原生菜单，避免每次右键重复分配系统资源。 */
   async function createResources(): Promise<NativeMenuResources> {
+    const created: Array<{ close: () => Promise<void> }> = []
+
+    /** 记录已创建资源，后续步骤失败时统一释放。 */
+    async function retain<T extends { close: () => Promise<void> }>(
+      pending: Promise<T>,
+    ): Promise<T> {
+      const resource = await pending
+      created.push(resource)
+      return resource
+    }
+
     const createCheckItem = (options: CheckMenuItemOptions) => CheckMenuItem.new(options)
-    const [normalCover, lyricsCover, lyrics, spectrum, separator, settings, restart, quit] =
-      await Promise.all([
+    try {
+      const normalCover = await retain(
         createCheckItem({
           id: 'taskbar-toggle-normal-cover',
           text: '普通模式封面',
           action: () => runAction(() => toggleCover('normal'), '切换普通模式封面失败'),
         }),
+      )
+      const lyricsCover = await retain(
         createCheckItem({
           id: 'taskbar-toggle-lyrics-cover',
           text: '歌词模式封面',
           action: () => runAction(() => toggleCover('lyrics'), '切换歌词模式封面失败'),
         }),
+      )
+      const lyrics = await retain(
         createCheckItem({
           id: 'taskbar-toggle-lyrics',
           text: '开启歌词',
           action: () => runAction(toggleLyrics, '切换歌词失败'),
         }),
+      )
+      const spectrum = await retain(
         createCheckItem({
           id: 'taskbar-toggle-spectrum',
           text: '显示频谱',
           action: () => runAction(toggleSpectrum, '切换频谱显示失败'),
         }),
-        PredefinedMenuItem.new({ item: 'Separator' }),
+      )
+      const separator = await retain(PredefinedMenuItem.new({ item: 'Separator' }))
+      const settings = await retain(
         MenuItem.new({
           id: 'taskbar-open-settings',
           text: '打开设置',
           action: () => runAction(openSettingsWindow, '从任务栏菜单打开设置失败'),
         }),
+      )
+      const restart = await retain(
         MenuItem.new({
           id: 'taskbar-restart-application',
           text: import.meta.env.PROD ? '重启应用' : '重启应用（正式版可用）',
           enabled: import.meta.env.PROD,
           action: () => runAction(restartApplication, '从任务栏菜单重启应用失败'),
         }),
-        PredefinedMenuItem.new({ item: 'Quit', text: '退出应用' }),
-      ])
-    const menu = await Menu.new({
-      items: [normalCover, lyricsCover, lyrics, spectrum, separator, settings, restart, quit],
-    })
-    return { menu, normalCover, lyricsCover, lyrics, spectrum, separator, settings, restart, quit }
+      )
+      const quit = await retain(PredefinedMenuItem.new({ item: 'Quit', text: '退出应用' }))
+      const menu = await retain(
+        Menu.new({
+          items: [normalCover, lyricsCover, lyrics, spectrum, separator, settings, restart, quit],
+        }),
+      )
+      return {
+        menu,
+        normalCover,
+        lyricsCover,
+        lyrics,
+        spectrum,
+        separator,
+        settings,
+        restart,
+        quit,
+      }
+    } catch (error) {
+      await Promise.allSettled(created.map((resource) => resource.close()))
+      throw error
+    }
   }
 
   /** 获取当前窗口唯一的菜单实例，并合并并发初始化。 */
   async function getResources(): Promise<NativeMenuResources> {
     if (resources) return resources
     resourcesPromise ??= createResources()
-    const created = await resourcesPromise
+    let created: NativeMenuResources
+    try {
+      created = await resourcesPromise
+    } catch (error) {
+      resourcesPromise = undefined
+      throw error
+    }
     if (disposed) {
       await closeResources(created)
       throw new Error('任务栏窗口已关闭')
     }
     resources = created
+    resourcesPromise = undefined
     return created
   }
 

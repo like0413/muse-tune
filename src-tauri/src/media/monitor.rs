@@ -435,25 +435,28 @@ fn run_worker<R: Runtime>(
                 }
             }
             WorkerMessage::SelectionPolicyChanged(policy, result_sender) => {
-                selection_policy = normalize_selection_policy(policy);
-                synchronize_sessions(
-                    &manager.manager,
-                    &sender,
-                    &mut sessions,
-                    &mut next_session_id,
-                    &mut next_activity_order,
-                    false,
-                    selection_policy.only_supported_players,
-                );
-                reconcile_selection_and_volume(
-                    &app,
-                    &snapshot,
-                    &manager.manager,
-                    &sessions,
-                    &mut selected,
-                    &selection_policy,
-                    true,
-                );
+                let normalized = normalize_selection_policy(policy);
+                if selection_policy != normalized {
+                    selection_policy = normalized;
+                    synchronize_sessions(
+                        &manager.manager,
+                        &sender,
+                        &mut sessions,
+                        &mut next_session_id,
+                        &mut next_activity_order,
+                        false,
+                        selection_policy.only_supported_players,
+                    );
+                    reconcile_selection_and_volume(
+                        &app,
+                        &snapshot,
+                        &manager.manager,
+                        &sessions,
+                        &mut selected,
+                        &selection_policy,
+                        true,
+                    );
+                }
                 let _ = result_sender.send(Ok(()));
             }
             WorkerMessage::Control(action, result_sender) => {

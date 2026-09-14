@@ -3,7 +3,7 @@ import { emit, listen } from '@tauri-apps/api/event'
 import { clamp } from 'es-toolkit'
 
 import { SETTINGS_SCHEMA_VERSIONS } from './storage/schema-versions'
-import { getVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
+import { loadVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
 
 export const TASKBAR_TRANSPARENCY_MIN = 0
 export const TASKBAR_TRANSPARENCY_MAX = 100
@@ -32,7 +32,7 @@ const backgroundTransparencyStorage = {
 
 /** 读取背景透明度；版本不兼容时仅恢复此项默认值。 */
 export async function getTaskbarBackgroundTransparency(): Promise<number> {
-  return getVersionedSetting(backgroundTransparencyStorage)
+  return loadVersionedSetting(backgroundTransparencyStorage)
 }
 
 /** 仅预览背景透明度，不触发持久化写入。 */

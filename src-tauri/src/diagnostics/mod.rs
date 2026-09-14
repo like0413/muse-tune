@@ -24,8 +24,8 @@ pub use model::{
 static STORAGE_DIAGNOSTICS: LazyLock<Mutex<Option<StorageDiagnostics>>> =
     LazyLock::new(|| Mutex::new(None));
 
-/// 一次性读取现有服务和窗口状态，不建立诊断专用后台任务。
-pub fn snapshot<R: Runtime>(
+/// 一次性采集现有服务和窗口状态，不建立诊断专用后台任务。
+pub fn collect<R: Runtime>(
     app: &AppHandle<R>,
     media_service: &MediaService,
     lyrics_service: &LyricsService,
