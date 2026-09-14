@@ -18,10 +18,12 @@ use super::super::{
     matcher::{SongCandidate, accepted_score},
     model::{LyricLine, LyricWord, LyricsSource, LyricsSourceKind, ResolvedLyrics},
     network::{ResolutionDeadline, parse_json},
-    track::{PlaybackWindow, TrackDescriptor},
+    track::TrackDescriptor,
 };
 
 const MAX_QUEUE_BYTES: u64 = 16 * 1024 * 1024;
+const STANDARD_PREVIEW_DURATIONS_MS: [u64; 2] = [30_000, 60_000];
+const STANDARD_PREVIEW_TOLERANCE_MS: u64 = 500;
 const USER_AGENT_VALUE: &str = concat!("Mozilla/5.0 MuseTune/", env!("CARGO_PKG_VERSION"));
 static LINE_PATTERN: LazyLock<Result<Regex, regex::Error>> =
     LazyLock::new(|| Regex::new(r"^\[(\d+),(\d+)](.*)$"));
@@ -75,31 +77,49 @@ pub fn automatic_cache_path() -> Option<PathBuf> {
         .map(|root| PathBuf::from(root).join("SodaMusic").join("LunaStorage"))
 }
 
-/// 仅当系统播放时长与汽水试听时长一致时，采用 QueueCache 声明的原曲偏移。
-pub fn playback_window(
+/// 先识别汽水标准试听时长，其他时长再由 QueueCache 元数据补充判定。
+pub fn is_preview_playback(
     track: &TrackDescriptor,
-    cache_path: &Path,
-) -> Result<Option<PlaybackWindow>, LyricsError> {
+    cache_path: Option<&Path>,
+) -> Result<bool, LyricsError> {
     let Some(playback_duration_ms) = track.duration_ms else {
-        return Ok(None);
+        return Ok(false);
+    };
+    if matches_standard_preview_duration(playback_duration_ms) {
+        return Ok(true);
+    }
+    let Some(cache_path) = cache_path else {
+        return Ok(false);
     };
     let Some(song) = find_queue_song(track, cache_path)? else {
-        return Ok(None);
+        return Ok(false);
     };
-    let Some(audition) = song.audition_window() else {
-        return Ok(None);
+    let Some(audition_duration_ms) = song.audition_duration_ms() else {
+        return Ok(false);
     };
-    if playback_duration_ms.abs_diff(audition.duration_ms) > 5_000
-        || audition.start_ms == 0
-        || audition.start_ms >= song.duration
-    {
-        return Ok(None);
-    }
-    Ok(Some(PlaybackWindow {
-        start_ms: audition.start_ms,
-        duration_ms: audition.duration_ms,
-        source_duration_ms: song.duration,
-    }))
+    Ok(matches_preview_duration(
+        playback_duration_ms,
+        audition_duration_ms,
+        song.duration,
+    ))
+}
+
+/// 标准 30/60 秒试听在实测中有数十毫秒封装偏差，仅在窄容差内命中。
+fn matches_standard_preview_duration(playback_duration_ms: u64) -> bool {
+    STANDARD_PREVIEW_DURATIONS_MS
+        .into_iter()
+        .any(|expected| playback_duration_ms.abs_diff(expected) <= STANDARD_PREVIEW_TOLERANCE_MS)
+}
+
+/// 试听时长必须显著短于原曲，避免将带有冗余元数据的完整播放误判为试听。
+fn matches_preview_duration(
+    playback_duration_ms: u64,
+    audition_duration_ms: u64,
+    source_duration_ms: u64,
+) -> bool {
+    audition_duration_ms > 0
+        && audition_duration_ms < source_duration_ms
+        && playback_duration_ms.abs_diff(audition_duration_ms) <= 5_000
 }
 
 fn find_queue_song(
@@ -260,8 +280,6 @@ struct SodaTrack {
     preview: Option<SodaPreview>,
     #[serde(default)]
     audition_info: Option<SodaAuditionInfo>,
-    #[serde(default)]
-    playable_range: Option<SodaPlayableRange>,
 }
 
 impl SodaTrack {
@@ -275,45 +293,23 @@ impl SodaTrack {
         ]
     }
 
-    fn audition_window(&self) -> Option<SodaAuditionWindow> {
-        let duration_ms = self
-            .audition_info
+    fn audition_duration_ms(&self) -> Option<u64> {
+        self.audition_info
             .as_ref()
             .and_then(|value| value.duration_ms)
-            .or_else(|| self.preview.as_ref().and_then(|value| value.duration))?;
-        let start_ms = self
-            .audition_info
-            .as_ref()
-            .and_then(|value| value.start_time_ms)
-            .or_else(|| self.preview.as_ref().and_then(|value| value.start))
-            .or_else(|| self.playable_range.as_ref().and_then(|value| value.start))?;
-        (duration_ms > 0).then_some(SodaAuditionWindow {
-            start_ms,
-            duration_ms,
-        })
+            .or_else(|| self.preview.as_ref().and_then(|value| value.duration))
+            .filter(|duration_ms| *duration_ms > 0)
     }
-}
-
-struct SodaAuditionWindow {
-    start_ms: u64,
-    duration_ms: u64,
 }
 
 #[derive(Deserialize)]
 struct SodaPreview {
     duration: Option<u64>,
-    start: Option<u64>,
 }
 
 #[derive(Deserialize)]
 struct SodaAuditionInfo {
     duration_ms: Option<u64>,
-    start_time_ms: Option<u64>,
-}
-
-#[derive(Deserialize)]
-struct SodaPlayableRange {
-    start: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -333,7 +329,37 @@ struct SodaLyric {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_soda_lyrics;
+    use super::{matches_preview_duration, matches_standard_preview_duration, parse_soda_lyrics};
+
+    #[test]
+    fn standard_preview_duration_accepts_observed_thirty_second_offset() {
+        assert!(matches_standard_preview_duration(30_005));
+    }
+
+    #[test]
+    fn standard_preview_duration_accepts_observed_sixty_second_offset() {
+        assert!(matches_standard_preview_duration(60_047));
+    }
+
+    #[test]
+    fn standard_preview_duration_rejects_value_outside_tolerance() {
+        assert!(!matches_standard_preview_duration(60_501));
+    }
+
+    #[test]
+    fn preview_metadata_accepts_matching_duration_shorter_than_source() {
+        assert!(matches_preview_duration(30_000, 30_000, 180_000));
+    }
+
+    #[test]
+    fn preview_metadata_rejects_full_song_playback_duration() {
+        assert!(!matches_preview_duration(180_000, 30_000, 180_000));
+    }
+
+    #[test]
+    fn preview_metadata_requires_audition_shorter_than_source() {
+        assert!(!matches_preview_duration(30_000, 180_000, 180_000));
+    }
 
     #[test]
     fn parser_keeps_plain_line_when_word_tags_are_absent() {

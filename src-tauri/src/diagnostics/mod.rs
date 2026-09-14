@@ -173,7 +173,10 @@ fn collect_issues(
                 false,
             ));
         }
-        LyricsStatus::Loading | LyricsStatus::Ready | LyricsStatus::Unavailable => {}
+        LyricsStatus::Loading
+        | LyricsStatus::Ready
+        | LyricsStatus::Instrumental
+        | LyricsStatus::Unavailable => {}
     }
     if lyrics.cache.total_bytes > lyrics.cache.limit_bytes {
         issues.push(issue(

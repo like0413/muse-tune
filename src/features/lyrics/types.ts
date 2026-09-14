@@ -1,6 +1,6 @@
 import type { MediaPlayer } from '@/features/media/types'
 
-export type LyricsStatus = 'loading' | 'ready' | 'unavailable' | 'error'
+export type LyricsStatus = 'loading' | 'ready' | 'instrumental' | 'unavailable' | 'error'
 export type LyricsPrecision = 'word' | 'line'
 export type LyricsSourceKind = 'local' | 'online'
 export type LyricsResolutionMethod = 'none' | 'application_cache' | 'player_local' | 'online'

@@ -97,7 +97,7 @@ impl ParsedLyricsCache {
         let entry = serde_json::from_slice::<CacheEntry>(&content).ok();
         if let Some(entry) = entry.filter(|entry| {
             entry.snapshot.track_key.as_deref() == Some(track_key)
-                && entry.snapshot.status == LyricsStatus::Ready
+                && is_cacheable_status(entry.snapshot.status)
         }) {
             let is_fresh = is_fresh(&entry);
             self.record_current_entry(track_key, metadata.len(), &entry);
@@ -116,8 +116,8 @@ impl ParsedLyricsCache {
         let Some(track_key) = snapshot.track_key.as_deref() else {
             return Ok(());
         };
-        // 适配器的未命中可能是瞬时结果，只有真实歌词适合跨播放持久化。
-        if snapshot.status != LyricsStatus::Ready {
+        // 瞬时未命中不持久化；真实歌词和已确认纯音乐都可跨播放复用。
+        if !is_cacheable_status(snapshot.status) {
             return Ok(());
         }
         self.ensure_directory_boundary()?;
@@ -554,9 +554,14 @@ fn refresh_interval(entry: &CacheEntry) -> Option<Duration> {
         LyricsStatus::Ready if entry.snapshot.precision == Some(LyricsPrecision::Word) => {
             Some(WORD_REFRESH_INTERVAL)
         }
-        LyricsStatus::Ready => Some(LINE_REFRESH_INTERVAL),
+        LyricsStatus::Ready | LyricsStatus::Instrumental => Some(LINE_REFRESH_INTERVAL),
         LyricsStatus::Loading | LyricsStatus::Unavailable | LyricsStatus::Error => None,
     }
+}
+
+/// 只允许可稳定复用的解析结论进入磁盘缓存。
+fn is_cacheable_status(status: LyricsStatus) -> bool {
+    matches!(status, LyricsStatus::Ready | LyricsStatus::Instrumental)
 }
 
 fn now_seconds() -> u64 {
@@ -603,5 +608,12 @@ mod tests {
         let entry = entry(LyricsStatus::Ready, Some(LyricsPrecision::Line));
 
         assert!(!is_fresh_at(&entry, 50));
+    }
+
+    #[test]
+    fn instrumental_cache_uses_line_refresh_interval() {
+        let entry = entry(LyricsStatus::Instrumental, None);
+
+        assert!(!is_fresh_at(&entry, 100 + LINE_REFRESH_INTERVAL.as_secs()));
     }
 }

@@ -456,7 +456,7 @@ impl LyricsService {
         if !self.is_current_generation(generation) {
             return;
         }
-        let Some(mut track) = track else {
+        let Some(track) = track else {
             self.cancel_resolution();
             self.publish_if_current(
                 LyricsSnapshot::unavailable(None, "当前没有支持的歌曲"),
@@ -480,30 +480,37 @@ impl LyricsService {
             );
             return;
         }
-        track.playback_window =
-            players::playback_window(&track, self.cache_path(track.player).as_deref())
-                .inspect_err(|error| log::debug!("读取播放器试听区间失败: {error}"))
-                .ok()
-                .flatten();
-        let keeps_current_ready = preserve_ready
+        let is_preview =
+            players::is_preview_playback(&track, self.cache_path(track.player).as_deref())
+                .inspect_err(|error| log::debug!("识别播放器试听状态失败: {error}"))
+                .unwrap_or(false);
+        if is_preview {
+            self.cancel_resolution();
+            self.publish_if_current(
+                LyricsSnapshot::unavailable(Some(track.key), "试听播放不显示歌词"),
+                generation,
+            );
+            return;
+        }
+        let keeps_current_content = preserve_ready
             && self.inner.runtime_state.read().is_ok_and(|state| {
-                state.snapshot.status == LyricsStatus::Ready
-                    && state.snapshot.track_key.as_ref() == Some(&track.key)
+                matches!(
+                    state.snapshot.status,
+                    LyricsStatus::Ready | LyricsStatus::Instrumental
+                ) && state.snapshot.track_key.as_ref() == Some(&track.key)
             });
-        // 有效缓存直接进入 ready，避免切歌时 loading -> ready 触发歌词层闪烁。
+        // 有效歌词或纯音乐结论直接展示，避免重复解析造成内容层闪烁。
         let cached = self.inner.cache.load(&track.key);
         let displayable_cache = cached.as_ref().filter(|cached| {
-            cached.is_fresh
-                && is_cached_timeline_displayable(validate_timeline(&track, &cached.snapshot.lines))
+            cached.is_fresh && is_cached_snapshot_displayable(&track, &cached.snapshot)
         });
         if let Some(cached) = displayable_cache {
-            let snapshot = snapshot_for_playback(&track, &cached.snapshot);
             self.publish_if_current_with_method(
-                snapshot,
+                cached.snapshot.clone(),
                 generation,
                 LyricsResolutionMethod::ApplicationCache,
             );
-        } else if !keeps_current_ready {
+        } else if !keeps_current_content {
             self.publish_if_current(LyricsSnapshot::loading(track.key.clone()), generation);
         }
         self.enqueue_resolution(track, generation, cached);
@@ -646,24 +653,13 @@ impl LyricsService {
     ) {
         let deadline = ResolutionDeadline::new(cancellation);
         let mut candidates = Vec::new();
-        if let Some(window) = track.playback_window {
-            self.record_resolution_step(
-                generation,
-                "汽水试听时间轴",
-                LyricsResolutionOutcome::Hit,
-                Some(format!(
-                    "原曲 {} 起，试听时长 {}",
-                    format_milliseconds(window.start_ms),
-                    format_milliseconds(window.duration_ms),
-                )),
-            );
-        }
-        let cache_timeline_validation = cached
+        let cache_timeline_validation = cached.as_ref().and_then(|cached| {
+            (cached.snapshot.status == LyricsStatus::Ready)
+                .then(|| validate_timeline(&track, &cached.snapshot.lines))
+        });
+        let cached_snapshot_displayable = cached
             .as_ref()
-            .map_or(TimelineValidation::Invalid, |cached| {
-                validate_timeline(&track, &cached.snapshot.lines)
-            });
-        let cached_timeline_displayable = is_cached_timeline_displayable(cache_timeline_validation);
+            .is_some_and(|cached| is_cached_snapshot_displayable(&track, &cached.snapshot));
         self.record_resolution_step(
             generation,
             "Muse Tune 缓存",
@@ -674,29 +670,41 @@ impl LyricsService {
             },
             Some(cached.as_ref().map_or_else(
                 || "解析开始时无应用缓存".to_owned(),
-                |cached| match cache_timeline_validation {
-                    TimelineValidation::Plausible if cached.is_fresh => "有效期内".to_owned(),
-                    TimelineValidation::Plausible => "已过期，作为兜底候选".to_owned(),
-                    TimelineValidation::DurationMismatch {
-                        track_duration_ms,
-                        latest_start_ms,
-                        latest_end_ms,
-                    } => format!(
+                |cached| match (cached.snapshot.status, cache_timeline_validation) {
+                    (LyricsStatus::Instrumental, _) if cached.is_fresh => {
+                        "已确认纯音乐，有效期内".to_owned()
+                    }
+                    (LyricsStatus::Instrumental, _) => "已确认纯音乐，已过期，重新确认".to_owned(),
+                    (_, Some(TimelineValidation::Plausible)) if cached.is_fresh => {
+                        "有效期内".to_owned()
+                    }
+                    (_, Some(TimelineValidation::Plausible)) => "已过期，作为兜底候选".to_owned(),
+                    (
+                        _,
+                        Some(TimelineValidation::DurationMismatch {
+                            track_duration_ms,
+                            latest_start_ms,
+                            latest_end_ms,
+                        }),
+                    ) => format!(
                         "已读取；播放器时长 {}，歌词末行开始 {}、结束 {}；采用有效缓存",
                         format_milliseconds(track_duration_ms),
                         format_milliseconds(latest_start_ms),
                         format_milliseconds(latest_end_ms),
                     ),
-                    TimelineValidation::Invalid => "已读取，但缓存时间轴结构无效".to_owned(),
+                    (_, Some(TimelineValidation::Invalid) | None) => {
+                        "已读取，但缓存状态或时间轴结构无效".to_owned()
+                    }
                 },
             )),
         );
         if let Some(cached) = cached {
-            if cached_timeline_displayable && cached.is_fresh {
-                let should_check_local = players::supports_current_local(track.player)
+            if cached_snapshot_displayable && cached.is_fresh {
+                let should_check_local = cached.snapshot.status == LyricsStatus::Ready
+                    && players::supports_current_local(track.player)
                     && cached.snapshot.precision != Some(super::model::LyricsPrecision::Word);
                 self.publish_if_current_with_method(
-                    snapshot_for_playback(&track, &cached.snapshot),
+                    cached.snapshot.clone(),
                     generation,
                     LyricsResolutionMethod::ApplicationCache,
                 );
@@ -769,7 +777,10 @@ impl LyricsService {
                 }
                 return;
             }
-            if cached_timeline_displayable && let Some(source) = cached.snapshot.source {
+            if cached.snapshot.status == LyricsStatus::Ready
+                && cached_snapshot_displayable
+                && let Some(source) = cached.snapshot.source
+            {
                 candidates.push(LyricsCandidate {
                     resolved: ResolvedLyrics {
                         source,
@@ -876,7 +887,6 @@ impl LyricsService {
                 self.publish_candidate(&track, candidate, generation);
             } else {
                 self.store_and_publish_if_current(
-                    &track,
                     LyricsSnapshot::unavailable(
                         Some(track.key.clone()),
                         "联网策略仅允许本地与缓存",
@@ -1004,7 +1014,6 @@ impl LyricsService {
             self.publish_candidate(&track, candidate, generation);
         } else {
             self.store_and_publish_if_current(
-                &track,
                 LyricsSnapshot::unavailable(Some(track.key.clone()), "没有找到可靠歌词"),
                 generation,
                 LyricsResolutionMethod::None,
@@ -1020,8 +1029,8 @@ impl LyricsService {
         generation: u64,
     ) {
         let resolution_method = method_from_source(&resolved);
-        let snapshot = LyricsSnapshot::ready(track.key.clone(), resolved);
-        self.store_and_publish_if_current(track, snapshot, generation, resolution_method);
+        let snapshot = LyricsSnapshot::from_resolved(track.key.clone(), resolved);
+        self.store_and_publish_if_current(snapshot, generation, resolution_method);
     }
 
     /// 发布已带有实际取得方式的候选，区分在线来源与应用缓存命中。
@@ -1031,14 +1040,13 @@ impl LyricsService {
         candidate: LyricsCandidate,
         generation: u64,
     ) {
-        let snapshot = LyricsSnapshot::ready(track.key.clone(), candidate.resolved);
-        self.store_and_publish_if_current(track, snapshot, generation, candidate.resolution_method);
+        let snapshot = LyricsSnapshot::from_resolved(track.key.clone(), candidate.resolved);
+        self.store_and_publish_if_current(snapshot, generation, candidate.resolution_method);
     }
 
     /// 持久化解析结果，并仅在请求仍对应当前歌曲时发布，避免慢请求覆盖新歌曲。
     fn store_and_publish_if_current(
         &self,
-        track: &TrackDescriptor,
         snapshot: LyricsSnapshot,
         generation: u64,
         resolution_method: LyricsResolutionMethod,
@@ -1053,7 +1061,7 @@ impl LyricsService {
         if let Err(error) = self.inner.cache.store(&snapshot) {
             log::warn!("保存解析后歌词缓存失败: {error}");
         }
-        self.publish(snapshot_for_playback(track, &snapshot), resolution_method);
+        self.publish(snapshot, resolution_method);
     }
 
     fn publish_if_current(&self, snapshot: LyricsSnapshot, generation: u64) {
@@ -1532,7 +1540,7 @@ fn validate_timeline(
     track: &TrackDescriptor,
     lines: &[super::model::LyricLine],
 ) -> TimelineValidation {
-    let Some(duration_ms) = track.lyrics_duration_ms() else {
+    let Some(duration_ms) = track.duration_ms else {
         return TimelineValidation::Invalid;
     };
     if lines.is_empty()
@@ -1578,48 +1586,23 @@ fn is_cached_timeline_displayable(validation: TimelineValidation) -> bool {
     )
 }
 
+/// 纯音乐是无时间轴的可展示结论；普通歌词仍必须通过缓存时间轴结构校验。
+fn is_cached_snapshot_displayable(track: &TrackDescriptor, snapshot: &LyricsSnapshot) -> bool {
+    match snapshot.status {
+        LyricsStatus::Instrumental => true,
+        LyricsStatus::Ready => {
+            is_cached_timeline_displayable(validate_timeline(track, &snapshot.lines))
+        }
+        LyricsStatus::Loading | LyricsStatus::Unavailable | LyricsStatus::Error => false,
+    }
+}
+
 /// 拒绝明显超出歌曲时长或顺序倒退的解析结果，避免错误候选进入长期缓存。
 fn is_plausible_timeline(track: &TrackDescriptor, lines: &[super::model::LyricLine]) -> bool {
     matches!(
         validate_timeline(track, lines),
         TimelineValidation::Plausible
     )
-}
-
-/// 将完整歌曲歌词临时裁剪并平移到试听片段，持久缓存仍保持可跨平台复用的原时间轴。
-fn snapshot_for_playback(track: &TrackDescriptor, snapshot: &LyricsSnapshot) -> LyricsSnapshot {
-    let Some(window) = track.playback_window else {
-        return snapshot.clone();
-    };
-    let window_end_ms = window.start_ms.saturating_add(window.duration_ms);
-    let mut adjusted = snapshot.clone();
-    adjusted.lines = adjusted
-        .lines
-        .into_iter()
-        .filter(|line| line.end_ms > window.start_ms && line.start_ms < window_end_ms)
-        .map(|mut line| {
-            line.start_ms = line.start_ms.saturating_sub(window.start_ms);
-            line.end_ms = line
-                .end_ms
-                .min(window_end_ms)
-                .saturating_sub(window.start_ms);
-            line.words = line
-                .words
-                .into_iter()
-                .filter(|word| word.end_ms > window.start_ms && word.start_ms < window_end_ms)
-                .map(|mut word| {
-                    word.start_ms = word.start_ms.saturating_sub(window.start_ms);
-                    word.end_ms = word
-                        .end_ms
-                        .min(window_end_ms)
-                        .saturating_sub(window.start_ms);
-                    word
-                })
-                .collect();
-            line
-        })
-        .collect();
-    adjusted
 }
 
 /// 以诊断友好的秒数显示毫秒时间点。
@@ -1642,12 +1625,8 @@ fn source_priority(player: MediaPlayer) -> u8 {
 mod tests {
     use crate::media::MediaPlayer;
 
-    use super::{
-        TimelineValidation, TrackDescriptor, is_plausible_timeline, snapshot_for_playback,
-        validate_timeline,
-    };
+    use super::{TimelineValidation, TrackDescriptor, is_plausible_timeline, validate_timeline};
     use crate::lyrics::model::{LyricLine, LyricWord};
-    use crate::lyrics::track::PlaybackWindow;
 
     fn track() -> TrackDescriptor {
         TrackDescriptor {
@@ -1656,7 +1635,6 @@ mod tests {
             title: "歌曲".to_owned(),
             artists: vec!["歌手".to_owned()],
             duration_ms: Some(180_000),
-            playback_window: None,
         }
     }
 
@@ -1703,29 +1681,5 @@ mod tests {
     #[test]
     fn timeline_accepts_ordered_lines_inside_duration() {
         assert!(is_plausible_timeline(&track(), &[line(1_000), line(2_000)]));
-    }
-
-    #[test]
-    fn soda_preview_rebases_full_song_lyrics_without_changing_cache_timeline() {
-        let mut preview_track = track();
-        preview_track.player = MediaPlayer::SodaMusic;
-        preview_track.duration_ms = Some(30_000);
-        preview_track.playback_window = Some(PlaybackWindow {
-            start_ms: 60_000,
-            duration_ms: 30_000,
-            source_duration_ms: 180_000,
-        });
-        let original = crate::lyrics::model::LyricsSnapshot {
-            track_key: Some("track".to_owned()),
-            status: crate::lyrics::model::LyricsStatus::Ready,
-            lines: vec![line(50_000), line(65_000), line(95_000)],
-            ..crate::lyrics::model::LyricsSnapshot::default()
-        };
-
-        let adjusted = snapshot_for_playback(&preview_track, &original);
-
-        assert_eq!(adjusted.lines.len(), 1);
-        assert_eq!(adjusted.lines[0].start_ms, 5_000);
-        assert_eq!(original.lines[1].start_ms, 65_000);
     }
 }

@@ -10,6 +10,8 @@ const MIN_WORD_TIMING_COVERAGE_PERCENT: usize = 80;
 pub enum LyricsStatus {
     Loading,
     Ready,
+    /// 平台已明确声明当前歌曲为纯音乐，不属于歌词时间轴。
+    Instrumental,
     #[default]
     Unavailable,
     Error,
@@ -203,9 +205,18 @@ impl LyricsSnapshot {
         }
     }
 
-    /// 创建已解析状态并按实际逐字数据声明精度。
-    pub fn ready(track_key: String, resolved: ResolvedLyrics) -> Self {
-        let precision = if has_word_timing(&resolved.lines) {
+    /// 创建已解析状态；平台纯音乐说明转换为不携带时间轴的语义状态。
+    pub fn from_resolved(track_key: String, resolved: ResolvedLyrics) -> Self {
+        let ResolvedLyrics { source, lines } = resolved;
+        if is_instrumental_notice(&lines) {
+            return Self {
+                track_key: Some(track_key),
+                status: LyricsStatus::Instrumental,
+                source: Some(source),
+                ..Self::default()
+            };
+        }
+        let precision = if has_word_timing(&lines) {
             LyricsPrecision::Word
         } else {
             LyricsPrecision::Line
@@ -213,9 +224,9 @@ impl LyricsSnapshot {
         Self {
             track_key: Some(track_key),
             status: LyricsStatus::Ready,
-            source: Some(resolved.source),
+            source: Some(source),
             precision: Some(precision),
-            lines: resolved.lines,
+            lines,
             error_reason: None,
         }
     }
@@ -237,9 +248,25 @@ pub struct ResolvedLyrics {
     pub lines: Vec<LyricLine>,
 }
 
+/// 仅识别已确认的平台固定文案，避免把普通歌词中的“纯音乐”误判为语义状态。
+fn is_instrumental_notice(lines: &[LyricLine]) -> bool {
+    let [line] = lines else {
+        return false;
+    };
+    matches!(
+        normalize_text(&line.text).as_str(),
+        "此歌曲为没有填词的纯音乐请您欣赏" | "此歌曲为没有填词的纯音乐请您欣" | "纯音乐请欣赏"
+    )
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{LyricLine, LyricWord, has_word_timing};
+    use crate::media::MediaPlayer;
+
+    use super::{
+        LyricLine, LyricWord, LyricsSnapshot, LyricsSource, LyricsSourceKind, LyricsStatus,
+        ResolvedLyrics, has_word_timing,
+    };
 
     fn line(text: &str, words: Vec<LyricWord>) -> LyricLine {
         LyricLine {
@@ -257,6 +284,18 @@ mod tests {
             start_ms: 0,
             end_ms: 500,
             text: text.to_owned(),
+        }
+    }
+
+    /// 构造单行在线歌词结果，供语义状态测试复用。
+    fn resolved(text: &str) -> ResolvedLyrics {
+        ResolvedLyrics {
+            source: LyricsSource {
+                player: MediaPlayer::QqMusic,
+                kind: LyricsSourceKind::Online,
+                song_id: Some("song-id".to_owned()),
+            },
+            lines: vec![line(text, Vec::new())],
         }
     }
 
@@ -283,5 +322,36 @@ mod tests {
         let lines = [line("正确歌词", vec![word("错误歌词")])];
 
         assert!(!has_word_timing(&lines));
+    }
+
+    #[test]
+    fn instrumental_notice_becomes_semantic_state_without_timeline() {
+        let snapshot = LyricsSnapshot::from_resolved(
+            "track-key".to_owned(),
+            resolved("此歌曲为没有填词的纯音乐，请您欣赏"),
+        );
+
+        assert_eq!(
+            (snapshot.status, snapshot.precision, snapshot.lines.len()),
+            (LyricsStatus::Instrumental, None, 0),
+        );
+    }
+
+    #[test]
+    fn observed_truncated_instrumental_notice_is_recognized() {
+        let snapshot = LyricsSnapshot::from_resolved(
+            "track-key".to_owned(),
+            resolved("此歌曲为没有填词的纯音乐，请您欣"),
+        );
+
+        assert_eq!(snapshot.status, LyricsStatus::Instrumental);
+    }
+
+    #[test]
+    fn ordinary_single_line_lyrics_remain_ready() {
+        let snapshot =
+            LyricsSnapshot::from_resolved("track-key".to_owned(), resolved("纯音乐般的夜晚"));
+
+        assert_eq!(snapshot.status, LyricsStatus::Ready);
     }
 }

@@ -44,6 +44,7 @@ import { useAutomaticUpdateMonitor } from '@/features/updater/useAutomaticUpdate
 
 import AudioSpectrumElement from './components/AudioSpectrumElement.vue'
 import CoverElement from './components/CoverElement.vue'
+import LyricsNoticeElement from './components/lyrics/LyricsNoticeElement.vue'
 import LyricsElement from './components/LyricsElement.vue'
 import PlaybackControlsElement from './components/PlaybackControlsElement.vue'
 import TrackInfoElement from './components/TrackInfoElement.vue'
@@ -69,15 +70,19 @@ const lyricsCoverAnchor = useTemplateRef<HTMLElement>('lyricsCoverAnchor')
 const isTaskbarHovered = useElementHover(taskbarRoot)
 const taskbarWidth = shallowRef<number>(TASKBAR_WIDTH_PRESETS.wide)
 const isCompact = computed(() => taskbarWidth.value <= TASKBAR_WIDTH_PRESETS.compact)
-// 所有播放器都必须提供有效时间线；能力出现或消失时自动在歌词与普通界面间切换。
+// 所有解析入口都要求有效播放器时间线；纯音乐结论本身不伪装成歌词行。
 const hasReliableLyricsTimeline = computed(() => timeline.value !== null)
+const hasLyricsContent = computed(
+  () =>
+    (lyrics.value.status === 'ready' && lyrics.value.lines.length > 0) ||
+    lyrics.value.status === 'instrumental',
+)
 const showLyrics = computed(
   () =>
     lyricsSettings.value.enabled &&
     playbackStatus.value === 'playing' &&
     hasReliableLyricsTimeline.value &&
-    lyrics.value.status === 'ready' &&
-    lyrics.value.lines.length > 0 &&
+    hasLyricsContent.value &&
     !isTaskbarHovered.value,
 )
 const normalCoverVisible = computed(() =>
@@ -312,9 +317,16 @@ onUnmounted(() => {
           aria-hidden="true"
         />
         <LyricsElement
+          v-if="lyrics.status === 'ready'"
           :key="lyrics.trackKey ?? 'no-track'"
           :lyrics="lyrics"
           :position-ms="lyricsPositionMs"
+          :settings="lyricsSettings"
+          :theme-color="progressColor"
+        />
+        <LyricsNoticeElement
+          v-else-if="lyrics.status === 'instrumental'"
+          text="纯音乐，请欣赏"
           :settings="lyricsSettings"
           :theme-color="progressColor"
         />

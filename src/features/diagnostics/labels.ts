@@ -22,6 +22,7 @@ export const playbackStatusLabels: Record<MediaPlaybackStatus, string> = {
 export const lyricsStatusLabels: Record<LyricsStatus, string> = {
   loading: '解析中',
   ready: '已就绪',
+  instrumental: '纯音乐',
   unavailable: '不可用',
   error: '错误',
 }

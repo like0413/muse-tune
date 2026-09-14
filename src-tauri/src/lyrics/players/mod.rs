@@ -17,7 +17,7 @@ use super::{
     error::LyricsError,
     model::{LyricsSource, LyricsSourceKind, ResolvedLyrics},
     network::ResolutionDeadline,
-    track::{PlaybackWindow, TrackDescriptor},
+    track::TrackDescriptor,
 };
 
 /// 当前支持的四个播放器，供自动缓存监听复用。
@@ -55,18 +55,15 @@ pub fn supports_current_online(player: MediaPlayer) -> bool {
     )
 }
 
-/// 读取播放器提供的试听区间；仅汽水需要把完整歌词映射到片段时间轴。
-pub fn playback_window(
+/// 使用播放器本地元数据识别当前是否为试听播放。
+pub fn is_preview_playback(
     track: &TrackDescriptor,
     cache_path: Option<&Path>,
-) -> Result<Option<PlaybackWindow>, LyricsError> {
+) -> Result<bool, LyricsError> {
     if track.player != MediaPlayer::SodaMusic {
-        return Ok(None);
+        return Ok(false);
     }
-    let Some(cache_path) = cache_path else {
-        return Ok(None);
-    };
-    soda_music::playback_window(track, cache_path)
+    soda_music::is_preview_playback(track, cache_path)
 }
 
 /// 只读取当前播放器的本地歌词，用于新鲜持久缓存的低成本升级检查。
