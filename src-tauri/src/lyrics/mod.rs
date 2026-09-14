@@ -16,7 +16,7 @@ mod watcher;
 pub use model::{LyricsDiagnostics, LyricsOnlineStrategy, LyricsSnapshot, LyricsStatus};
 pub use service::LyricsService;
 
-/// 初始化歌词服务；媒体服务随后通过托管状态通知歌曲变化。
+/// 初始化歌词服务；组合根随后把媒体快照订阅能力注入媒体服务。
 pub fn initialize<R: tauri::Runtime>(app: &tauri::App<R>) -> Result<LyricsService, std::io::Error> {
     LyricsService::initialize(app)
 }

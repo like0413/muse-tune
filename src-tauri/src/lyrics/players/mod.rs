@@ -15,7 +15,9 @@ use crate::media::MediaPlayer;
 
 use super::{
     error::LyricsError,
-    model::{LyricsSource, LyricsSourceKind, ResolvedLyrics},
+    model::{
+        LyricsLookupMiss, LyricsLookupOutcome, LyricsSource, LyricsSourceKind, ResolvedLyrics,
+    },
     network::ResolutionDeadline,
     track::TrackDescriptor,
 };
@@ -34,25 +36,23 @@ pub fn resolve_current_online(
     cache_path: Option<PathBuf>,
     client: &Client,
     deadline: &ResolutionDeadline,
-) -> Result<Option<ResolvedLyrics>, LyricsError> {
-    match track.player {
+) -> Result<LyricsLookupOutcome, LyricsError> {
+    let result = match track.player {
         MediaPlayer::QqMusic => qq_music::resolve_online(track, client, deadline),
         MediaPlayer::NeteaseCloudMusic => {
             netease_cloud_music::resolve_online(track, client, deadline)
         }
         MediaPlayer::SodaMusic => {
-            soda_music::resolve(track, cache_path.as_deref(), client, deadline)
+            let Some(cache_path) = cache_path.as_deref() else {
+                return Ok(LyricsLookupOutcome::Miss(LyricsLookupMiss::DataUnavailable));
+            };
+            soda_music::resolve(track, Some(cache_path), client, deadline)
         }
-        MediaPlayer::KugouMusic | MediaPlayer::Other => Ok(None),
-    }
-}
-
-/// 判断当前播放器是否存在需要联网的专用解析入口。
-pub fn supports_current_online(player: MediaPlayer) -> bool {
-    matches!(
-        player,
-        MediaPlayer::QqMusic | MediaPlayer::NeteaseCloudMusic | MediaPlayer::SodaMusic
-    )
+        MediaPlayer::KugouMusic | MediaPlayer::Other => {
+            return Ok(LyricsLookupOutcome::Unsupported);
+        }
+    }?;
+    Ok(completed_lookup(result))
 }
 
 /// 使用播放器本地元数据识别当前是否为试听播放。
@@ -70,24 +70,28 @@ pub fn is_preview_playback(
 pub fn resolve_current_local(
     track: &TrackDescriptor,
     cache_path: Option<PathBuf>,
-) -> Result<Option<ResolvedLyrics>, LyricsError> {
+) -> Result<LyricsLookupOutcome, LyricsError> {
     let Some(cache_path) = cache_path else {
-        return Ok(None);
+        return Ok(
+            if matches!(
+                track.player,
+                MediaPlayer::QqMusic | MediaPlayer::NeteaseCloudMusic | MediaPlayer::KugouMusic
+            ) {
+                LyricsLookupOutcome::Miss(LyricsLookupMiss::DataUnavailable)
+            } else {
+                LyricsLookupOutcome::Unsupported
+            },
+        );
     };
-    match track.player {
+    let result = match track.player {
         MediaPlayer::QqMusic => qq_music::resolve_local(track, &cache_path),
         MediaPlayer::NeteaseCloudMusic => netease_cloud_music::resolve_local(track, &cache_path),
         MediaPlayer::KugouMusic => kugou_music::resolve(track, Some(&cache_path)),
-        MediaPlayer::SodaMusic | MediaPlayer::Other => Ok(None),
-    }
-}
-
-/// 判断当前播放器是否存在可直接读取的本地歌词入口。
-pub fn supports_current_local(player: MediaPlayer) -> bool {
-    matches!(
-        player,
-        MediaPlayer::QqMusic | MediaPlayer::NeteaseCloudMusic | MediaPlayer::KugouMusic
-    )
+        MediaPlayer::SodaMusic | MediaPlayer::Other => {
+            return Ok(LyricsLookupOutcome::Unsupported);
+        }
+    }?;
+    Ok(completed_lookup(result))
 }
 
 /// 判断播放器缓存事件是否确实可能改变当前歌曲的歌词。
@@ -144,19 +148,19 @@ pub fn resolve_qq_online(
     track: &TrackDescriptor,
     client: &Client,
     deadline: &ResolutionDeadline,
-) -> Result<Option<ResolvedLyrics>, LyricsError> {
-    qq_music::resolve_online(track, client, deadline)
+) -> Result<LyricsLookupOutcome, LyricsError> {
+    qq_music::resolve_online(track, client, deadline).map(completed_lookup)
 }
 
 /// 仅查询 QQ 音乐本地 QRC，供协调器为其他播放器补足真实逐字时间轴。
 pub fn resolve_qq_local(
     track: &TrackDescriptor,
     cache_path: Option<PathBuf>,
-) -> Result<Option<ResolvedLyrics>, LyricsError> {
+) -> Result<LyricsLookupOutcome, LyricsError> {
     let Some(cache_path) = cache_path else {
-        return Ok(None);
+        return Ok(LyricsLookupOutcome::Miss(LyricsLookupMiss::DataUnavailable));
     };
-    qq_music::resolve_local(track, &cache_path)
+    qq_music::resolve_local(track, &cache_path).map(completed_lookup)
 }
 
 /// 使用网易云官方域名下的网页内部 HTTPS 接口作为跨播放器兜底。
@@ -164,8 +168,16 @@ pub fn resolve_netease_online(
     track: &TrackDescriptor,
     client: &Client,
     deadline: &ResolutionDeadline,
-) -> Result<Option<ResolvedLyrics>, LyricsError> {
-    netease_cloud_music::resolve_online(track, client, deadline)
+) -> Result<LyricsLookupOutcome, LyricsError> {
+    netease_cloud_music::resolve_online(track, client, deadline).map(completed_lookup)
+}
+
+/// 把平台内部查找结果收敛为协调器可替换的统一业务契约。
+fn completed_lookup(resolved: Option<ResolvedLyrics>) -> LyricsLookupOutcome {
+    resolved.map_or(
+        LyricsLookupOutcome::Miss(LyricsLookupMiss::NoReliableLyrics),
+        LyricsLookupOutcome::Hit,
+    )
 }
 
 /// 将路径自动发现委派给对应播放器模块。
@@ -205,5 +217,53 @@ pub fn watch_paths_for(player: MediaPlayer, cache_path: Option<&Path>) -> Vec<Pa
 pub fn watch_registry_settings(on_change: Arc<dyn Fn() + Send + Sync>) {
     if let Err(error) = qq_music::watch_cache_path_changes(on_change) {
         log::warn!("监听 QQ 音乐缓存目录设置失败: {error}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::media::MediaPlayer;
+
+    use super::{
+        LyricsLookupMiss, LyricsLookupOutcome, TrackDescriptor, completed_lookup,
+        resolve_current_local,
+    };
+
+    /// 构造指定播放器的最小歌曲描述。
+    fn track(player: MediaPlayer) -> TrackDescriptor {
+        TrackDescriptor {
+            key: "track".to_owned(),
+            player,
+            title: "歌曲".to_owned(),
+            artists: vec!["歌手".to_owned()],
+            duration_ms: Some(180_000),
+        }
+    }
+
+    #[test]
+    fn completed_empty_lookup_is_normal_miss() {
+        let outcome = completed_lookup(None);
+
+        assert!(matches!(
+            outcome,
+            LyricsLookupOutcome::Miss(LyricsLookupMiss::NoReliableLyrics)
+        ));
+    }
+
+    #[test]
+    fn unsupported_local_capability_is_explicit() {
+        let outcome = resolve_current_local(&track(MediaPlayer::SodaMusic), None);
+
+        assert!(matches!(outcome, Ok(LyricsLookupOutcome::Unsupported)));
+    }
+
+    #[test]
+    fn missing_supported_local_data_is_normal_miss() {
+        let outcome = resolve_current_local(&track(MediaPlayer::QqMusic), None);
+
+        assert!(matches!(
+            outcome,
+            Ok(LyricsLookupOutcome::Miss(LyricsLookupMiss::DataUnavailable))
+        ));
     }
 }

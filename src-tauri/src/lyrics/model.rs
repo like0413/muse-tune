@@ -248,6 +248,26 @@ pub struct ResolvedLyrics {
     pub lines: Vec<LyricLine>,
 }
 
+/// 歌词适配器对协调器返回的统一业务结果；技术失败继续由 `LyricsError` 表达。
+#[derive(Debug)]
+pub enum LyricsLookupOutcome {
+    /// 当前适配器不具备所请求的能力。
+    Unsupported,
+    /// 适配器具备能力，但本次没有找到可靠歌词。
+    Miss(LyricsLookupMiss),
+    /// 找到可进入统一质量校验的歌词候选。
+    Hit(ResolvedLyrics),
+}
+
+/// 正常未命中的稳定分类，供编排和诊断使用，不承载平台私有细节。
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LyricsLookupMiss {
+    /// 解析所需的播放器缓存、索引或歌曲元数据尚不可用。
+    DataUnavailable,
+    /// 适配器已执行，但没有产出通过其内部规则的可靠歌词。
+    NoReliableLyrics,
+}
+
 /// 仅识别已确认的平台固定文案，避免把普通歌词中的“纯音乐”误判为语义状态。
 fn is_instrumental_notice(lines: &[LyricLine]) -> bool {
     let [line] = lines else {

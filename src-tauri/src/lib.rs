@@ -11,6 +11,8 @@ mod system;
 mod taskbar;
 mod tray;
 
+use std::sync::Arc;
+
 use tauri::Manager;
 
 pub fn run() {
@@ -64,8 +66,14 @@ pub fn run() {
         .setup(|app| {
             logging::initialize(app.handle())?;
             let lyrics_service = lyrics::initialize(app)?;
+            let lyrics_snapshot_subscriber = lyrics_service.clone();
+            let media_service = media::initialize(
+                app.handle().clone(),
+                Arc::new(move |snapshot| {
+                    lyrics_snapshot_subscriber.update_media(snapshot.as_ref());
+                }),
+            )?;
             app.manage(lyrics_service);
-            let media_service = media::initialize(app.handle().clone())?;
             app.manage(media_service);
             let system_theme_service = system::initialize(app.handle().clone())?;
             app.manage(system_theme_service);

@@ -22,9 +22,10 @@ use super::{
     error::LyricsError,
     matcher::MAX_DURATION_DIFFERENCE_MS,
     model::{
-        LyricsAdapterDiagnostics, LyricsCacheDiagnostics, LyricsDiagnostics, LyricsOnlineStrategy,
-        LyricsResolutionMethod, LyricsResolutionOutcome, LyricsResolutionStep, LyricsSnapshot,
-        LyricsSnapshotDiagnostics, LyricsSourceKind, LyricsStatus, ResolvedLyrics, has_word_timing,
+        LyricsAdapterDiagnostics, LyricsCacheDiagnostics, LyricsDiagnostics, LyricsLookupMiss,
+        LyricsLookupOutcome, LyricsOnlineStrategy, LyricsResolutionMethod, LyricsResolutionOutcome,
+        LyricsResolutionStep, LyricsSnapshot, LyricsSnapshotDiagnostics, LyricsSourceKind,
+        LyricsStatus, ResolvedLyrics, has_word_timing,
     },
     network::ResolutionDeadline,
     players,
@@ -44,7 +45,7 @@ const ALLOWED_HTTPS_HOSTS: [&str; 4] = [
 
 type SnapshotPublisher = dyn Fn(&LyricsSnapshot) + Send + Sync;
 type DiagnosticsNotifier = dyn Fn() + Send + Sync;
-type LyricsResolutionResult = Result<Option<ResolvedLyrics>, LyricsError>;
+type LyricsResolutionResult = Result<LyricsLookupOutcome, LyricsError>;
 type LabeledLyricsResolutionResult<'a> = (&'a str, Option<LyricsResolutionResult>);
 
 /// 可被 Tauri command 和媒体监控线程安全共享的歌词服务。
@@ -701,7 +702,6 @@ impl LyricsService {
         if let Some(cached) = cached {
             if cached_snapshot_displayable && cached.is_fresh {
                 let should_check_local = cached.snapshot.status == LyricsStatus::Ready
-                    && players::supports_current_local(track.player)
                     && cached.snapshot.precision != Some(super::model::LyricsPrecision::Word);
                 self.publish_if_current_with_method(
                     cached.snapshot.clone(),
@@ -715,7 +715,7 @@ impl LyricsService {
                 // 已有缓存必须先展示；本地精度升级属于增强路径，不能阻塞首屏歌词。
                 let upgrade_started_at = Instant::now();
                 match players::resolve_current_local(&track, self.cache_path(track.player)) {
-                    Ok(Some(local))
+                    Ok(LyricsLookupOutcome::Hit(local))
                         if is_plausible_timeline(&track, &local.lines)
                             && (has_word_timing(&local.lines)
                                 || auxiliary_content_count(&local.lines)
@@ -732,7 +732,9 @@ impl LyricsService {
                         );
                         self.publish_resolution(&track, local, generation);
                     }
-                    Ok(Some(local)) if !is_plausible_timeline(&track, &local.lines) => {
+                    Ok(LyricsLookupOutcome::Hit(local))
+                        if !is_plausible_timeline(&track, &local.lines) =>
+                    {
                         self.record_resolution_step(
                             generation,
                             "后台本地歌词升级",
@@ -743,7 +745,7 @@ impl LyricsService {
                             )),
                         );
                     }
-                    Ok(Some(_)) => self.record_resolution_step(
+                    Ok(LyricsLookupOutcome::Hit(_)) => self.record_resolution_step(
                         generation,
                         "后台本地歌词升级",
                         LyricsResolutionOutcome::Miss,
@@ -752,12 +754,22 @@ impl LyricsService {
                             duration_millis(upgrade_started_at.elapsed()),
                         )),
                     ),
-                    Ok(None) => self.record_resolution_step(
+                    Ok(LyricsLookupOutcome::Miss(reason)) => self.record_resolution_step(
                         generation,
                         "后台本地歌词升级",
                         LyricsResolutionOutcome::Miss,
                         Some(format!(
-                            "未发现本地逐字歌词 · {} ms",
+                            "{} · {} ms",
+                            lookup_miss_detail(reason),
+                            duration_millis(upgrade_started_at.elapsed()),
+                        )),
+                    ),
+                    Ok(LyricsLookupOutcome::Unsupported) => self.record_resolution_step(
+                        generation,
+                        "后台本地歌词升级",
+                        LyricsResolutionOutcome::Miss,
+                        Some(format!(
+                            "当前播放器不支持本地歌词 · {} ms",
                             duration_millis(upgrade_started_at.elapsed()),
                         )),
                     ),
@@ -794,7 +806,9 @@ impl LyricsService {
         let path = self.cache_path(track.player);
         let current_local_result = players::resolve_current_local(&track, path.clone());
         match current_local_result {
-            Ok(Some(resolved)) if is_plausible_timeline(&track, &resolved.lines) => {
+            Ok(LyricsLookupOutcome::Hit(resolved))
+                if is_plausible_timeline(&track, &resolved.lines) =>
+            {
                 self.record_resolution_step(
                     generation,
                     "当前播放器本地",
@@ -807,7 +821,7 @@ impl LyricsService {
                 }
                 candidates.push(candidate_from_source(resolved));
             }
-            Ok(Some(_)) => {
+            Ok(LyricsLookupOutcome::Hit(_)) => {
                 self.record_resolution_step(
                     generation,
                     "当前播放器本地",
@@ -816,11 +830,17 @@ impl LyricsService {
                 );
                 log::warn!("当前播放器本地歌词时间轴超出歌曲有效范围");
             }
-            Ok(None) => self.record_resolution_step(
+            Ok(LyricsLookupOutcome::Miss(reason)) => self.record_resolution_step(
                 generation,
                 "当前播放器本地",
                 LyricsResolutionOutcome::Miss,
-                None,
+                Some(lookup_miss_detail(reason).to_owned()),
+            ),
+            Ok(LyricsLookupOutcome::Unsupported) => self.record_resolution_step(
+                generation,
+                "当前播放器本地",
+                LyricsResolutionOutcome::Miss,
+                Some("当前播放器不支持本地歌词".to_owned()),
             ),
             Err(LyricsError::Cancelled) => return,
             Err(error) => {
@@ -840,7 +860,9 @@ impl LyricsService {
         let qq_cache_path = self.cache_path(MediaPlayer::QqMusic);
         if track.player != MediaPlayer::QqMusic {
             match players::resolve_qq_local(&track, qq_cache_path) {
-                Ok(Some(resolved)) if is_plausible_timeline(&track, &resolved.lines) => {
+                Ok(LyricsLookupOutcome::Hit(resolved))
+                    if is_plausible_timeline(&track, &resolved.lines) =>
+                {
                     self.record_resolution_step(
                         generation,
                         "QQ 本地兜底",
@@ -853,18 +875,19 @@ impl LyricsService {
                     }
                     candidates.push(candidate_from_source(resolved));
                 }
-                Ok(Some(_)) => self.record_resolution_step(
+                Ok(LyricsLookupOutcome::Hit(_)) => self.record_resolution_step(
                     generation,
                     "QQ 本地兜底",
                     LyricsResolutionOutcome::Error,
                     Some("歌词时间轴超出歌曲有效范围".to_owned()),
                 ),
-                Ok(None) => self.record_resolution_step(
+                Ok(LyricsLookupOutcome::Miss(reason)) => self.record_resolution_step(
                     generation,
                     "QQ 本地兜底",
                     LyricsResolutionOutcome::Miss,
-                    None,
+                    Some(lookup_miss_detail(reason).to_owned()),
                 ),
+                Ok(LyricsLookupOutcome::Unsupported) => {}
                 Err(LyricsError::Cancelled) => return,
                 Err(error) => {
                     self.record_resolution_step(
@@ -902,17 +925,14 @@ impl LyricsService {
             LyricsOnlineStrategy::Parallel => {
                 let (current_online_result, qq_online_result, netease_result) =
                     thread::scope(|scope| {
-                        let current_online =
-                            players::supports_current_online(track.player).then(|| {
-                                scope.spawn(|| {
-                                    players::resolve_current_online(
-                                        &track,
-                                        path,
-                                        &self.inner.client,
-                                        &deadline,
-                                    )
-                                })
-                            });
+                        let current_online = scope.spawn(|| {
+                            players::resolve_current_online(
+                                &track,
+                                path,
+                                &self.inner.client,
+                                &deadline,
+                            )
+                        });
                         let qq_online = (track.player != MediaPlayer::QqMusic).then(|| {
                             scope.spawn(|| {
                                 players::resolve_qq_online(&track, &self.inner.client, &deadline)
@@ -928,7 +948,7 @@ impl LyricsService {
                             })
                         });
                         (
-                            current_online.and_then(|handle| handle.join().ok()),
+                            current_online.join().ok(),
                             qq_online.and_then(|handle| handle.join().ok()),
                             netease.and_then(|handle| handle.join().ok()),
                         )
@@ -952,28 +972,24 @@ impl LyricsService {
                 );
             }
             LyricsOnlineStrategy::CurrentPlayerFirst => {
-                if players::supports_current_online(track.player) {
-                    let current_result = players::resolve_current_online(
-                        &track,
-                        path,
-                        &self.inner.client,
-                        &deadline,
-                    );
-                    let (outcome, detail) = summarize_resolution_result(&current_result);
-                    self.record_resolution_step(generation, "当前播放器在线优先", outcome, detail);
-                    match current_result {
-                        Ok(Some(resolved))
-                            if is_plausible_timeline(&track, &resolved.lines)
-                                && has_word_timing(&resolved.lines) =>
-                        {
-                            self.publish_resolution(&track, resolved, generation);
-                            return;
-                        }
-                        Ok(Some(resolved)) => candidates.push(candidate_from_source(resolved)),
-                        Ok(None) => {}
-                        Err(LyricsError::Cancelled) => return,
-                        Err(error) => log::warn!("当前播放器在线歌词适配器失败: {error}"),
+                let current_result =
+                    players::resolve_current_online(&track, path, &self.inner.client, &deadline);
+                let (outcome, detail) = summarize_resolution_result(&current_result);
+                self.record_resolution_step(generation, "当前播放器在线优先", outcome, detail);
+                match current_result {
+                    Ok(LyricsLookupOutcome::Hit(resolved))
+                        if is_plausible_timeline(&track, &resolved.lines)
+                            && has_word_timing(&resolved.lines) =>
+                    {
+                        self.publish_resolution(&track, resolved, generation);
+                        return;
                     }
+                    Ok(LyricsLookupOutcome::Hit(resolved)) => {
+                        candidates.push(candidate_from_source(resolved));
+                    }
+                    Ok(LyricsLookupOutcome::Unsupported | LyricsLookupOutcome::Miss(_)) => {}
+                    Err(LyricsError::Cancelled) => return,
+                    Err(error) => log::warn!("当前播放器在线歌词适配器失败: {error}"),
                 }
 
                 let (qq_online_result, netease_result) = thread::scope(|scope| {
@@ -1175,8 +1191,11 @@ impl LyricsService {
                 detail,
             );
             match result {
-                Ok(Some(resolved)) => candidates.push(candidate_from_source(resolved)),
-                Ok(None) | Err(LyricsError::Cancelled) => {}
+                Ok(LyricsLookupOutcome::Hit(resolved)) => {
+                    candidates.push(candidate_from_source(resolved));
+                }
+                Ok(LyricsLookupOutcome::Unsupported | LyricsLookupOutcome::Miss(_))
+                | Err(LyricsError::Cancelled) => {}
                 Err(error) => log::warn!("跨平台歌词适配器失败: {error}"),
             }
         }
@@ -1337,7 +1356,8 @@ impl LyricsService {
         if current_uses_player_local
             && local_after_change
                 .as_ref()
-                .and_then(|result| result.as_ref().ok().and_then(Option::as_ref))
+                .and_then(|result| result.as_ref().ok())
+                .and_then(lookup_hit)
                 .is_some_and(|local| self.current_snapshot_matches(&track.key, local))
         {
             return Ok(());
@@ -1346,7 +1366,8 @@ impl LyricsService {
         if current_has_word_timing && !current_uses_player_local {
             let local_can_replace_word_timing = local_after_change
                 .as_ref()
-                .and_then(|result| result.as_ref().ok().and_then(Option::as_ref))
+                .and_then(|result| result.as_ref().ok())
+                .and_then(lookup_hit)
                 .is_some_and(|local| {
                     is_plausible_timeline(&track, &local.lines) && has_word_timing(&local.lines)
                 });
@@ -1489,6 +1510,14 @@ fn candidate_from_source(resolved: ResolvedLyrics) -> LyricsCandidate {
     }
 }
 
+/// 只借用命中值，供文件事件比较路径使用。
+fn lookup_hit(outcome: &LyricsLookupOutcome) -> Option<&ResolvedLyrics> {
+    match outcome {
+        LyricsLookupOutcome::Hit(resolved) => Some(resolved),
+        LyricsLookupOutcome::Unsupported | LyricsLookupOutcome::Miss(_) => None,
+    }
+}
+
 fn method_from_source(resolved: &ResolvedLyrics) -> LyricsResolutionMethod {
     match resolved.source.kind {
         LyricsSourceKind::Local => LyricsResolutionMethod::PlayerLocal,
@@ -1497,12 +1526,29 @@ fn method_from_source(resolved: &ResolvedLyrics) -> LyricsResolutionMethod {
 }
 
 fn summarize_resolution_result(
-    result: &Result<Option<ResolvedLyrics>, LyricsError>,
+    result: &LyricsResolutionResult,
 ) -> (LyricsResolutionOutcome, Option<String>) {
     match result {
-        Ok(Some(resolved)) => (LyricsResolutionOutcome::Hit, Some(source_summary(resolved))),
-        Ok(None) => (LyricsResolutionOutcome::Miss, None),
+        Ok(LyricsLookupOutcome::Hit(resolved)) => {
+            (LyricsResolutionOutcome::Hit, Some(source_summary(resolved)))
+        }
+        Ok(LyricsLookupOutcome::Miss(reason)) => (
+            LyricsResolutionOutcome::Miss,
+            Some(lookup_miss_detail(*reason).to_owned()),
+        ),
+        Ok(LyricsLookupOutcome::Unsupported) => (
+            LyricsResolutionOutcome::Miss,
+            Some("当前适配器不支持此解析能力".to_owned()),
+        ),
         Err(error) => (LyricsResolutionOutcome::Error, Some(error.to_string())),
+    }
+}
+
+/// 将稳定未命中分类转换为诊断文案，不泄漏播放器私有实现。
+fn lookup_miss_detail(reason: LyricsLookupMiss) -> &'static str {
+    match reason {
+        LyricsLookupMiss::DataUnavailable => "解析所需的本地数据不可用",
+        LyricsLookupMiss::NoReliableLyrics => "没有找到可靠歌词",
     }
 }
 

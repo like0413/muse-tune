@@ -1,5 +1,7 @@
 //! 通过 Windows GSMTC 事件提供当前歌曲信息和基础播放控制。
 
+use std::sync::Arc;
+
 mod model;
 mod monitor;
 mod players;
@@ -19,11 +21,15 @@ pub(crate) use model::{
 };
 pub use monitor::MediaService;
 
+/// 完整媒体快照的后端订阅者，由组合根注入以隔离下游领域实现。
+pub(crate) type MediaSnapshotSubscriber = Arc<dyn Fn(&Option<MediaSessionSnapshot>) + Send + Sync>;
+
 /// 启动媒体会话服务。
-pub fn initialize<R: tauri::Runtime>(
+pub(crate) fn initialize<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
+    snapshot_subscriber: MediaSnapshotSubscriber,
 ) -> Result<MediaService, std::io::Error> {
-    MediaService::initialize(app)
+    MediaService::initialize(app, snapshot_subscriber)
 }
 
 use model::{MediaMetadata, MediaPlayback, MediaPlaybackControls};

@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Emitter, Runtime};
 use windows::{
     Foundation::TypedEventHandler,
     Media::Control::{
@@ -20,7 +20,8 @@ use windows::{
 
 use super::{
     MediaControlAction, MediaMetadata, MediaPlayback, MediaPlaybackControls, MediaPlayer,
-    MediaSessionSelectionPolicy, MediaSessionSnapshot, MediaTimeline, MediaVolumeSnapshot,
+    MediaSessionSelectionPolicy, MediaSessionSnapshot, MediaSnapshotSubscriber, MediaTimeline,
+    MediaVolumeSnapshot,
     model::MediaPlaybackStatus,
     players::{identify, selection_hold_after_title_change},
     selector::{SelectionCandidate, select_session},
@@ -71,7 +72,10 @@ struct MediaServiceInner {
 
 impl MediaService {
     /// 启动独立 WinRT MTA 线程，避免媒体 API 阻塞 Tauri 主线程。
-    pub fn initialize<R: Runtime>(app: AppHandle<R>) -> Result<Self, std::io::Error> {
+    pub(crate) fn initialize<R: Runtime>(
+        app: AppHandle<R>,
+        snapshot_subscriber: MediaSnapshotSubscriber,
+    ) -> Result<Self, std::io::Error> {
         let (sender, receiver) = mpsc::channel();
         let snapshot = Arc::new(RwLock::new(None));
         let worker_sender = sender.clone();
@@ -79,7 +83,15 @@ impl MediaService {
 
         thread::Builder::new()
             .name("media-session-monitor".to_owned())
-            .spawn(move || run_worker(app, worker_sender, receiver, worker_snapshot))?;
+            .spawn(move || {
+                run_worker(
+                    app,
+                    worker_sender,
+                    receiver,
+                    worker_snapshot,
+                    snapshot_subscriber,
+                );
+            })?;
 
         Ok(Self {
             inner: Arc::new(MediaServiceInner { sender, snapshot }),
@@ -243,6 +255,13 @@ struct SelectedMedia<R: Runtime> {
     spectrum: AudioSpectrumController<R>,
 }
 
+/// 聚合完整快照发布所需的只读依赖，不拥有媒体 worker 状态。
+struct MediaSnapshotPublisher<'a, R: Runtime> {
+    app: &'a AppHandle<R>,
+    snapshot: &'a RwLock<Option<MediaSessionSnapshot>>,
+    subscriber: &'a MediaSnapshotSubscriber,
+}
+
 /// 单次时间线刷新结果，用于区分轻量位置更新与会话质量变化。
 #[derive(Clone, Copy, Default)]
 struct TimelineRefresh {
@@ -278,6 +297,7 @@ fn run_worker<R: Runtime>(
     sender: Sender<WorkerMessage>,
     receiver: Receiver<WorkerMessage>,
     snapshot: Arc<RwLock<Option<MediaSessionSnapshot>>>,
+    snapshot_subscriber: MediaSnapshotSubscriber,
 ) {
     // SAFETY: 此处运行在新建专用线程，成功初始化后在线程退出前成对调用 RoUninitialize。
     if let Err(error) = unsafe { RoInitialize(RO_INIT_MULTITHREADED) } {
@@ -303,6 +323,11 @@ fn run_worker<R: Runtime>(
         volume: ApplicationVolumeController::new(sender.clone()),
         spectrum: AudioSpectrumController::new(app.clone()),
     };
+    let snapshot_publisher = MediaSnapshotPublisher {
+        app: &app,
+        snapshot: &snapshot,
+        subscriber: &snapshot_subscriber,
+    };
     synchronize_sessions(
         &manager.manager,
         &sender,
@@ -313,8 +338,7 @@ fn run_worker<R: Runtime>(
         selection_policy.only_supported_players,
     );
     reconcile_selection_and_volume(
-        &app,
-        &snapshot,
+        &snapshot_publisher,
         &manager.manager,
         &sessions,
         &mut selected,
@@ -337,8 +361,7 @@ fn run_worker<R: Runtime>(
                 let selected_was_refreshed =
                     refresh_all_playback(&mut sessions, &mut next_activity_order, selected.id);
                 reconcile_selection_and_volume(
-                    &app,
-                    &snapshot,
+                    &snapshot_publisher,
                     &manager.manager,
                     &sessions,
                     &mut selected,
@@ -358,8 +381,7 @@ fn run_worker<R: Runtime>(
                 if metadata_refresh.changed || timeline_refresh.availability_changed {
                     let selected_was_refreshed = selected.id == Some(session_id);
                     reconcile_selection_and_volume(
-                        &app,
-                        &snapshot,
+                        &snapshot_publisher,
                         &manager.manager,
                         &sessions,
                         &mut selected,
@@ -391,8 +413,7 @@ fn run_worker<R: Runtime>(
                 {
                     let selected_was_refreshed = selected.id == Some(session_id);
                     reconcile_selection_and_volume(
-                        &app,
-                        &snapshot,
+                        &snapshot_publisher,
                         &manager.manager,
                         &sessions,
                         &mut selected,
@@ -422,8 +443,7 @@ fn run_worker<R: Runtime>(
                 {
                     let selected_was_refreshed = selected.id == Some(session_id);
                     reconcile_selection_and_volume(
-                        &app,
-                        &snapshot,
+                        &snapshot_publisher,
                         &manager.manager,
                         &sessions,
                         &mut selected,
@@ -448,8 +468,7 @@ fn run_worker<R: Runtime>(
                         selection_policy.only_supported_players,
                     );
                     reconcile_selection_and_volume(
-                        &app,
-                        &snapshot,
+                        &snapshot_publisher,
                         &manager.manager,
                         &sessions,
                         &mut selected,
@@ -853,8 +872,7 @@ fn refresh_timeline(entries: &mut [SessionEntry], session_id: u64) -> TimelineRe
 
 /// 按当前策略重新选择会话，仅在目标或已显示内容变化时广播。
 fn reconcile_selection<R: Runtime>(
-    app: &AppHandle<R>,
-    snapshot: &RwLock<Option<MediaSessionSnapshot>>,
+    publisher: &MediaSnapshotPublisher<'_, R>,
     manager: &GlobalSystemMediaTransportControlsSessionManager,
     entries: &[SessionEntry],
     selected_id: &mut Option<u64>,
@@ -887,15 +905,14 @@ fn reconcile_selection<R: Runtime>(
     *selected_id = next_id;
 
     if selection_changed || force_publish {
-        publish_selected_snapshot(app, snapshot, entries, next_id);
+        publish_selected_snapshot(publisher, entries, next_id);
     }
     selection_changed
 }
 
 /// 统一处理会话选择与音量目标切换，避免各事件分支重复绑定逻辑。
 fn reconcile_selection_and_volume<R: Runtime>(
-    app: &AppHandle<R>,
-    snapshot: &RwLock<Option<MediaSessionSnapshot>>,
+    publisher: &MediaSnapshotPublisher<'_, R>,
     manager: &GlobalSystemMediaTransportControlsSessionManager,
     entries: &[SessionEntry],
     selected: &mut SelectedMedia<R>,
@@ -903,8 +920,7 @@ fn reconcile_selection_and_volume<R: Runtime>(
     force_publish: bool,
 ) {
     if reconcile_selection(
-        app,
-        snapshot,
+        publisher,
         manager,
         entries,
         &mut selected.id,
@@ -913,7 +929,7 @@ fn reconcile_selection_and_volume<R: Runtime>(
     ) {
         bind_selected_volume(&mut selected.volume, entries, selected.id);
         selected.spectrum.bind(selected.volume.capture_process_id());
-        publish_volume(app, selected.volume.snapshot());
+        publish_volume(publisher.app, selected.volume.snapshot());
     }
 }
 
@@ -980,8 +996,7 @@ fn metadata_completeness(metadata: &MediaMetadata) -> u8 {
 
 /// 发布已选会话快照；不存在有效目标时清空任务栏媒体状态。
 fn publish_selected_snapshot<R: Runtime>(
-    app: &AppHandle<R>,
-    snapshot: &RwLock<Option<MediaSessionSnapshot>>,
+    publisher: &MediaSnapshotPublisher<'_, R>,
     entries: &[SessionEntry],
     selected_id: Option<u64>,
 ) {
@@ -989,7 +1004,7 @@ fn publish_selected_snapshot<R: Runtime>(
         .iter()
         .find(|entry| Some(entry.id) == selected_id)
         .map(|entry| entry.snapshot.clone());
-    publish_snapshot(app, snapshot, next);
+    publish_snapshot(publisher, next);
 }
 
 /// 仅发布轻量时间线，避免播放器定期更新时间时重复序列化封面。
@@ -1164,17 +1179,14 @@ fn read_timeline(
 
 /// 原子替换缓存并把相同值广播给所有任务栏窗口。
 fn publish_snapshot<R: Runtime>(
-    app: &AppHandle<R>,
-    snapshot: &RwLock<Option<MediaSessionSnapshot>>,
+    publisher: &MediaSnapshotPublisher<'_, R>,
     next: Option<MediaSessionSnapshot>,
 ) {
-    if let Ok(mut current) = snapshot.write() {
+    if let Ok(mut current) = publisher.snapshot.write() {
         current.clone_from(&next);
     }
-    emit_snapshot(app, &next);
-    if let Some(lyrics) = app.try_state::<crate::lyrics::LyricsService>() {
-        lyrics.update_media(next.as_ref());
-    }
+    emit_snapshot(publisher.app, &next);
+    (publisher.subscriber)(&next);
 }
 
 /// 广播媒体快照；窗口未就绪时由前端初始 command 补取缓存。
