@@ -1,5 +1,7 @@
-import { onActivated, onUnmounted, readonly, shallowRef } from 'vue'
+import { computed, onActivated, onUnmounted, readonly, shallowRef } from 'vue'
 import { toast } from 'vue-sonner'
+
+import { normalizeIpcError, type IpcError } from '@/features/ipc/errors'
 
 import {
   clearLogHistory,
@@ -9,7 +11,7 @@ import {
   openDataDirectory,
   refreshCurrentLyrics,
   resetConfiguration,
-} from './api'
+} from './client'
 import type { DataDirectoryKind, DataOverview } from './types'
 
 /** 管理数据页的读取和用户操作状态。 */
@@ -23,7 +25,8 @@ export function useDataManagement() {
   const clearingLogs = shallowRef(false)
   const openingDirectory = shallowRef<DataDirectoryKind | null>(null)
   const cacheCleared = shallowRef(false)
-  const errorMessage = shallowRef<string | null>(null)
+  const error = shallowRef<IpcError | null>(null)
+  const errorMessage = computed(() => error.value?.message ?? null)
   let refreshRequestId = 0
   let clearStatusTimer: number | undefined
   let logClearStatusTimer: number | undefined
@@ -38,10 +41,10 @@ export function useDataManagement() {
       const next = await getDataOverview()
       if (!disposed && requestId === refreshRequestId) {
         overview.value = next
-        errorMessage.value = null
+        error.value = null
       }
     } catch (error) {
-      if (!disposed && requestId === refreshRequestId) errorMessage.value = String(error)
+      if (!disposed && requestId === refreshRequestId) setError(error)
     } finally {
       if (!disposed && requestId === refreshRequestId) loading.value = false
     }
@@ -52,9 +55,9 @@ export function useDataManagement() {
     openingDirectory.value = kind
     try {
       await openDataDirectory(kind)
-      errorMessage.value = null
+      error.value = null
     } catch (error) {
-      errorMessage.value = String(error)
+      setError(error)
     } finally {
       openingDirectory.value = null
     }
@@ -67,11 +70,11 @@ export function useDataManagement() {
     window.clearTimeout(clearStatusTimer)
     try {
       overview.value = await clearLyricsCache()
-      errorMessage.value = null
+      error.value = null
       cacheCleared.value = true
       clearStatusTimer = window.setTimeout(() => (cacheCleared.value = false), 2_000)
     } catch (error) {
-      errorMessage.value = String(error)
+      setError(error)
     } finally {
       clearing.value = false
     }
@@ -82,12 +85,12 @@ export function useDataManagement() {
     clearingCurrent.value = true
     try {
       overview.value = await clearCurrentLyricsCache()
-      errorMessage.value = null
+      error.value = null
       toast.success('当前歌曲缓存已清理', {
         description: '该条目已从 Muse Tune 缓存中移除',
       })
     } catch (error) {
-      errorMessage.value = String(error)
+      setError(error)
     } finally {
       clearingCurrent.value = false
     }
@@ -98,12 +101,12 @@ export function useDataManagement() {
     refreshingCurrent.value = true
     try {
       overview.value = await refreshCurrentLyrics()
-      errorMessage.value = null
+      error.value = null
       toast.success('已开始重新获取当前歌词', {
         description: '将按当前联网策略重新执行完整获取链路',
       })
     } catch (error) {
-      errorMessage.value = String(error)
+      setError(error)
     } finally {
       refreshingCurrent.value = false
     }
@@ -114,9 +117,9 @@ export function useDataManagement() {
     resetting.value = true
     try {
       await resetConfiguration()
-      errorMessage.value = null
+      error.value = null
     } catch (error) {
-      errorMessage.value = String(error)
+      setError(error)
       resetting.value = false
     }
   }
@@ -128,11 +131,11 @@ export function useDataManagement() {
     window.clearTimeout(logClearStatusTimer)
     try {
       overview.value = await clearLogHistory()
-      errorMessage.value = null
+      error.value = null
       logsCleared.value = true
       logClearStatusTimer = window.setTimeout(() => (logsCleared.value = false), 2_000)
     } catch (error) {
-      errorMessage.value = String(error)
+      setError(error)
     } finally {
       clearingLogs.value = false
     }
@@ -146,6 +149,11 @@ export function useDataManagement() {
     window.clearTimeout(logClearStatusTimer)
   })
 
+  /** 保留结构化错误，界面当前只展示消息，后续操作可读取是否允许安全重试。 */
+  function setError(value: unknown) {
+    error.value = normalizeIpcError(value, 'data.unknown')
+  }
+
   return {
     overview: readonly(overview),
     loading: readonly(loading),
@@ -157,7 +165,8 @@ export function useDataManagement() {
     openingDirectory: readonly(openingDirectory),
     cacheCleared: readonly(cacheCleared),
     logsCleared: readonly(logsCleared),
-    errorMessage: readonly(errorMessage),
+    error: readonly(error),
+    errorMessage,
     refresh,
     openDirectory,
     clearCache,

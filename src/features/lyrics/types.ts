@@ -5,7 +5,9 @@ export type LyricsPrecision = 'word' | 'line'
 export type LyricsSourceKind = 'local' | 'online'
 export type LyricsResolutionMethod = 'none' | 'application_cache' | 'player_local' | 'online'
 export type LyricsResolutionOutcome = 'hit' | 'miss' | 'error'
-export type LyricsOnlineStrategy = 'parallel' | 'current_player_first'
+/** 前后端共同支持的在线歌词调度策略。 */
+export const LYRICS_ONLINE_STRATEGIES = ['parallel', 'current_player_first'] as const
+export type LyricsOnlineStrategy = (typeof LYRICS_ONLINE_STRATEGIES)[number]
 
 export interface LyricsResolutionStep {
   label: string

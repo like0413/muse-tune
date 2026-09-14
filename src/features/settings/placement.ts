@@ -1,10 +1,9 @@
-import { invoke } from '@tauri-apps/api/core'
+import { setTaskbarPlacement as applyNativeTaskbarPlacement } from '@/features/taskbar/client'
+import { TASKBAR_PLACEMENTS, type TaskbarPlacement } from '@/features/taskbar/contracts'
 
 import { settingsStore } from './store'
 
-const TASKBAR_PLACEMENTS = ['auto', 'left', 'right'] as const
-
-export type TaskbarPlacement = (typeof TASKBAR_PLACEMENTS)[number]
+export type { TaskbarPlacement } from '@/features/taskbar/contracts'
 
 const TASKBAR_PLACEMENT_KEY = 'taskbar.placement'
 const DEFAULT_TASKBAR_PLACEMENT: TaskbarPlacement = 'auto'
@@ -28,5 +27,5 @@ export async function setTaskbarPlacement(placement: TaskbarPlacement): Promise<
 
 /** 将播放器位置同步到原生任务栏定位线程。 */
 export async function applyTaskbarPlacement(placement: TaskbarPlacement): Promise<void> {
-  await invoke('set_taskbar_placement', { placement })
+  await applyNativeTaskbarPlacement(placement)
 }

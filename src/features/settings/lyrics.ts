@@ -1,7 +1,9 @@
-import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
 import { clamp } from 'es-toolkit'
+
+import { setLyricsPreferences } from '@/features/lyrics/client'
+import { LYRICS_ONLINE_STRATEGIES, type LyricsOnlineStrategy } from '@/features/lyrics/types'
 
 import { SETTINGS_SCHEMA_VERSIONS } from './storage/schema-versions'
 import { getVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
@@ -13,7 +15,6 @@ const TASKBAR_LYRICS_ALIGNMENTS = ['left', 'center', 'right'] as const
 const TASKBAR_LYRICS_LINE_MODES = ['single', 'double'] as const
 const TASKBAR_LYRICS_SECONDARY_LINES = ['translation_only', 'next', 'translation_or_next'] as const
 const TASKBAR_LYRICS_NETWORK_POLICIES = ['auto', 'local_only'] as const
-const TASKBAR_LYRICS_ONLINE_STRATEGIES = ['parallel', 'current_player_first'] as const
 const TASKBAR_LYRICS_ANIMATIONS = ['none', 'up'] as const
 const TASKBAR_LYRICS_COLOR_SCHEMES = ['theme', 'custom'] as const
 const MAX_FONT_FAMILY_LENGTH = 128
@@ -26,7 +27,6 @@ export type TaskbarLyricsAlignment = (typeof TASKBAR_LYRICS_ALIGNMENTS)[number]
 export type TaskbarLyricsLineMode = (typeof TASKBAR_LYRICS_LINE_MODES)[number]
 export type TaskbarLyricsSecondaryLine = (typeof TASKBAR_LYRICS_SECONDARY_LINES)[number]
 export type TaskbarLyricsNetworkPolicy = (typeof TASKBAR_LYRICS_NETWORK_POLICIES)[number]
-export type TaskbarLyricsOnlineStrategy = (typeof TASKBAR_LYRICS_ONLINE_STRATEGIES)[number]
 export type TaskbarLyricsAnimation = (typeof TASKBAR_LYRICS_ANIMATIONS)[number]
 export type TaskbarLyricsColorScheme = (typeof TASKBAR_LYRICS_COLOR_SCHEMES)[number]
 
@@ -36,7 +36,7 @@ export interface TaskbarLyricsSettings {
   lineMode: TaskbarLyricsLineMode
   secondaryLine: TaskbarLyricsSecondaryLine
   networkPolicy: TaskbarLyricsNetworkPolicy
-  onlineStrategy: TaskbarLyricsOnlineStrategy
+  onlineStrategy: LyricsOnlineStrategy
   timingOffsetMs: number
   wordHighlight: boolean
   animation: TaskbarLyricsAnimation
@@ -87,10 +87,8 @@ export function isTaskbarLyricsNetworkPolicy(value: unknown): value is TaskbarLy
 }
 
 /** 判断外部值是否为支持的在线歌词调度策略。 */
-export function isTaskbarLyricsOnlineStrategy(
-  value: unknown,
-): value is TaskbarLyricsOnlineStrategy {
-  return TASKBAR_LYRICS_ONLINE_STRATEGIES.some((strategy) => strategy === value)
+export function isTaskbarLyricsOnlineStrategy(value: unknown): value is LyricsOnlineStrategy {
+  return LYRICS_ONLINE_STRATEGIES.some((strategy) => strategy === value)
 }
 
 /** 将时间偏移限制到可校准的范围；正值表示延后显示。 */
@@ -212,7 +210,7 @@ export async function setTaskbarLyricsSettings(value: TaskbarLyricsSettings): Pr
     saved.onlineStrategy !== previous.onlineStrategy
   ) {
     try {
-      await invoke('set_lyrics_preferences', {
+      await setLyricsPreferences({
         enabled: saved.enabled,
         allowOnline: saved.networkPolicy === 'auto',
         onlineStrategy: saved.onlineStrategy,

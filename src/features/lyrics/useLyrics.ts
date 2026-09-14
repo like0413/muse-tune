@@ -1,10 +1,9 @@
-import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
 
+import { getCurrentLyrics, LYRICS_CHANGED_EVENT } from './client'
 import type { LyricsSnapshot } from './types'
 
-const LYRICS_CHANGED_EVENT = 'lyrics://changed'
 const EMPTY_LYRICS: LyricsSnapshot = {
   trackKey: null,
   status: 'unavailable',
@@ -33,7 +32,7 @@ export function useLyrics() {
         return
       }
       unlisten = stopListener
-      const initial = await invoke<LyricsSnapshot>('get_current_lyrics')
+      const initial = await getCurrentLyrics()
       if (!disposed && !receivedEvent) lyrics.value = initial
     } catch (error) {
       console.error('初始化歌词状态失败', error)

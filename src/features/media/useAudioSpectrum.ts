@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
 
@@ -8,7 +7,8 @@ import {
   listenTaskbarAudioSpectrumSettingsChange,
 } from '@/features/settings/audio-spectrum'
 
-const MEDIA_SPECTRUM_CHANGED_EVENT = 'media://spectrum-changed'
+import { MEDIA_SPECTRUM_CHANGED_EVENT, setMediaSpectrumEnabled } from './client'
+
 const SOURCE_BAND_COUNT = 64
 
 /** 订阅真实播放器频谱与显示设置，并按显隐状态启停原生采集。 */
@@ -25,7 +25,7 @@ export function useAudioSpectrum() {
     if (captureEnabled === enabled) return
     captureEnabled = enabled
     try {
-      await invoke('set_media_spectrum_enabled', { enabled })
+      await setMediaSpectrumEnabled(enabled)
     } catch (error) {
       console.error('切换播放器频谱采集失败', error)
     }

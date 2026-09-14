@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import type { UpdateCheckFrequency } from '@/features/updater/settings'
+import { isUpdateCheckFrequency, type UpdateCheckFrequency } from '@/features/updater/settings'
 import { UPDATE_RELEASES_URL, type UpdateStatus } from '@/features/updater/useApplicationUpdater'
 
 const props = defineProps<{
@@ -72,7 +72,7 @@ const installButtonLabel = computed(() => {
 
 /** 仅接受选择器声明的三个检测周期。 */
 function selectUpdateCheckFrequency(value: unknown) {
-  if (value === 'daily' || value === 'weekly' || value === 'monthly') {
+  if (isUpdateCheckFrequency(value)) {
     emit('updateAutomaticCheckFrequency', value)
   }
 }

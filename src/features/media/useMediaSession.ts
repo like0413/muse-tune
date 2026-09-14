@@ -1,11 +1,13 @@
-import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
 
+import {
+  controlMediaSession,
+  getCurrentMediaSession,
+  MEDIA_SESSION_CHANGED_EVENT,
+  MEDIA_TIMELINE_CHANGED_EVENT,
+} from './client'
 import type { MediaControlAction, MediaSessionSnapshot, MediaTimeline } from './types'
-
-const MEDIA_SESSION_CHANGED_EVENT = 'media://session-changed'
-const MEDIA_TIMELINE_CHANGED_EVENT = 'media://timeline-changed'
 
 /** 同步 Windows 当前媒体会话，并提供串行基础播放控制。 */
 export function useMediaSession() {
@@ -37,7 +39,7 @@ export function useMediaSession() {
       }
       unlistenSession = stopSessionListener
       unlistenTimeline = stopTimelineListener
-      const initial = await invoke<MediaSessionSnapshot | null>('get_current_media_session')
+      const initial = await getCurrentMediaSession()
       if (!disposed && !receivedEvent) {
         session.value = initial
         timeline.value = initial?.timeline ?? null
@@ -52,7 +54,7 @@ export function useMediaSession() {
     if (controlPending.value) return
     controlPending.value = true
     try {
-      const accepted = await invoke<boolean>('control_media_session', { action })
+      const accepted = await controlMediaSession(action)
       if (!accepted) console.warn('当前播放器拒绝了媒体控制请求', action)
     } catch (error) {
       console.error('控制 Windows 媒体会话失败', error)

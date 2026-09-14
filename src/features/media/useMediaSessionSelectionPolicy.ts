@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 
 import {
@@ -6,6 +5,7 @@ import {
   listenMediaSessionSelectionPolicyChange,
 } from '@/features/settings/media-session'
 
+import { setMediaSessionSelectionPolicy } from './client'
 import type { MediaSessionSelectionPolicy } from './types'
 
 /** 将前端持久化策略同步到持有全部 WinRT 会话的 Rust 服务。 */
@@ -19,7 +19,7 @@ export function useMediaSessionSelectionPolicy() {
   function applyPolicy(policy: MediaSessionSelectionPolicy): Promise<void> {
     applyQueue = applyQueue.then(async () => {
       try {
-        await invoke('set_media_session_selection_policy', { policy })
+        await setMediaSessionSelectionPolicy(policy)
       } catch (error) {
         console.error('应用媒体会话选择策略失败', error)
       }

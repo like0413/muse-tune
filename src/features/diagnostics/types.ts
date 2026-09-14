@@ -1,6 +1,6 @@
 import type { LyricsDiagnostics } from '@/features/lyrics/types'
 import type { MediaPlaybackStatus, MediaPlayer } from '@/features/media/types'
-import type { TaskbarDisplay } from '@/features/settings/display'
+import type { TaskbarDisplay } from '@/features/taskbar/contracts'
 
 export interface ApplicationDiagnostics {
   name: string

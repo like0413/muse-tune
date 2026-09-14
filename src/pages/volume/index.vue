@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
 
@@ -13,6 +12,7 @@ import {
   type VolumePopupOpenPayload,
   type VolumePopupOwnerPayload,
 } from '@/features/media/volume-popup'
+import { hideVolumePopup } from '@/features/taskbar/client'
 
 const { volume, setLevel, adjustLevel } = useApplicationVolume()
 const ownerLabel = shallowRef('')
@@ -65,7 +65,7 @@ function close(payload: VolumePopupOwnerPayload) {
   hideTimer = setTimeout(async () => {
     hideTimer = undefined
     try {
-      await invoke('hide_volume_popup', { generation: closingGeneration })
+      await hideVolumePopup(closingGeneration)
     } catch (error) {
       console.error('隐藏音量悬浮窗失败', error)
     }

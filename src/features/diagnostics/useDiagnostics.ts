@@ -1,14 +1,17 @@
-import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
 import { useDebounceFn } from '@vueuse/core'
 
+import { LYRICS_DIAGNOSTICS_CHANGED_EVENT } from '@/features/lyrics/client'
+import { MEDIA_SESSION_CHANGED_EVENT } from '@/features/media/client'
+
+import { getDiagnostics } from './client'
 import { createSanitizedDiagnosticsReport } from './report'
 import type { DiagnosticsSnapshot } from './types'
 
 const DIAGNOSTICS_REFRESH_EVENTS = [
-  'media://session-changed',
-  'lyrics://diagnostics-changed',
+  MEDIA_SESSION_CHANGED_EVENT,
+  LYRICS_DIAGNOSTICS_CHANGED_EVENT,
 ] as const
 
 /** 使用现有业务事件刷新应用诊断，不引入定时轮询。 */
@@ -49,7 +52,7 @@ export function useDiagnostics() {
         storageRefreshQueued = false
         const currentLifecycle = lifecycleId
         try {
-          const next = await invoke<DiagnosticsSnapshot>('get_diagnostics', { refreshStorage })
+          const next = await getDiagnostics(refreshStorage)
           if (!disposed && currentLifecycle === lifecycleId) {
             diagnostics.value = next
             errorMessage.value = null

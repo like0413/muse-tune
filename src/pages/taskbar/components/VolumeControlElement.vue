@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Volume1, Volume2, VolumeX } from '@lucide/vue'
-import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emitTo, listen } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -15,6 +14,7 @@ import {
   VOLUME_POPUP_LABEL,
   type VolumePopupHoverPayload,
 } from '@/features/media/volume-popup'
+import { showVolumePopup } from '@/features/taskbar/client'
 
 const props = defineProps<{
   themeColor: string
@@ -60,10 +60,7 @@ async function openPopup() {
   cancelClose()
   const bounds = anchor.value.getBoundingClientRect()
   try {
-    await invoke('show_volume_popup', {
-      anchorCenterX: bounds.left + bounds.width / 2,
-      themeColor: props.themeColor,
-    })
+    await showVolumePopup(bounds.left + bounds.width / 2, props.themeColor)
   } catch (error) {
     console.error('显示音量悬浮窗失败', error)
   }

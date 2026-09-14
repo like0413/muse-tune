@@ -1,7 +1,8 @@
-import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
 import { clamp } from 'es-toolkit'
+
+import { setTaskbarWidth as applyNativeTaskbarWidth } from '@/features/taskbar/client'
 
 import { settingsStore } from './store'
 
@@ -44,7 +45,7 @@ export async function getTaskbarWidth(): Promise<number> {
 export async function applyTaskbarWidth(width: number): Promise<void> {
   const normalized = normalizeTaskbarWidth(width)
   if (normalized !== undefined) {
-    await invoke('set_taskbar_width', { width: normalized })
+    await applyNativeTaskbarWidth(normalized)
     await emit(TASKBAR_WIDTH_CHANGED_EVENT, normalized)
   }
 }

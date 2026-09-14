@@ -1,16 +1,13 @@
-import { invoke } from '@tauri-apps/api/core'
+import {
+  listTaskbarDisplays as listNativeTaskbarDisplays,
+  setTaskbarDisplayTarget as applyNativeTaskbarDisplayTarget,
+} from '@/features/taskbar/client'
+import type { TaskbarDisplay } from '@/features/taskbar/contracts'
 
 import { settingsStore } from './store'
 
 export const ALL_TASKBAR_DISPLAYS = 'all'
-
-export interface TaskbarDisplay {
-  id: string
-  label: string
-  width: number
-  height: number
-  isPrimary: boolean
-}
+export type { TaskbarDisplay } from '@/features/taskbar/contracts'
 
 const TASKBAR_DISPLAY_TARGET_KEY = 'taskbar.displayTarget'
 
@@ -24,7 +21,7 @@ export async function getTaskbarDisplayTarget(): Promise<string> {
 
 /** 枚举当前由 Windows 创建了任务栏的显示器。 */
 export async function listTaskbarDisplays(): Promise<TaskbarDisplay[]> {
-  return invoke<TaskbarDisplay[]>('list_taskbar_displays')
+  return listNativeTaskbarDisplays()
 }
 
 /** 立即切换目标显示器，并在成功后持久化选择。 */
@@ -35,5 +32,5 @@ export async function setTaskbarDisplayTarget(target: string): Promise<void> {
 
 /** 将目标显示器同步到原生多任务栏窗口管理线程。 */
 export async function applyTaskbarDisplayTarget(target: string): Promise<void> {
-  await invoke('set_taskbar_display_target', { target })
+  await applyNativeTaskbarDisplayTarget(target)
 }

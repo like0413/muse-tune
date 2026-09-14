@@ -1,10 +1,12 @@
-import { invoke } from '@tauri-apps/api/core'
+import { setTaskbarOverlapPriority as applyNativeTaskbarOverlapPriority } from '@/features/taskbar/client'
+import {
+  TASKBAR_OVERLAP_PRIORITIES,
+  type TaskbarOverlapPriority,
+} from '@/features/taskbar/contracts'
 
 import { settingsStore } from './store'
 
-const TASKBAR_OVERLAP_PRIORITIES = ['bar', 'taskbar'] as const
-
-export type TaskbarOverlapPriority = (typeof TASKBAR_OVERLAP_PRIORITIES)[number]
+export type { TaskbarOverlapPriority } from '@/features/taskbar/contracts'
 
 const TASKBAR_OVERLAP_PRIORITY_KEY = 'taskbar.overlapPriority'
 const DEFAULT_TASKBAR_OVERLAP_PRIORITY: TaskbarOverlapPriority = 'bar'
@@ -30,5 +32,5 @@ export async function setTaskbarOverlapPriority(priority: TaskbarOverlapPriority
 
 /** 将任务栏元素遮挡优先级同步到原生任务栏定位线程。 */
 export async function applyTaskbarOverlapPriority(priority: TaskbarOverlapPriority): Promise<void> {
-  await invoke('set_taskbar_overlap_priority', { priority })
+  await applyNativeTaskbarOverlapPriority(priority)
 }

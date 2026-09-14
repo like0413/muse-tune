@@ -1,5 +1,6 @@
-import { invoke } from '@tauri-apps/api/core'
 import { isEqual } from 'es-toolkit'
+
+import { listSystemFonts } from './client'
 
 let cachedSystemFonts: readonly string[] = []
 let refreshRequest: Promise<readonly string[]> | undefined
@@ -19,10 +20,8 @@ export function refreshSystemFonts(): Promise<readonly string[]> {
 
 /** 调用后端枚举并规范字体族列表。 */
 async function loadSystemFonts(): Promise<readonly string[]> {
-  const fonts = await invoke<unknown>('list_system_fonts')
-  const nextFonts = Array.isArray(fonts)
-    ? fonts.filter((font): font is string => typeof font === 'string' && font.length > 0)
-    : []
+  const fonts = await listSystemFonts()
+  const nextFonts = fonts.filter((font) => font.length > 0)
   if (!isEqual(cachedSystemFonts, nextFonts)) cachedSystemFonts = nextFonts
   return cachedSystemFonts
 }

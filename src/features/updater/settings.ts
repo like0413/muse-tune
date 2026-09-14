@@ -14,7 +14,8 @@ const UPDATE_CHECK_RESULT_KEY = 'application.update-check-result'
 const UPDATE_CHECK_PREFERENCES_CHANGED_EVENT = 'updater://preferences-changed'
 const UPDATE_CHECK_RESULT_CHANGED_EVENT = 'updater://result-changed'
 
-export type UpdateCheckFrequency = 'daily' | 'weekly' | 'monthly'
+const UPDATE_CHECK_FREQUENCIES = ['daily', 'weekly', 'monthly'] as const
+export type UpdateCheckFrequency = (typeof UPDATE_CHECK_FREQUENCIES)[number]
 
 export interface UpdateCheckResult {
   checkedAt: number
@@ -38,10 +39,14 @@ function normalizeAutomaticUpdateCheck(value: unknown): boolean {
   return typeof value === 'boolean' ? value : AUTOMATIC_UPDATE_CHECK_DEFAULT
 }
 
+/** 判断持久化值是否为受支持的自动更新检查频率。 */
+export function isUpdateCheckFrequency(value: unknown): value is UpdateCheckFrequency {
+  return UPDATE_CHECK_FREQUENCIES.some((frequency) => frequency === value)
+}
+
+/** 将损坏或旧版频率设置回退为默认值。 */
 function normalizeUpdateCheckFrequency(value: unknown): UpdateCheckFrequency {
-  return value === 'daily' || value === 'weekly' || value === 'monthly'
-    ? value
-    : DEFAULT_UPDATE_CHECK_FREQUENCY
+  return isUpdateCheckFrequency(value) ? value : DEFAULT_UPDATE_CHECK_FREQUENCY
 }
 
 function normalizeUpdateCheckResult(value: unknown): UpdateCheckResult {

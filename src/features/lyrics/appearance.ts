@@ -1,6 +1,6 @@
 import type { TaskbarLyricsSettings } from '@/features/settings/lyrics'
 
-export interface ResolvedLyricsAppearance {
+interface ResolvedLyricsAppearance {
   playedColor: string
   unplayedColor: string
   fontFamily?: string

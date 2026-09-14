@@ -1,10 +1,13 @@
-import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
 
+import {
+  getCurrentMediaVolume,
+  MEDIA_VOLUME_CHANGED_EVENT,
+  setCurrentMediaVolume,
+  toggleCurrentMediaMute,
+} from './client'
 import type { MediaVolumeSnapshot } from './types'
-
-const MEDIA_VOLUME_CHANGED_EVENT = 'media://volume-changed'
 
 type VolumeMutation = { type: 'level'; level: number } | { type: 'toggle-mute' }
 
@@ -34,7 +37,7 @@ export function useApplicationVolume() {
       unlistenVolume = stopListener
       // 只让读取期间的新事件覆盖快照，订阅建立期间的旧空值不能阻止初始化。
       const versionBeforeRead = eventVersion
-      const initial = await invoke<MediaVolumeSnapshot | null>('get_current_media_volume')
+      const initial = await getCurrentMediaVolume()
       if (!disposed && eventVersion === versionBeforeRead) volume.value = initial
     } catch (error) {
       console.error('初始化播放器应用音量失败', error)
@@ -70,14 +73,12 @@ export function useApplicationVolume() {
         try {
           volume.value =
             mutation.type === 'level'
-              ? await invoke<MediaVolumeSnapshot>('set_current_media_volume', {
-                  level: mutation.level,
-                })
-              : await invoke<MediaVolumeSnapshot>('toggle_current_media_mute')
+              ? await setCurrentMediaVolume(mutation.level)
+              : await toggleCurrentMediaMute()
         } catch (error) {
           console.error('修改播放器应用音量失败', error)
           try {
-            volume.value = await invoke<MediaVolumeSnapshot | null>('get_current_media_volume')
+            volume.value = await getCurrentMediaVolume()
           } catch (refreshError) {
             console.error('刷新播放器应用音量失败', refreshError)
           }

@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import type { Ref } from 'vue'
 
@@ -9,6 +8,8 @@ import {
   listenTaskbarAutoHideChange,
   type TaskbarAutoHide,
 } from '@/features/settings/bar-visibility'
+
+import { setTaskbarContentVisibility } from './client'
 
 /** 根据媒体状态与用户偏好，驱动原生 bar 窗口的可见性门控。 */
 export function useTaskbarAutoHide(session: Readonly<Ref<MediaSessionSnapshot | null>>) {
@@ -29,7 +30,7 @@ export function useTaskbarAutoHide(session: Readonly<Ref<MediaSessionSnapshot | 
     if (appliedVisibility === value) return
     appliedVisibility = value
     try {
-      await invoke('set_taskbar_content_visibility', { visible: value })
+      await setTaskbarContentVisibility(value)
     } catch (error) {
       appliedVisibility = undefined
       console.error('更新任务栏播放器可见性失败', error)

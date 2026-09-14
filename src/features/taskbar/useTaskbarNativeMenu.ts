@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import {
   CheckMenuItem,
   Menu,
@@ -9,6 +8,7 @@ import {
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { onUnmounted } from 'vue'
 
+import { openSettingsWindow } from '@/features/application/client'
 import {
   getTaskbarAudioSpectrumSettings,
   setTaskbarAudioSpectrumSettings,
@@ -21,6 +21,7 @@ import {
   type TaskbarCoverDisplayMode,
 } from '@/features/settings/cover'
 import { getTaskbarLyricsSettings, setTaskbarLyricsSettings } from '@/features/settings/lyrics'
+import { restartApplication } from '@/features/system/client'
 
 interface NativeMenuResources {
   menu: Menu
@@ -97,15 +98,13 @@ export function useTaskbarNativeMenu() {
         MenuItem.new({
           id: 'taskbar-open-settings',
           text: '打开设置',
-          action: () =>
-            runAction(() => invoke<void>('open_settings_window'), '从任务栏菜单打开设置失败'),
+          action: () => runAction(openSettingsWindow, '从任务栏菜单打开设置失败'),
         }),
         MenuItem.new({
           id: 'taskbar-restart-application',
           text: import.meta.env.PROD ? '重启应用' : '重启应用（正式版可用）',
           enabled: import.meta.env.PROD,
-          action: () =>
-            runAction(() => invoke<void>('restart_application'), '从任务栏菜单重启应用失败'),
+          action: () => runAction(restartApplication, '从任务栏菜单重启应用失败'),
         }),
         PredefinedMenuItem.new({ item: 'Quit', text: '退出应用' }),
       ])
