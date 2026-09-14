@@ -5,6 +5,8 @@ use std::{ffi::OsString, fs, io};
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_log::{Builder, RotationStrategy, Target, TargetKind, TimezoneStrategy};
 
+use crate::filesystem;
+
 pub const LOG_FILE_MAX_BYTES: u64 = 512 * 1024;
 pub const LOG_ARCHIVE_FILE_LIMIT: usize = 9;
 pub const LOG_STORAGE_CAPACITY_BYTES: u64 =
@@ -39,6 +41,11 @@ pub fn clear_history<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
         .path()
         .app_log_dir()
         .map_err(|error| format!("无法定位日志目录: {error}"))?;
+    match filesystem::ensure_directory(&log_directory) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(format!("日志目录边界检查失败: {error}")),
+    }
     let entries = match fs::read_dir(&log_directory) {
         Ok(entries) => entries,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
@@ -48,10 +55,9 @@ pub fn clear_history<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     log::logger().flush();
     for entry in entries {
         let entry = entry.map_err(|error| format!("无法读取日志文件: {error}"))?;
-        let file_type = entry
-            .file_type()
-            .map_err(|error| format!("无法识别日志文件: {error}"))?;
-        if file_type.is_file() && entry.file_name() != active_file_name {
+        let metadata = filesystem::entry_metadata_without_reparse(&entry)
+            .map_err(|error| format!("日志文件边界检查失败: {error}"))?;
+        if metadata.is_file() && entry.file_name() != active_file_name {
             fs::remove_file(entry.path()).map_err(|error| format!("无法删除历史日志: {error}"))?;
         }
     }

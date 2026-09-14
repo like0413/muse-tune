@@ -1,5 +1,6 @@
 use std::{
-    fs,
+    fs::{self, OpenOptions},
+    io::Write,
     path::{Path, PathBuf},
     sync::Mutex,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -7,7 +8,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::media::MediaPlayer;
+use crate::{filesystem, media::MediaPlayer};
 
 use super::{
     error::LyricsError,
@@ -65,11 +66,12 @@ struct CacheDiagnosticsState {
 impl ParsedLyricsCache {
     /// 在应用缓存目录下创建歌词专用版本目录。
     pub fn new(app_cache_dir: &Path) -> Result<Self, std::io::Error> {
+        filesystem::ensure_managed_directory(app_cache_dir)?;
         let lyrics_path = app_cache_dir.join("lyrics");
-        fs::create_dir_all(&lyrics_path)?;
+        filesystem::ensure_managed_directory(&lyrics_path)?;
         remove_obsolete_schema_directories(&lyrics_path);
         let cache_path = lyrics_path.join(lyrics_cache_schema_label());
-        fs::create_dir_all(&cache_path)?;
+        filesystem::ensure_managed_directory(&cache_path)?;
         migrate_legacy_entries_directory(&cache_path);
         Ok(Self {
             cache_path,
@@ -85,7 +87,7 @@ impl ParsedLyricsCache {
     /// 读取并校验单个缓存条目，损坏条目按未命中处理。
     pub fn load(&self, track_key: &str) -> Option<CacheLookup> {
         let path = self.entry_path(track_key);
-        let metadata = fs::metadata(&path).ok()?;
+        let metadata = filesystem::metadata_without_reparse(&path).ok()?;
         if metadata.len() > MAX_CACHE_ENTRY_BYTES {
             let _ = fs::remove_file(&path);
             self.invalidate_diagnostics();
@@ -118,6 +120,7 @@ impl ParsedLyricsCache {
         if snapshot.status != LyricsStatus::Ready {
             return Ok(());
         }
+        self.ensure_directory_boundary()?;
         let target = self.entry_path(track_key);
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -136,12 +139,29 @@ impl ParsedLyricsCache {
                 "规范化歌词超过缓存大小上限".to_owned(),
             ));
         }
+        let target_exists = match filesystem::metadata_if_exists(&target)? {
+            Some(metadata) if metadata.is_file() => true,
+            Some(_) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("歌词缓存目标不是普通文件: {}", target.display()),
+                )
+                .into());
+            }
+            None => false,
+        };
         let content_bytes = content.len() as u64;
-        fs::write(&temporary, content)?;
-        if target.exists()
-            && let Err(error) = fs::remove_file(&target)
-        {
-            let _ = fs::remove_file(temporary);
+        let write_result = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?
+            .write_all(&content);
+        if let Err(error) = write_result {
+            let _ = fs::remove_file(&temporary);
+            return Err(error.into());
+        }
+        if target_exists && let Err(error) = fs::remove_file(&target) {
+            let _ = fs::remove_file(&temporary);
             return Err(error.into());
         }
         match fs::rename(&temporary, &target) {
@@ -165,8 +185,19 @@ impl ParsedLyricsCache {
 
     /// 删除当前歌曲的解析结果，使播放器源文件变化后只重建受影响条目。
     pub fn remove(&self, track_key: &str) -> Result<(), std::io::Error> {
+        self.ensure_directory_boundary()?;
         let path = self.entry_path(track_key);
-        let removed_bytes = fs::metadata(&path).ok().map(|metadata| metadata.len());
+        let Some(metadata) = filesystem::metadata_if_exists(&path)? else {
+            self.record_removed_entry(track_key, None);
+            return Ok(());
+        };
+        if !metadata.is_file() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("歌词缓存目标不是普通文件: {}", path.display()),
+            ));
+        }
+        let removed_bytes = Some(metadata.len());
         match fs::remove_file(path) {
             Ok(()) => {
                 self.record_removed_entry(track_key, removed_bytes);
@@ -182,9 +213,10 @@ impl ParsedLyricsCache {
 
     /// 清空全部规范化歌词缓存，同时保留版本目录供后续写入复用。
     pub fn clear(&self) -> Result<(), std::io::Error> {
+        self.ensure_directory_boundary()?;
         for entry in fs::read_dir(&self.cache_path)? {
             let entry = entry?;
-            if entry.file_type()?.is_file() {
+            if filesystem::entry_metadata_without_reparse(&entry)?.is_file() {
                 fs::remove_file(entry.path())?;
             }
         }
@@ -195,9 +227,10 @@ impl ParsedLyricsCache {
     /// 只删除依赖指定播放器本地目录的结果，在线结果与其他播放器缓存继续保留。
     pub fn clear_local_source(&self, player: MediaPlayer) -> Result<(), std::io::Error> {
         let result = (|| {
+            self.ensure_directory_boundary()?;
             for entry in fs::read_dir(&self.cache_path)? {
                 let entry = entry?;
-                if !entry.file_type()?.is_file() {
+                if !filesystem::entry_metadata_without_reparse(&entry)?.is_file() {
                     continue;
                 }
                 let path = entry.path();
@@ -361,12 +394,13 @@ impl ParsedLyricsCache {
 
     /// 按最近写入时间淘汰旧条目，使永久运行也不会无限占用磁盘。
     fn prune_to_size_limit(&self, protected_path: &Path) -> Result<CacheTotals, std::io::Error> {
+        self.ensure_directory_boundary()?;
         let mut total_bytes = 0_u64;
         let mut entry_count = 0_usize;
         let mut entries = Vec::new();
         for entry in fs::read_dir(&self.cache_path)? {
             let entry = entry?;
-            let metadata = entry.metadata()?;
+            let metadata = filesystem::entry_metadata_without_reparse(&entry)?;
             if !metadata.is_file() {
                 continue;
             }
@@ -401,15 +435,28 @@ impl ParsedLyricsCache {
             total_bytes,
         })
     }
+
+    /// 逐级验证应用缓存根、歌词根和版本目录，避免父级 junction 隐藏最终真实位置。
+    fn ensure_directory_boundary(&self) -> Result<(), std::io::Error> {
+        let lyrics_path = self.cache_path.parent().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "歌词缓存目录缺少父级")
+        })?;
+        let app_cache_dir = lyrics_path.parent().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "歌词缓存根目录缺少父级")
+        })?;
+        filesystem::ensure_directory(app_cache_dir)?;
+        filesystem::ensure_directory(lyrics_path)?;
+        filesystem::ensure_directory(&self.cache_path)
+    }
 }
 
 /// 将旧的 `vN/entries/*.json` 原地迁移到版本目录，失败时保留旧目录供下次重试。
 fn migrate_legacy_entries_directory(cache_path: &Path) {
     let legacy_path = cache_path.join("entries");
-    let Ok(legacy_metadata) = fs::symlink_metadata(&legacy_path) else {
+    let Ok(legacy_metadata) = filesystem::metadata_without_reparse(&legacy_path) else {
         return;
     };
-    if !legacy_metadata.is_dir() || legacy_metadata.file_type().is_symlink() {
+    if !legacy_metadata.is_dir() {
         return;
     }
     let Ok(entries) = fs::read_dir(&legacy_path) else {
@@ -421,11 +468,11 @@ fn migrate_legacy_entries_directory(cache_path: &Path) {
             migration_failed = true;
             continue;
         };
-        let Ok(file_type) = entry.file_type() else {
+        let Ok(metadata) = filesystem::entry_metadata_without_reparse(&entry) else {
             migration_failed = true;
             continue;
         };
-        if !file_type.is_file() || file_type.is_symlink() {
+        if !metadata.is_file() {
             continue;
         }
         let source = entry.path();
@@ -433,13 +480,11 @@ fn migrate_legacy_entries_directory(cache_path: &Path) {
             continue;
         }
         let target = cache_path.join(entry.file_name());
-        let result = match fs::symlink_metadata(&target) {
+        let result = match filesystem::metadata_without_reparse(&target) {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 fs::rename(&source, &target)
             }
-            Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => {
-                fs::remove_file(&source)
-            }
+            Ok(metadata) if metadata.is_file() => fs::remove_file(&source),
             Ok(_) => {
                 log::warn!("迁移歌词缓存时目标路径不是普通文件: {}", target.display());
                 migration_failed = true;
@@ -459,14 +504,18 @@ fn migrate_legacy_entries_directory(cache_path: &Path) {
 
 /// 启动时仅清理旧版目录；未知目录和更高版本需保留，以支持安全回退。
 fn remove_obsolete_schema_directories(lyrics_path: &Path) {
+    if let Err(error) = filesystem::ensure_directory(lyrics_path) {
+        log::warn!("歌词缓存根目录边界检查失败: {error}");
+        return;
+    }
     let Ok(entries) = fs::read_dir(lyrics_path) else {
         return;
     };
     for entry in entries.flatten() {
-        let Ok(file_type) = entry.file_type() else {
+        let Ok(metadata) = filesystem::entry_metadata_without_reparse(&entry) else {
             continue;
         };
-        if !file_type.is_dir() || file_type.is_symlink() {
+        if !metadata.is_dir() {
             continue;
         }
         let Some(version) = entry

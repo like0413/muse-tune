@@ -54,6 +54,7 @@
       }
     ],
     "security": {
+      "capabilities": ["taskbar", "settings", "volume-popup"],
       "devCsp": {
         "default-src": "'self' http://localhost:1480",
         "connect-src": "ipc: http://ipc.localhost http://localhost:1480 ws://localhost:1480",

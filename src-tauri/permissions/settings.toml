@@ -1,0 +1,22 @@
+"$schema" = "schemas/schema.json"
+
+[[permission]]
+identifier = "settings-commands"
+description = "Allows the settings window to manage configuration, diagnostics, and application data."
+commands.allow = [
+  "get_data_overview",
+  "open_data_directory",
+  "clear_lyrics_cache",
+  "clear_current_lyrics_cache",
+  "refresh_current_lyrics",
+  "reset_configuration",
+  "clear_log_history",
+  "get_diagnostics",
+  "set_lyrics_preferences",
+  "list_system_fonts",
+  "list_taskbar_displays",
+  "set_taskbar_display_target",
+  "set_taskbar_overlap_priority",
+  "set_taskbar_placement",
+  "set_taskbar_width",
+]

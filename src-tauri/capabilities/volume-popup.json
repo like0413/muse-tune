@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "volume-popup",
+  "description": "Permissions required by the volume popup window",
+  "platforms": ["windows"],
+  "windows": ["volume-popup"],
+  "permissions": [
+    "core:event:default",
+    "store:allow-load",
+    "store:allow-get",
+    "volume-popup-commands"
+  ]
+}

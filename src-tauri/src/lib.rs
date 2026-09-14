@@ -1,6 +1,7 @@
 mod commands;
 mod data;
 mod diagnostics;
+mod filesystem;
 mod logging;
 mod lyrics;
 mod media;

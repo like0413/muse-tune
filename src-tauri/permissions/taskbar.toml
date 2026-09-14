@@ -1,0 +1,22 @@
+"$schema" = "schemas/schema.json"
+
+[[permission]]
+identifier = "taskbar-commands"
+description = "Allows the taskbar windows to control media and their native UI."
+commands.allow = [
+  "get_current_media_session",
+  "control_media_session",
+  "get_current_media_volume",
+  "set_current_media_volume",
+  "toggle_current_media_mute",
+  "set_media_spectrum_enabled",
+  "set_media_session_selection_policy",
+  "get_current_lyrics",
+  "set_lyrics_preferences",
+  "get_system_accent_color",
+  "get_system_foreground_color",
+  "restart_application",
+  "set_taskbar_content_visibility",
+  "show_volume_popup",
+  "open_settings_window",
+]

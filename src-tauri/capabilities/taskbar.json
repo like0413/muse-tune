@@ -1,0 +1,23 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "taskbar",
+  "description": "Permissions required by taskbar media controller windows",
+  "platforms": ["windows"],
+  "windows": ["taskbar", "taskbar-*"],
+  "permissions": [
+    "core:event:default",
+    "core:app:allow-version",
+    "core:menu:allow-new",
+    "core:menu:allow-set-checked",
+    "core:menu:allow-popup",
+    "core:resources:allow-close",
+    "store:allow-load",
+    "store:allow-get",
+    "store:allow-set",
+    "updater:allow-check",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify",
+    "taskbar-commands"
+  ]
+}
