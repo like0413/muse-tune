@@ -5,11 +5,13 @@ export type LyricsPrecision = 'word' | 'line'
 export type LyricsSourceKind = 'local' | 'online'
 export type LyricsResolutionMethod = 'none' | 'application_cache' | 'player_local' | 'online'
 export type LyricsResolutionOutcome = 'hit' | 'miss' | 'error'
+export type LyricsOnlineStrategy = 'parallel' | 'current_player_first'
 
 export interface LyricsResolutionStep {
   label: string
   outcome: LyricsResolutionOutcome
   detail: string | null
+  parallelGroup: string | null
 }
 
 export interface LyricsCacheDiagnostics {
@@ -73,6 +75,7 @@ export interface LyricsDiagnostics {
   snapshot: LyricsSnapshotDiagnostics
   currentPlayer: MediaPlayer | null
   enabled: boolean
+  onlineStrategy: LyricsOnlineStrategy
   resolutionMethod: LyricsResolutionMethod
   localCachePath: string | null
   localCacheAvailable: boolean

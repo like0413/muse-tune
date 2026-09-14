@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::lyrics::{LyricsService, LyricsSnapshot};
+use crate::lyrics::{LyricsOnlineStrategy, LyricsService, LyricsSnapshot};
 
 /// 返回最近一次歌词解析状态，供新创建的任务栏窗口补取初始值。
 #[tauri::command]
@@ -13,7 +13,8 @@ pub fn get_current_lyrics(service: State<'_, LyricsService>) -> LyricsSnapshot {
 pub fn set_lyrics_preferences(
     enabled: bool,
     allow_online: bool,
+    online_strategy: LyricsOnlineStrategy,
     service: State<'_, LyricsService>,
 ) -> Result<(), String> {
-    service.set_preferences(enabled, allow_online)
+    service.set_preferences(enabled, allow_online, online_strategy)
 }

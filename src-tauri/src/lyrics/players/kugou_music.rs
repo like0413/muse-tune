@@ -131,6 +131,11 @@ pub(super) fn changed_paths_affect_track(track: &TrackDescriptor, paths: &[PathB
     })
 }
 
+/// 文件监听确认酷狗歌词目录变化后，淘汰可能早于目录时间戳更新的索引。
+pub(super) fn invalidate_local_index(cache_path: &Path) {
+    LOCAL_KRC_INDEX.invalidate(cache_path);
+}
+
 /// 从酷狗 UTF-16LE 配置中的 LyricPath 定位歌词目录。
 pub fn automatic_cache_path() -> Option<PathBuf> {
     let app_data = std::env::var_os("APPDATA")?;

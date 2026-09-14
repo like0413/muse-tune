@@ -13,6 +13,7 @@ const TASKBAR_LYRICS_ALIGNMENTS = ['left', 'center', 'right'] as const
 const TASKBAR_LYRICS_LINE_MODES = ['single', 'double'] as const
 const TASKBAR_LYRICS_SECONDARY_LINES = ['translation_only', 'next', 'translation_or_next'] as const
 const TASKBAR_LYRICS_NETWORK_POLICIES = ['auto', 'local_only'] as const
+const TASKBAR_LYRICS_ONLINE_STRATEGIES = ['parallel', 'current_player_first'] as const
 const TASKBAR_LYRICS_ANIMATIONS = ['none', 'up'] as const
 const TASKBAR_LYRICS_COLOR_SCHEMES = ['theme', 'custom'] as const
 const MAX_FONT_FAMILY_LENGTH = 128
@@ -25,6 +26,7 @@ export type TaskbarLyricsAlignment = (typeof TASKBAR_LYRICS_ALIGNMENTS)[number]
 export type TaskbarLyricsLineMode = (typeof TASKBAR_LYRICS_LINE_MODES)[number]
 export type TaskbarLyricsSecondaryLine = (typeof TASKBAR_LYRICS_SECONDARY_LINES)[number]
 export type TaskbarLyricsNetworkPolicy = (typeof TASKBAR_LYRICS_NETWORK_POLICIES)[number]
+export type TaskbarLyricsOnlineStrategy = (typeof TASKBAR_LYRICS_ONLINE_STRATEGIES)[number]
 export type TaskbarLyricsAnimation = (typeof TASKBAR_LYRICS_ANIMATIONS)[number]
 export type TaskbarLyricsColorScheme = (typeof TASKBAR_LYRICS_COLOR_SCHEMES)[number]
 
@@ -34,6 +36,7 @@ export interface TaskbarLyricsSettings {
   lineMode: TaskbarLyricsLineMode
   secondaryLine: TaskbarLyricsSecondaryLine
   networkPolicy: TaskbarLyricsNetworkPolicy
+  onlineStrategy: TaskbarLyricsOnlineStrategy
   timingOffsetMs: number
   wordHighlight: boolean
   animation: TaskbarLyricsAnimation
@@ -51,6 +54,7 @@ export const DEFAULT_TASKBAR_LYRICS_SETTINGS: TaskbarLyricsSettings = {
   lineMode: 'double',
   secondaryLine: 'translation_or_next',
   networkPolicy: 'auto',
+  onlineStrategy: 'parallel',
   timingOffsetMs: 0,
   wordHighlight: true,
   animation: 'up',
@@ -80,6 +84,13 @@ export function isTaskbarLyricsSecondaryLine(value: unknown): value is TaskbarLy
 /** 判断外部值是否为支持的联网策略。 */
 export function isTaskbarLyricsNetworkPolicy(value: unknown): value is TaskbarLyricsNetworkPolicy {
   return TASKBAR_LYRICS_NETWORK_POLICIES.some((policy) => policy === value)
+}
+
+/** 判断外部值是否为支持的在线歌词调度策略。 */
+export function isTaskbarLyricsOnlineStrategy(
+  value: unknown,
+): value is TaskbarLyricsOnlineStrategy {
+  return TASKBAR_LYRICS_ONLINE_STRATEGIES.some((strategy) => strategy === value)
 }
 
 /** 将时间偏移限制到可校准的范围；正值表示延后显示。 */
@@ -154,6 +165,9 @@ export function normalizeTaskbarLyricsSettings(value: unknown): TaskbarLyricsSet
     networkPolicy: isTaskbarLyricsNetworkPolicy(record.networkPolicy)
       ? record.networkPolicy
       : DEFAULT_TASKBAR_LYRICS_SETTINGS.networkPolicy,
+    onlineStrategy: isTaskbarLyricsOnlineStrategy(record.onlineStrategy)
+      ? record.onlineStrategy
+      : DEFAULT_TASKBAR_LYRICS_SETTINGS.onlineStrategy,
     timingOffsetMs: normalizeTaskbarLyricsTimingOffset(record.timingOffsetMs),
     wordHighlight:
       typeof record.wordHighlight === 'boolean'
@@ -192,11 +206,16 @@ export function getTaskbarLyricsSettings(): Promise<TaskbarLyricsSettings> {
 export async function setTaskbarLyricsSettings(value: TaskbarLyricsSettings): Promise<void> {
   const previous = await getTaskbarLyricsSettings()
   const saved = await setVersionedSetting(lyricsStorage, value)
-  if (saved.enabled !== previous.enabled || saved.networkPolicy !== previous.networkPolicy) {
+  if (
+    saved.enabled !== previous.enabled ||
+    saved.networkPolicy !== previous.networkPolicy ||
+    saved.onlineStrategy !== previous.onlineStrategy
+  ) {
     try {
       await invoke('set_lyrics_preferences', {
         enabled: saved.enabled,
         allowOnline: saved.networkPolicy === 'auto',
+        onlineStrategy: saved.onlineStrategy,
       })
     } catch (error) {
       await setVersionedSetting(lyricsStorage, previous)

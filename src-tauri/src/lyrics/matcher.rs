@@ -20,6 +20,7 @@ const VERSION_MARKERS: [(&str, &[&str]); 14] = [
     ("slowed", &["slowed", "慢速版"]),
     ("anniversary", &["anniversary", "周年版"]),
 ];
+pub(super) const MAX_DURATION_DIFFERENCE_MS: u64 = 5_000;
 
 /// 可供各播放器独立适配器使用的歌曲候选元数据。
 pub struct SongCandidate<'a> {
@@ -50,12 +51,12 @@ pub fn accepted_score(track: &TrackDescriptor, candidate: SongCandidate<'_>) -> 
         return None;
     };
     let title_score = (title_similarity * 50.0).round() as u8;
-    let duration_score = match (track.duration_ms, candidate.duration_ms) {
+    let duration_score = match (track.lyrics_duration_ms(), candidate.duration_ms) {
         (Some(expected), Some(actual)) => {
             let difference = expected.abs_diff(actual);
             if difference <= 2_000 {
                 20
-            } else if difference <= 5_000 {
+            } else if difference <= MAX_DURATION_DIFFERENCE_MS {
                 15
             } else {
                 return None;
@@ -139,6 +140,7 @@ mod tests {
             title: "歌曲 Live".to_owned(),
             artists: vec!["歌手".to_owned()],
             duration_ms: Some(180_000),
+            playback_window: None,
         };
         let candidate_artists = vec!["歌手".to_owned()];
 

@@ -17,7 +17,7 @@ use super::{
     error::LyricsError,
     model::{LyricsSource, LyricsSourceKind, ResolvedLyrics},
     network::ResolutionDeadline,
-    track::TrackDescriptor,
+    track::{PlaybackWindow, TrackDescriptor},
 };
 
 /// 当前支持的四个播放器，供自动缓存监听复用。
@@ -55,6 +55,20 @@ pub fn supports_current_online(player: MediaPlayer) -> bool {
     )
 }
 
+/// 读取播放器提供的试听区间；仅汽水需要把完整歌词映射到片段时间轴。
+pub fn playback_window(
+    track: &TrackDescriptor,
+    cache_path: Option<&Path>,
+) -> Result<Option<PlaybackWindow>, LyricsError> {
+    if track.player != MediaPlayer::SodaMusic {
+        return Ok(None);
+    }
+    let Some(cache_path) = cache_path else {
+        return Ok(None);
+    };
+    soda_music::playback_window(track, cache_path)
+}
+
 /// 只读取当前播放器的本地歌词，用于新鲜持久缓存的低成本升级检查。
 pub fn resolve_current_local(
     track: &TrackDescriptor,
@@ -69,6 +83,14 @@ pub fn resolve_current_local(
         MediaPlayer::KugouMusic => kugou_music::resolve(track, Some(&cache_path)),
         MediaPlayer::SodaMusic | MediaPlayer::Other => Ok(None),
     }
+}
+
+/// 判断当前播放器是否存在可直接读取的本地歌词入口。
+pub fn supports_current_local(player: MediaPlayer) -> bool {
+    matches!(
+        player,
+        MediaPlayer::QqMusic | MediaPlayer::NeteaseCloudMusic | MediaPlayer::KugouMusic
+    )
 }
 
 /// 判断播放器缓存事件是否确实可能改变当前歌曲的歌词。
@@ -105,6 +127,18 @@ pub fn changed_paths_affect_track(
                 })
         }
         MediaPlayer::Other => false,
+    }
+}
+
+/// 根据原生文件事件使播放器的文件名索引失效，避免依赖目录时间戳的更新顺序。
+pub fn invalidate_local_index(player: MediaPlayer, cache_path: Option<&Path>) {
+    let Some(cache_path) = cache_path else {
+        return;
+    };
+    match player {
+        MediaPlayer::QqMusic => qq_music::invalidate_local_index(cache_path),
+        MediaPlayer::KugouMusic => kugou_music::invalidate_local_index(cache_path),
+        MediaPlayer::NeteaseCloudMusic | MediaPlayer::SodaMusic | MediaPlayer::Other => {}
     }
 }
 

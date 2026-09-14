@@ -6,9 +6,8 @@
 /* 传入 Tailwind 色板值，同时生成图标的前景色、浅色背景和边框。 */
 @utility icon-tone-* {
   color: --value(--color-*);
-  /* 覆盖 shadcn ItemMedia icon 变体自带的 bg-muted。 */
   background-color: --alpha(--value(--color-*) / 10%) !important;
-  border-color: --alpha(--value(--color-*) / 20%);
+  border-color: --alpha(--value(--color-*) / 20%) !important;
   border-radius: 35% !important;
 }
 

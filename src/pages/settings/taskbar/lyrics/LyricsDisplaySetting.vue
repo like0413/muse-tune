@@ -23,6 +23,7 @@ import {
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { notifySettingSaveFailed } from '@/features/settings/feedback'
 import {
   DEFAULT_TASKBAR_LYRICS_SETTINGS,
@@ -31,6 +32,7 @@ import {
   isTaskbarLyricsAnimation,
   isTaskbarLyricsLineMode,
   isTaskbarLyricsNetworkPolicy,
+  isTaskbarLyricsOnlineStrategy,
   isTaskbarLyricsSecondaryLine,
   normalizeTaskbarLyricsSettings,
   setTaskbarLyricsSettings,
@@ -60,6 +62,10 @@ const secondaryLineOptions = [
 const networkPolicyOptions = [
   { value: 'auto', label: '自动' },
   { value: 'local_only', label: '仅本地与缓存' },
+] as const
+const onlineStrategyOptions = [
+  { value: 'parallel', label: '并行查询' },
+  { value: 'current_player_first', label: '当前平台优先' },
 ] as const
 const animationOptions = [
   { value: 'none', label: '无' },
@@ -120,6 +126,11 @@ function selectSecondaryLine(value: unknown) {
 /** 接收联网策略选项。 */
 function selectNetworkPolicy(value: unknown) {
   if (isTaskbarLyricsNetworkPolicy(value)) void updateSettings({ networkPolicy: value })
+}
+
+/** 接收在线歌词调度策略。 */
+function selectOnlineStrategy(value: unknown) {
+  if (isTaskbarLyricsOnlineStrategy(value)) void updateSettings({ onlineStrategy: value })
 }
 
 /** 拖动歌词时间偏移时只更新草稿。 */
@@ -388,6 +399,41 @@ onMounted(loadSettings)
               </TabsTrigger>
             </TabsList>
           </Tabs>
+        </Field>
+
+        <Field
+          orientation="horizontal"
+          :data-disabled="
+            !selectedSettings.enabled || selectedSettings.networkPolicy === 'local_only'
+          "
+        >
+          <FieldContent>
+            <FieldTitle>在线解析策略</FieldTitle>
+            <FieldDescription>
+              <div>并行查询：等待更短，但会同时请求多个来源</div>
+              <div>当前平台优先：命中可靠逐字后停止；未命中时兜底会更慢</div>
+            </FieldDescription>
+          </FieldContent>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            :model-value="selectedSettings.onlineStrategy"
+            :disabled="
+              settingsSaving ||
+              !selectedSettings.enabled ||
+              selectedSettings.networkPolicy === 'local_only'
+            "
+            aria-label="在线歌词解析策略"
+            @update:model-value="selectOnlineStrategy"
+          >
+            <ToggleGroupItem
+              v-for="option in onlineStrategyOptions"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </ToggleGroupItem>
+          </ToggleGroup>
         </Field>
       </FieldGroup>
     </template>

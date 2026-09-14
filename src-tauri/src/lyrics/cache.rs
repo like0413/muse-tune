@@ -21,7 +21,6 @@ const MAX_CACHE_ENTRY_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_CACHE_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
 const WORD_REFRESH_INTERVAL: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 const LINE_REFRESH_INTERVAL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
-const UNAVAILABLE_REFRESH_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 
 /// 缓存命中及其是否仍处于免联网刷新期。
 pub struct CacheLookup {
@@ -96,10 +95,7 @@ impl ParsedLyricsCache {
         let entry = serde_json::from_slice::<CacheEntry>(&content).ok();
         if let Some(entry) = entry.filter(|entry| {
             entry.snapshot.track_key.as_deref() == Some(track_key)
-                && matches!(
-                    entry.snapshot.status,
-                    LyricsStatus::Ready | LyricsStatus::Unavailable
-                )
+                && entry.snapshot.status == LyricsStatus::Ready
         }) {
             let is_fresh = is_fresh(&entry);
             self.record_current_entry(track_key, metadata.len(), &entry);
@@ -118,10 +114,8 @@ impl ParsedLyricsCache {
         let Some(track_key) = snapshot.track_key.as_deref() else {
             return Ok(());
         };
-        if !matches!(
-            snapshot.status,
-            LyricsStatus::Ready | LyricsStatus::Unavailable
-        ) {
+        // 适配器的未命中可能是瞬时结果，只有真实歌词适合跨播放持久化。
+        if snapshot.status != LyricsStatus::Ready {
             return Ok(());
         }
         let target = self.entry_path(track_key);
@@ -512,8 +506,7 @@ fn refresh_interval(entry: &CacheEntry) -> Option<Duration> {
             Some(WORD_REFRESH_INTERVAL)
         }
         LyricsStatus::Ready => Some(LINE_REFRESH_INTERVAL),
-        LyricsStatus::Unavailable => Some(UNAVAILABLE_REFRESH_INTERVAL),
-        LyricsStatus::Loading | LyricsStatus::Error => None,
+        LyricsStatus::Loading | LyricsStatus::Unavailable | LyricsStatus::Error => None,
     }
 }
 

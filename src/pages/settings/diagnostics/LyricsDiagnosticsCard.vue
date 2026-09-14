@@ -34,9 +34,41 @@ const currentCacheStatus = computed(() => {
   if (!cache.currentEntryExists) return '当前歌曲无缓存'
   if (cache.currentEntryFresh === false) return '已到刷新时间'
   if (cache.currentEntryFresh === null) return '状态未知'
-  return cache.currentRefreshRemainingSeconds === null
-    ? '有效'
-    : `${formatAgeSeconds(cache.currentRefreshRemainingSeconds)}后刷新`
+  const freshness =
+    cache.currentRefreshRemainingSeconds === null
+      ? '有效'
+      : `${formatAgeSeconds(cache.currentRefreshRemainingSeconds)}后刷新`
+  const applicationCacheMissed = props.diagnostics.resolutionSteps.some(
+    (step) => step.label === 'Muse Tune 缓存' && step.outcome === 'miss',
+  )
+
+  return applicationCacheMissed ? `本次解析后已写入 · ${freshness}` : freshness
+})
+
+const onlineStrategyLabel = computed(() =>
+  props.diagnostics.onlineStrategy === 'current_player_first' ? '当前平台优先' : '并行查询',
+)
+
+/** 把连续的并发步骤折叠成一个阶段，避免将同时执行的请求显示成先后顺序。 */
+const resolutionStages = computed(() => {
+  const stages: Array<{
+    key: string
+    parallelGroup: string | null
+    steps: LyricsDiagnostics['resolutionSteps']
+  }> = []
+  props.diagnostics.resolutionSteps.forEach((step, index) => {
+    const previous = stages.at(-1)
+    if (step.parallelGroup && previous?.parallelGroup === step.parallelGroup) {
+      previous.steps.push(step)
+      return
+    }
+    stages.push({
+      key: `${index}-${step.label}`,
+      parallelGroup: step.parallelGroup,
+      steps: [step],
+    })
+  })
+  return stages
 })
 </script>
 
@@ -49,6 +81,7 @@ const currentCacheStatus = computed(() => {
       </Badge>
     </template>
     <DiagnosticRow label="歌词开关" :value="diagnostics.enabled ? '已开启' : '已关闭'" />
+    <DiagnosticRow label="在线解析策略" :value="onlineStrategyLabel" />
     <DiagnosticRow label="原始来源" :value="originalSource" />
     <DiagnosticRow label="来源歌曲 ID" :value="diagnostics.snapshot.source?.songId ?? '未提供'" />
     <DiagnosticRow label="本次获取" :value="resolutionMethodLabels[diagnostics.resolutionMethod]" />
@@ -93,11 +126,34 @@ const currentCacheStatus = computed(() => {
     </DiagnosticRow>
     <DiagnosticRow label="解析队列" :value="resolverStatus" />
     <DiagnosticRow label="解析链路">
-      <ol v-if="diagnostics.resolutionSteps.length > 0" class="grid gap-1">
-        <li v-for="(step, index) in diagnostics.resolutionSteps" :key="`${index}-${step.label}`">
-          {{ index + 1 }}. {{ step.label }} ·
-          {{ step.outcome === 'hit' ? '命中' : step.outcome === 'miss' ? '未命中' : '失败' }}
-          <span v-if="step.detail" class="text-muted-foreground">（{{ step.detail }}）</span>
+      <ol v-if="resolutionStages.length > 0" class="grid gap-1.5">
+        <li v-for="(stage, index) in resolutionStages" :key="stage.key">
+          <template v-if="stage.parallelGroup">
+            <div>
+              {{ index + 1 }}. {{ stage.parallelGroup }}
+              <span class="text-muted-foreground">（{{ stage.steps.length }} 项并发）</span>
+            </div>
+            <ul class="border-border ml-3 grid gap-1 border-l pl-3">
+              <li v-for="step in stage.steps" :key="step.label">
+                {{ step.label }} ·
+                {{ step.outcome === 'hit' ? '命中' : step.outcome === 'miss' ? '未命中' : '失败' }}
+                <span v-if="step.detail" class="text-muted-foreground">（{{ step.detail }}）</span>
+              </li>
+            </ul>
+          </template>
+          <template v-else>
+            {{ index + 1 }}. {{ stage.steps[0]?.label }} ·
+            {{
+              stage.steps[0]?.outcome === 'hit'
+                ? '命中'
+                : stage.steps[0]?.outcome === 'miss'
+                  ? '未命中'
+                  : '失败'
+            }}
+            <span v-if="stage.steps[0]?.detail" class="text-muted-foreground"
+              >（{{ stage.steps[0]?.detail }}）</span
+            >
+          </template>
         </li>
       </ol>
       <span v-else>暂无</span>

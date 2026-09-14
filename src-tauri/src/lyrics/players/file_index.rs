@@ -48,4 +48,11 @@ impl<T: Clone> DirectoryFileIndex<T> {
         }
         Ok(entries)
     }
+
+    /// 文件监听已确认目录内容变化时，立即淘汰该目录的旧索引。
+    pub fn invalidate(&self, directory: &Path) {
+        if let Ok(mut directories) = self.directories.lock() {
+            directories.remove(directory);
+        }
+    }
 }

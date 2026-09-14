@@ -13,6 +13,15 @@ pub struct TrackDescriptor {
     pub title: String,
     pub artists: Vec<String>,
     pub duration_ms: Option<u64>,
+    pub playback_window: Option<PlaybackWindow>,
+}
+
+/// 播放器仅播放原曲中的一段时，描述该片段在完整歌曲时间轴上的位置。
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PlaybackWindow {
+    pub start_ms: u64,
+    pub duration_ms: u64,
+    pub source_duration_ms: u64,
 }
 
 impl PartialEq for TrackDescriptor {
@@ -53,11 +62,10 @@ impl TrackDescriptor {
             .collect::<Vec<_>>();
         normalized_artists.sort_unstable();
         normalized_artists.dedup();
-        // GSMTC 在同一首歌的不同快照中可能轻微修正时长，不能让它改变缓存身份。
-        // 时长仍保留在描述中，用于候选匹配和歌词时间轴校验。
+        // 播放器和时长不参与缓存身份：前者确保跨平台复用，后者避免
+        // GSMTC 的轻微时长修正生成重复条目。时长仍用于候选匹配和时间轴校验。
         let key_input = format!(
-            "v{LYRICS_CACHE_SCHEMA_VERSION}|{:?}|{}|{}",
-            snapshot.player,
+            "v{LYRICS_CACHE_SCHEMA_VERSION}|{}|{}",
             normalized_title,
             normalized_artists.join("/")
         );
@@ -69,7 +77,14 @@ impl TrackDescriptor {
             title: title.to_owned(),
             artists,
             duration_ms,
+            playback_window: None,
         })
+    }
+
+    /// 返回歌词候选应采用的完整歌曲时长，而不是试听片段的播放时长。
+    pub fn lyrics_duration_ms(&self) -> Option<u64> {
+        self.playback_window
+            .map_or(self.duration_ms, |window| Some(window.source_duration_ms))
     }
 }
 
@@ -106,6 +121,7 @@ mod tests {
             title: "歌曲".to_owned(),
             artists: vec!["歌手".to_owned()],
             duration_ms: Some(180_100),
+            playback_window: None,
         };
         let right = TrackDescriptor {
             duration_ms: Some(180_900),

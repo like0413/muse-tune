@@ -21,6 +21,7 @@ import {
   SidebarProvider,
 } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
+import { colorMode } from '@/lib/color-mode'
 
 import appIconUrl from '../../../src-tauri/icons/icon.png'
 import AboutSettingsPanel from './about/index.vue'
@@ -52,6 +53,7 @@ const panels: Record<SettingsSection, Component> = {
 
 const activePanel = computed(() => panels[activeSection.value])
 const activeSectionMeta = computed(() => SETTINGS_SECTION_META[activeSection.value])
+const toasterTheme = computed(() => (colorMode.value === 'dark' ? 'dark' : 'light'))
 
 function selectSection(section: SettingsSection) {
   activeSection.value = section
@@ -125,5 +127,5 @@ onMounted(async () => {
       </div>
     </SidebarInset>
   </SidebarProvider>
-  <Toaster position="bottom-right" rich-colors />
+  <Toaster :theme="toasterTheme" position="bottom-right" rich-colors />
 </template>

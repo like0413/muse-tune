@@ -51,6 +51,17 @@ pub enum LyricsResolutionOutcome {
     Error,
 }
 
+/// 在线歌词来源的调度策略。
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LyricsOnlineStrategy {
+    /// 同时查询所有可用来源，缩短兜底等待时间，但会产生更多网络请求。
+    #[default]
+    Parallel,
+    /// 先查询当前播放器，未获得可靠逐字歌词时再并发查询其他来源。
+    CurrentPlayerFirst,
+}
+
 /// 最近一次解析的有界步骤记录，仅保留诊断所需摘要。
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,6 +69,7 @@ pub struct LyricsResolutionStep {
     pub label: String,
     pub outcome: LyricsResolutionOutcome,
     pub detail: Option<String>,
+    pub parallel_group: Option<String>,
 }
 
 /// Muse Tune 规范化歌词缓存的磁盘状态。
@@ -158,6 +170,7 @@ pub struct LyricsDiagnostics {
     pub snapshot: LyricsSnapshotDiagnostics,
     pub current_player: Option<MediaPlayer>,
     pub enabled: bool,
+    pub online_strategy: LyricsOnlineStrategy,
     pub resolution_method: LyricsResolutionMethod,
     pub local_cache_path: Option<String>,
     pub local_cache_available: bool,

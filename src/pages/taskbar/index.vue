@@ -281,6 +281,7 @@ onUnmounted(() => {
           aria-hidden="true"
         />
         <LyricsElement
+          :key="lyrics.trackKey ?? 'no-track'"
           :lyrics="lyrics"
           :position-ms="lyricsPositionMs"
           :settings="lyricsSettings"

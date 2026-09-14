@@ -244,6 +244,11 @@ pub(super) fn resolve_local(
     }))
 }
 
+/// 文件监听确认 QQ 歌词目录变化后，淘汰可能早于目录时间戳更新的索引。
+pub(super) fn invalidate_local_index(cache_path: &Path) {
+    LOCAL_QRC_INDEX.invalidate(cache_path);
+}
+
 /// 扫描一次 QQ 主 QRC 文件并缓存稳定的文件名元数据。
 fn scan_local_qrc_files(cache_path: &Path) -> io::Result<Vec<IndexedQrcFile>> {
     let mut files = Vec::new();

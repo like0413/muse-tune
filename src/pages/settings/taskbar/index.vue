@@ -19,10 +19,10 @@ import TrackInfoSetting from './track-info/TrackInfoSetting.vue'
 <template>
   <div class="flex w-full flex-col gap-3">
     <div class="pl-2 text-sm font-bold">位置与行为</div>
-    <DisplaySetting />
     <PlacementSetting />
-    <BarVisibilitySetting />
     <OverlapPrioritySetting />
+    <BarVisibilitySetting />
+    <DisplaySetting />
 
     <div class="pl-2 text-sm font-bold">布局与外观</div>
     <BarWidthSetting />

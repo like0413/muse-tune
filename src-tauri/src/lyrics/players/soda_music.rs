@@ -18,7 +18,7 @@ use super::super::{
     matcher::{SongCandidate, accepted_score},
     model::{LyricLine, LyricWord, LyricsSource, LyricsSourceKind, ResolvedLyrics},
     network::{ResolutionDeadline, parse_json},
-    track::TrackDescriptor,
+    track::{PlaybackWindow, TrackDescriptor},
 };
 
 const MAX_QUEUE_BYTES: u64 = 16 * 1024 * 1024;
@@ -75,6 +75,33 @@ pub fn automatic_cache_path() -> Option<PathBuf> {
         .map(|root| PathBuf::from(root).join("SodaMusic").join("LunaStorage"))
 }
 
+/// 仅当系统播放时长与汽水试听时长一致时，采用 QueueCache 声明的原曲偏移。
+pub fn playback_window(
+    track: &TrackDescriptor,
+    cache_path: &Path,
+) -> Result<Option<PlaybackWindow>, LyricsError> {
+    let Some(playback_duration_ms) = track.duration_ms else {
+        return Ok(None);
+    };
+    let Some(song) = find_queue_song(track, cache_path)? else {
+        return Ok(None);
+    };
+    let Some(audition) = song.audition_window() else {
+        return Ok(None);
+    };
+    if playback_duration_ms.abs_diff(audition.duration_ms) > 5_000
+        || audition.start_ms == 0
+        || audition.start_ms >= song.duration
+    {
+        return Ok(None);
+    }
+    Ok(Some(PlaybackWindow {
+        start_ms: audition.start_ms,
+        duration_ms: audition.duration_ms,
+        source_duration_ms: song.duration,
+    }))
+}
+
 fn find_queue_song(
     track: &TrackDescriptor,
     cache_path: &Path,
@@ -119,14 +146,21 @@ fn find_queue_song(
                 .iter()
                 .map(|artist| artist.name.clone())
                 .collect::<Vec<_>>();
-            let score = accepted_score(
-                track,
-                SongCandidate {
-                    title: &song.name,
-                    artists: &artists,
-                    duration_ms: Some(song.duration),
-                },
-            )?;
+            let score = song
+                .matching_durations()
+                .into_iter()
+                .flatten()
+                .filter_map(|duration_ms| {
+                    accepted_score(
+                        track,
+                        SongCandidate {
+                            title: &song.name,
+                            artists: &artists,
+                            duration_ms: Some(duration_ms),
+                        },
+                    )
+                })
+                .max()?;
             Some((score, song))
         })
         .max_by_key(|(score, _)| *score)
@@ -222,6 +256,64 @@ struct SodaTrack {
     duration: u64,
     #[serde(default)]
     artists: Vec<SodaArtist>,
+    #[serde(default)]
+    preview: Option<SodaPreview>,
+    #[serde(default)]
+    audition_info: Option<SodaAuditionInfo>,
+    #[serde(default)]
+    playable_range: Option<SodaPlayableRange>,
+}
+
+impl SodaTrack {
+    fn matching_durations(&self) -> [Option<u64>; 3] {
+        [
+            Some(self.duration),
+            self.audition_info
+                .as_ref()
+                .and_then(|value| value.duration_ms),
+            self.preview.as_ref().and_then(|value| value.duration),
+        ]
+    }
+
+    fn audition_window(&self) -> Option<SodaAuditionWindow> {
+        let duration_ms = self
+            .audition_info
+            .as_ref()
+            .and_then(|value| value.duration_ms)
+            .or_else(|| self.preview.as_ref().and_then(|value| value.duration))?;
+        let start_ms = self
+            .audition_info
+            .as_ref()
+            .and_then(|value| value.start_time_ms)
+            .or_else(|| self.preview.as_ref().and_then(|value| value.start))
+            .or_else(|| self.playable_range.as_ref().and_then(|value| value.start))?;
+        (duration_ms > 0).then_some(SodaAuditionWindow {
+            start_ms,
+            duration_ms,
+        })
+    }
+}
+
+struct SodaAuditionWindow {
+    start_ms: u64,
+    duration_ms: u64,
+}
+
+#[derive(Deserialize)]
+struct SodaPreview {
+    duration: Option<u64>,
+    start: Option<u64>,
+}
+
+#[derive(Deserialize)]
+struct SodaAuditionInfo {
+    duration_ms: Option<u64>,
+    start_time_ms: Option<u64>,
+}
+
+#[derive(Deserialize)]
+struct SodaPlayableRange {
+    start: Option<u64>,
 }
 
 #[derive(Deserialize)]

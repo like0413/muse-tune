@@ -10,6 +10,8 @@ import {
 import type { ToasterProps } from 'vue-sonner'
 import { Toaster as Sonner } from 'vue-sonner'
 
+import 'vue-sonner/style.css'
+
 import { cn } from '@/lib/utils'
 
 const props = defineProps<ToasterProps>()

@@ -233,6 +233,7 @@ struct SessionEntry {
     snapshot: MediaSessionSnapshot,
     activity_order: u64,
     selection_hold_until: Option<Instant>,
+    pending_previous_position_ms: Option<i64>,
 }
 
 /// 把当前媒体目标及其应用音量绑定保持为同一份运行时状态。
@@ -247,6 +248,13 @@ struct SelectedMedia<R: Runtime> {
 struct TimelineRefresh {
     changed: bool,
     availability_changed: bool,
+    track_boundary: bool,
+}
+
+/// 单次媒体属性刷新结果，标题变化是比时间线更可靠的切歌信号。
+#[derive(Clone, Copy, Default)]
+struct MetadataRefresh {
+    changed: bool,
     track_boundary: bool,
 }
 
@@ -339,9 +347,15 @@ fn run_worker<R: Runtime>(
                 );
             }
             WorkerMessage::MediaPropertiesChanged(session_id) => {
-                let metadata_changed = refresh_metadata(&mut sessions, session_id);
+                let metadata_refresh = refresh_metadata(&mut sessions, session_id);
                 let timeline_refresh = refresh_timeline(&mut sessions, session_id);
-                if metadata_changed || timeline_refresh.availability_changed {
+                reset_stale_timeline_at_track_boundary(
+                    &mut sessions,
+                    session_id,
+                    metadata_refresh.track_boundary,
+                    timeline_refresh.track_boundary,
+                );
+                if metadata_refresh.changed || timeline_refresh.availability_changed {
                     let selected_was_refreshed = selected.id == Some(session_id);
                     reconcile_selection_and_volume(
                         &app,
@@ -359,10 +373,22 @@ fn run_worker<R: Runtime>(
             WorkerMessage::PlaybackInfoChanged(session_id) => {
                 let playback_changed =
                     refresh_playback(&mut sessions, session_id, &mut next_activity_order);
-                let metadata_changed =
-                    playback_changed && refresh_metadata(&mut sessions, session_id);
+                let metadata_refresh = if playback_changed {
+                    refresh_metadata(&mut sessions, session_id)
+                } else {
+                    MetadataRefresh::default()
+                };
                 let timeline_refresh = refresh_timeline(&mut sessions, session_id);
-                if playback_changed || metadata_changed || timeline_refresh.availability_changed {
+                reset_stale_timeline_at_track_boundary(
+                    &mut sessions,
+                    session_id,
+                    metadata_refresh.track_boundary,
+                    timeline_refresh.track_boundary,
+                );
+                if playback_changed
+                    || metadata_refresh.changed
+                    || timeline_refresh.availability_changed
+                {
                     let selected_was_refreshed = selected.id == Some(session_id);
                     reconcile_selection_and_volume(
                         &app,
@@ -379,9 +405,18 @@ fn run_worker<R: Runtime>(
             }
             WorkerMessage::TimelinePropertiesChanged(session_id) => {
                 let timeline_refresh = refresh_timeline(&mut sessions, session_id);
-                let metadata_changed =
-                    timeline_refresh.track_boundary && refresh_metadata(&mut sessions, session_id);
-                if metadata_changed
+                let metadata_refresh = if timeline_refresh.track_boundary {
+                    refresh_metadata(&mut sessions, session_id)
+                } else {
+                    MetadataRefresh::default()
+                };
+                reset_stale_timeline_at_track_boundary(
+                    &mut sessions,
+                    session_id,
+                    metadata_refresh.track_boundary,
+                    timeline_refresh.track_boundary,
+                );
+                if metadata_refresh.changed
                     || timeline_refresh.availability_changed
                     || timeline_refresh.track_boundary
                 {
@@ -591,6 +626,7 @@ fn synchronize_sessions(
             snapshot,
             activity_order,
             selection_hold_until: None,
+            pending_previous_position_ms: None,
         });
     }
 }
@@ -672,17 +708,17 @@ fn bind_session(
 }
 
 /// 只刷新指定会话的歌曲元数据，避免播放事件重复读取和编码封面。
-fn refresh_metadata(entries: &mut [SessionEntry], session_id: u64) -> bool {
+fn refresh_metadata(entries: &mut [SessionEntry], session_id: u64) -> MetadataRefresh {
     let Some(entry) = entries.iter_mut().find(|entry| entry.id == session_id) else {
-        return false;
+        return MetadataRefresh::default();
     };
     let Ok(metadata) = read_metadata(&entry.registration.session)
         .inspect_err(|error| log::warn!("刷新媒体属性失败: {error}"))
     else {
-        return false;
+        return MetadataRefresh::default();
     };
     if entry.snapshot.metadata == metadata {
-        return false;
+        return MetadataRefresh::default();
     }
     let title_changed = entry.snapshot.metadata.title != metadata.title
         && !entry.snapshot.metadata.title.is_empty()
@@ -692,7 +728,39 @@ fn refresh_metadata(entries: &mut [SessionEntry], session_id: u64) -> bool {
             .and_then(|duration| Instant::now().checked_add(duration));
     }
     entry.snapshot.metadata = metadata;
-    true
+    MetadataRefresh {
+        changed: true,
+        track_boundary: title_changed,
+    }
+}
+
+/// 标题已切换而时间线未出现新曲边界时，不向上层泄漏上一首的大进度。
+fn reset_stale_timeline_at_track_boundary(
+    entries: &mut [SessionEntry],
+    session_id: u64,
+    metadata_track_boundary: bool,
+    timeline_track_boundary: bool,
+) {
+    if !metadata_track_boundary {
+        return;
+    }
+    let Some(entry) = entries.iter_mut().find(|entry| entry.id == session_id) else {
+        return;
+    };
+    if timeline_track_boundary {
+        entry.pending_previous_position_ms = None;
+        return;
+    }
+    let Some(timeline) = entry.snapshot.timeline.as_mut() else {
+        entry.pending_previous_position_ms = None;
+        return;
+    };
+    if timeline.position_ms > timeline.start_time_ms.saturating_add(3_000) {
+        entry.pending_previous_position_ms = Some(timeline.position_ms);
+        timeline.position_ms = timeline.start_time_ms;
+    } else {
+        entry.pending_previous_position_ms = None;
+    }
 }
 
 /// 刷新指定会话播放状态，并记录进入播放态的严格递增顺序。
@@ -736,6 +804,21 @@ fn refresh_timeline(entries: &mut [SessionEntry], session_id: u64) -> TimelineRe
         log::warn!("刷新媒体时间线失败: {error}");
         None
     });
+    if let Some(previous_position_ms) = entry.pending_previous_position_ms {
+        let confirms_new_track = match (&entry.snapshot.timeline, &timeline) {
+            (_, None) | (None, Some(_)) => true,
+            (Some(current), Some(next)) => {
+                next.start_time_ms != current.start_time_ms
+                    || next.end_time_ms != current.end_time_ms
+                    || next.position_ms <= next.start_time_ms.saturating_add(3_000)
+                    || next.position_ms.saturating_add(5_000) < previous_position_ms
+            }
+        };
+        if !confirms_new_track {
+            return TimelineRefresh::default();
+        }
+        entry.pending_previous_position_ms = None;
+    }
     if entry.snapshot.timeline == timeline {
         return TimelineRefresh::default();
     }
@@ -1077,10 +1160,10 @@ fn publish_snapshot<R: Runtime>(
     if let Ok(mut current) = snapshot.write() {
         current.clone_from(&next);
     }
+    emit_snapshot(app, &next);
     if let Some(lyrics) = app.try_state::<crate::lyrics::LyricsService>() {
         lyrics.update_media(next.as_ref());
     }
-    emit_snapshot(app, &next);
 }
 
 /// 广播媒体快照；窗口未就绪时由前端初始 command 补取缓存。
