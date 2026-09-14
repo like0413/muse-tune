@@ -239,8 +239,7 @@ impl LyricsService {
         let discovered_paths = self.inner.adapter_paths.read().map_or_else(
             |_| Vec::new(),
             |paths| {
-                players::SUPPORTED_PLAYERS
-                    .into_iter()
+                players::supported_players()
                     .map(|player| {
                         let cache_path = paths.get(&player).cloned().flatten();
                         let available = cache_path.as_ref().is_some_and(|path| path.is_dir());
@@ -859,7 +858,7 @@ impl LyricsService {
 
         let qq_cache_path = self.cache_path(MediaPlayer::QqMusic);
         if track.player != MediaPlayer::QqMusic {
-            match players::resolve_qq_local(&track, qq_cache_path) {
+            match players::resolve_local_for(MediaPlayer::QqMusic, &track, qq_cache_path) {
                 Ok(LyricsLookupOutcome::Hit(resolved))
                     if is_plausible_timeline(&track, &resolved.lines) =>
                 {
@@ -935,13 +934,21 @@ impl LyricsService {
                         });
                         let qq_online = (track.player != MediaPlayer::QqMusic).then(|| {
                             scope.spawn(|| {
-                                players::resolve_qq_online(&track, &self.inner.client, &deadline)
+                                players::resolve_online_for(
+                                    MediaPlayer::QqMusic,
+                                    &track,
+                                    None,
+                                    &self.inner.client,
+                                    &deadline,
+                                )
                             })
                         });
                         let netease = (track.player != MediaPlayer::NeteaseCloudMusic).then(|| {
                             scope.spawn(|| {
-                                players::resolve_netease_online(
+                                players::resolve_online_for(
+                                    MediaPlayer::NeteaseCloudMusic,
                                     &track,
+                                    None,
                                     &self.inner.client,
                                     &deadline,
                                 )
@@ -995,12 +1002,24 @@ impl LyricsService {
                 let (qq_online_result, netease_result) = thread::scope(|scope| {
                     let qq_online = (track.player != MediaPlayer::QqMusic).then(|| {
                         scope.spawn(|| {
-                            players::resolve_qq_online(&track, &self.inner.client, &deadline)
+                            players::resolve_online_for(
+                                MediaPlayer::QqMusic,
+                                &track,
+                                None,
+                                &self.inner.client,
+                                &deadline,
+                            )
                         })
                     });
                     let netease = (track.player != MediaPlayer::NeteaseCloudMusic).then(|| {
                         scope.spawn(|| {
-                            players::resolve_netease_online(&track, &self.inner.client, &deadline)
+                            players::resolve_online_for(
+                                MediaPlayer::NeteaseCloudMusic,
+                                &track,
+                                None,
+                                &self.inner.client,
+                                &deadline,
+                            )
                         })
                     });
                     (
@@ -1223,15 +1242,14 @@ impl LyricsService {
 
     /// 按播放器分别重建非递归监听器，避免其他播放器的写入刷新当前歌词。
     fn refresh_watchers(&self) {
-        let next_paths = players::SUPPORTED_PLAYERS
-            .into_iter()
+        let next_paths = players::supported_players()
             .map(|player| (player, players::automatic_cache_path(player)))
             .collect::<HashMap<_, _>>();
         if let Ok(mut current) = self.inner.adapter_paths.write() {
             current.clone_from(&next_paths);
         }
         let mut next_watchers = HashMap::new();
-        for player in players::SUPPORTED_PLAYERS {
+        for player in players::supported_players() {
             let cache_path = next_paths.get(&player).cloned().flatten();
             let paths = players::watch_paths_for(player, cache_path.as_deref());
             let weak_inner = Arc::downgrade(&self.inner);
@@ -1240,11 +1258,7 @@ impl LyricsService {
                     return;
                 };
                 let service = LyricsService { inner };
-                let configuration_changed = paths.iter().any(|path| {
-                    path.file_name()
-                        .and_then(|value| value.to_str())
-                        .is_some_and(|value| value.eq_ignore_ascii_case("KuGou.ini"))
-                });
+                let configuration_changed = players::configuration_changed(player, &paths);
                 let result = if configuration_changed {
                     service.handle_configuration_change(player)
                 } else {
@@ -1267,16 +1281,16 @@ impl LyricsService {
         }
     }
 
-    /// 启动 QQ 音乐注册表键值通知；回调只持有服务的弱引用。
+    /// 启动适配器声明的原生缓存路径设置监听；回调只持有服务的弱引用。
     fn start_registry_watcher(&self) {
         let weak_inner = Arc::downgrade(&self.inner);
-        players::watch_registry_settings(Arc::new(move || {
+        players::watch_registry_settings(Arc::new(move |player| {
             let Some(inner) = weak_inner.upgrade() else {
                 return;
             };
             let service = LyricsService { inner };
-            if let Err(error) = service.handle_configuration_change(MediaPlayer::QqMusic) {
-                log::warn!("响应 QQ 音乐缓存目录设置变化失败: {error}");
+            if let Err(error) = service.handle_configuration_change(player) {
+                log::warn!("响应 {player:?} 缓存目录设置变化失败: {error}");
             }
         }));
     }
