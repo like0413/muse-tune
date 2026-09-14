@@ -67,7 +67,7 @@ const normalLayer = useTemplateRef<HTMLElement>('normalLayer')
 const normalCoverAnchor = useTemplateRef<HTMLElement>('normalCoverAnchor')
 const lyricsCoverAnchor = useTemplateRef<HTMLElement>('lyricsCoverAnchor')
 const isTaskbarHovered = useElementHover(taskbarRoot)
-const taskbarWidth = shallowRef(TASKBAR_WIDTH_PRESETS.wide)
+const taskbarWidth = shallowRef<number>(TASKBAR_WIDTH_PRESETS.wide)
 const isCompact = computed(() => taskbarWidth.value <= TASKBAR_WIDTH_PRESETS.compact)
 // 所有播放器都必须提供有效时间线；能力出现或消失时自动在歌词与普通界面间切换。
 const hasReliableLyricsTimeline = computed(() => timeline.value !== null)
@@ -174,10 +174,11 @@ function restoreTaskbarHover() {
   isTaskbarHovered.value = true
 }
 
-/** 计算竖线位置，并让已播放区域从起点透明渐变到当前位置的实色主题色。 */
+/** 用贴近任务栏背景的同色系渐变标示已播放区域，避免与歌词颜色混在一起。 */
 const verticalProgressStyle = computed(() => ({
   width: `${progress.value}%`,
-  background: 'linear-gradient(to right, transparent 0%, var(--taskbar-progress-color) 100%)',
+  background:
+    'linear-gradient(to right, transparent 0%, color-mix(in srgb, var(--taskbar-progress-color) 40%, var(--taskbar-background)) 100%)',
 }))
 
 /** 恢复背景透明度并订阅设置窗口的实时预览。 */
@@ -343,9 +344,7 @@ onUnmounted(() => {
         :class="progressBarPositionClass"
         :style="barProgressStyle"
       />
-      <div v-else class="absolute inset-y-0 left-0 z-0" :style="verticalProgressStyle">
-        <div class="absolute inset-y-0 right-0 w-px bg-(--taskbar-progress-color)" />
-      </div>
+      <div v-else class="absolute inset-y-0 left-0 z-0" :style="verticalProgressStyle" />
     </div>
   </main>
 </template>

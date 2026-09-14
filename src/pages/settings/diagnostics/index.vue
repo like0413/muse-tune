@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDiagnostics } from '@/features/diagnostics/useDiagnostics'
 
-import ApplicationDiagnosticsCard from './ApplicationDiagnosticsCard.vue'
 import AudioDiagnosticsCard from './AudioDiagnosticsCard.vue'
 import IssuesDiagnosticsCard from './IssuesDiagnosticsCard.vue'
 import LyricsDiagnosticsCard from './LyricsDiagnosticsCard.vue'
@@ -44,7 +43,6 @@ const updatedAtLabel = computed(() => updatedAt.value?.toLocaleTimeString() ?? '
 
     <template v-if="diagnostics">
       <IssuesDiagnosticsCard :issues="diagnostics.issues" />
-      <ApplicationDiagnosticsCard :diagnostics="diagnostics.application" />
       <TaskbarDiagnosticsCard :diagnostics="diagnostics.taskbar" />
       <MediaDiagnosticsCard :diagnostics="diagnostics.media" />
       <AudioDiagnosticsCard :diagnostics="diagnostics.media" />
@@ -52,7 +50,7 @@ const updatedAtLabel = computed(() => updatedAt.value?.toLocaleTimeString() ?? '
       <LyricsDiagnosticsCard :diagnostics="diagnostics.lyrics" />
     </template>
     <template v-else>
-      <Skeleton v-for="index in 7" :key="index" class="h-44 w-full rounded-xl" />
+      <Skeleton v-for="index in 6" :key="index" class="h-44 w-full rounded-xl" />
     </template>
   </div>
 </template>

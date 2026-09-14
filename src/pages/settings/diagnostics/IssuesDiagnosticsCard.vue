@@ -1,39 +1,36 @@
 <script setup lang="ts">
 import { CircleCheck, TriangleAlert } from '@lucide/vue'
 
-import { Badge } from '@/components/ui/badge'
 import type { DiagnosticIssue } from '@/features/diagnostics/types'
-
-import DiagnosticsCard from './DiagnosticsCard.vue'
 
 defineProps<{ issues: DiagnosticIssue[] }>()
 </script>
 
 <template>
-  <DiagnosticsCard title="当前问题" description="只汇总当前仍然成立、能够直接指导排查的异常状态">
-    <template #icon>
-      <TriangleAlert v-if="issues.length > 0" class="size-4 text-orange-500" />
-      <CircleCheck v-else class="size-4 text-emerald-500" />
-    </template>
-    <template #badge>
-      <Badge variant="outline">{{
-        issues.length > 0 ? `${issues.length} 项` : '未发现异常'
-      }}</Badge>
-    </template>
-    <div v-if="issues.length > 0" class="col-span-2 grid gap-2">
-      <div
+  <section class="rounded-lg border px-4 py-3 text-sm" aria-labelledby="diagnostic-issues-title">
+    <div class="flex items-center gap-2">
+      <TriangleAlert v-if="issues.length > 0" class="size-4 shrink-0 text-orange-500" />
+      <CircleCheck v-else class="size-4 shrink-0 text-emerald-500" />
+      <h3 id="diagnostic-issues-title" class="font-medium">当前问题</h3>
+      <span class="text-muted-foreground">
+        {{ issues.length > 0 ? `${issues.length} 项` : '未发现异常' }}
+      </span>
+    </div>
+
+    <ul v-if="issues.length > 0" class="mt-2 grid gap-1.5 pl-6">
+      <li
         v-for="(issue, index) in issues"
         :key="`${issue.area}-${index}`"
-        class="flex items-start gap-3 rounded-md border p-3"
+        class="flex items-start gap-2"
       >
-        <Badge :variant="issue.severity === 'error' ? 'destructive' : 'outline'">
-          {{ issue.area }}
-        </Badge>
-        <span>{{ issue.message }}</span>
-      </div>
-    </div>
-    <p v-else class="text-muted-foreground col-span-2 text-sm">
-      当前任务栏、媒体线程和歌词解析没有报告需要处理的问题。
-    </p>
-  </DiagnosticsCard>
+        <span
+          :class="issue.severity === 'error' ? 'text-destructive' : 'text-orange-600'"
+          class="shrink-0"
+        >
+          {{ issue.area }}：
+        </span>
+        <span class="min-w-0">{{ issue.message }}</span>
+      </li>
+    </ul>
+  </section>
 </template>
