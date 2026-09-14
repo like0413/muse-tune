@@ -37,6 +37,7 @@ interface DisplayWord extends LyricWord {
 const viewport = useTemplateRef<HTMLElement>('viewport')
 const textMeasure = useTemplateRef<HTMLElement>('textMeasure')
 const { width: viewportWidth } = useElementSize(viewport)
+// 测量实际渲染的逐字内容，宽度与字号变化时由 ResizeObserver 同步滚动边界。
 const { width: textWidth } = useElementSize(textMeasure)
 
 /** 计算当前歌词行的播放比例，异常时间范围直接保持起点。 */
@@ -133,24 +134,20 @@ const displayWords = computed<DisplayWord[]>(() => {
       :class="{ 'lyric-content-animated': animated }"
       :style="contentStyle"
     >
-      <span
-        ref="textMeasure"
-        class="pointer-events-none invisible absolute top-0 left-0 w-max whitespace-pre"
-      >
-        {{ text }}
-      </span>
       <div class="lyric-line-track whitespace-pre" :class="trackClass" :style="trackStyle">
-        <template v-if="displayWords.length > 0">
-          <span
-            v-for="(word, index) in displayWords"
-            :key="`${word.startMs}-${index}`"
-            class="lyric-word"
-            :class="`lyric-word-${word.state}`"
-            :style="word.style"
-            >{{ word.text }}</span
-          >
-        </template>
-        <span v-else class="lyric-plain-text">{{ text }}</span>
+        <span ref="textMeasure" class="inline-block w-max align-top">
+          <template v-if="displayWords.length > 0">
+            <span
+              v-for="(word, index) in displayWords"
+              :key="`${word.startMs}-${index}`"
+              class="lyric-word"
+              :class="`lyric-word-${word.state}`"
+              :style="word.style"
+              >{{ word.text }}</span
+            >
+          </template>
+          <span v-else class="lyric-plain-text">{{ text }}</span>
+        </span>
       </div>
     </div>
   </div>

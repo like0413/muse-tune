@@ -467,6 +467,14 @@ fn run_worker<R: Runtime>(
                 let _ = result_sender.send(result);
             }
             WorkerMessage::GetVolume(result_sender) => {
+                // 首次订阅可能晚于播放器启动；读取前补齐尚未就绪的音频绑定。
+                if selected.volume.snapshot().is_none()
+                    && let Some(target_id) = selected.id
+                {
+                    rebind_selected_volume(&mut selected.volume, &sessions, target_id);
+                    selected.spectrum.bind(selected.volume.capture_process_id());
+                    publish_volume(&app, selected.volume.snapshot());
+                }
                 let _ = result_sender.send(selected.volume.snapshot());
             }
             WorkerMessage::SetVolume(level, result_sender) => {

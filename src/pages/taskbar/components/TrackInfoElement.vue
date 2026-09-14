@@ -88,7 +88,7 @@ onUnmounted(() => {
 <template>
   <div
     v-if="visible"
-    class="flex min-w-7 flex-1 flex-col justify-center leading-tight"
+    class="flex min-w-0 flex-1 flex-col justify-center overflow-hidden leading-tight"
     :class="alignment === 'right' ? 'items-end text-right' : 'items-start text-left'"
   >
     <ScrollingTrackTitle

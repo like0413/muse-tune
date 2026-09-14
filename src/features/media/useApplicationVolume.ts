@@ -11,7 +11,7 @@ type VolumeMutation = { type: 'level'; level: number } | { type: 'toggle-mute' }
 /** 订阅当前播放器的 Windows 单应用音量，并合并连续写入避免 IPC 排队。 */
 export function useApplicationVolume() {
   const volume = shallowRef<MediaVolumeSnapshot | null>(null)
-  let receivedEvent = false
+  let eventVersion = 0
   let disposed = false
   let applying = false
   const pendingMutations: VolumeMutation[] = []
@@ -23,7 +23,7 @@ export function useApplicationVolume() {
       const stopListener = await listen<MediaVolumeSnapshot | null>(
         MEDIA_VOLUME_CHANGED_EVENT,
         ({ payload }) => {
-          receivedEvent = true
+          eventVersion += 1
           volume.value = payload
         },
       )
@@ -32,8 +32,10 @@ export function useApplicationVolume() {
         return
       }
       unlistenVolume = stopListener
+      // 只让读取期间的新事件覆盖快照，订阅建立期间的旧空值不能阻止初始化。
+      const versionBeforeRead = eventVersion
       const initial = await invoke<MediaVolumeSnapshot | null>('get_current_media_volume')
-      if (!disposed && !receivedEvent) volume.value = initial
+      if (!disposed && eventVersion === versionBeforeRead) volume.value = initial
     } catch (error) {
       console.error('初始化播放器应用音量失败', error)
     }

@@ -67,6 +67,7 @@ const hasReliableLyricsTimeline = computed(() => timeline.value !== null)
 const showLyrics = computed(
   () =>
     lyricsSettings.value.enabled &&
+    playbackStatus.value === 'playing' &&
     hasReliableLyricsTimeline.value &&
     lyrics.value.status === 'ready' &&
     lyrics.value.lines.length > 0 &&
