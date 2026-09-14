@@ -179,6 +179,7 @@ const displayStyle = computed<CSSProperties>(() => {
       :font-size="line.fontSize"
       :line-height="line.lineHeight"
       :row-top="line.rowTop"
+      :class="line.primary ? 'lyric-primary-row' : 'lyric-secondary-row'"
       class="shrink-0"
     />
   </TransitionGroup>
@@ -189,7 +190,7 @@ const displayStyle = computed<CSSProperties>(() => {
 .lyrics-up-enter-active,
 .lyrics-up-leave-active {
   transition:
-    transform 400ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 350ms ease-out,
     opacity 300ms ease;
 }
 
@@ -203,6 +204,11 @@ const displayStyle = computed<CSSProperties>(() => {
 .lyrics-up-enter-from {
   opacity: 0;
   transform: translateY(var(--lyric-line-step));
+}
+
+/* 第二行保留位移动画，但不改变透明度，避免出现过程中文字颜色逐渐加深。 */
+.lyrics-up-enter-from.lyric-secondary-row {
+  opacity: 1;
 }
 
 .lyrics-up-leave-to {

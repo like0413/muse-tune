@@ -686,14 +686,16 @@ impl LyricsService {
                 match players::resolve_current_local(&track, self.cache_path(track.player)) {
                     Ok(Some(local))
                         if is_plausible_timeline(&track, &local.lines)
-                            && has_word_timing(&local.lines) =>
+                            && (has_word_timing(&local.lines)
+                                || auxiliary_content_count(&local.lines)
+                                    > auxiliary_content_count(&cached.snapshot.lines)) =>
                     {
                         self.record_resolution_step(
                             generation,
-                            "后台本地逐字升级",
+                            "后台本地歌词升级",
                             LyricsResolutionOutcome::Hit,
                             Some(format!(
-                                "发现更高精度或新生成的本地歌词 · {} ms",
+                                "发现更高精度或辅助内容更完整的本地歌词 · {} ms",
                                 duration_millis(upgrade_started_at.elapsed()),
                             )),
                         );
@@ -702,7 +704,7 @@ impl LyricsService {
                     Ok(Some(local)) if !is_plausible_timeline(&track, &local.lines) => {
                         self.record_resolution_step(
                             generation,
-                            "后台本地逐字升级",
+                            "后台本地歌词升级",
                             LyricsResolutionOutcome::Error,
                             Some(format!(
                                 "结果时间轴超出歌曲有效范围 · {} ms",
@@ -712,16 +714,16 @@ impl LyricsService {
                     }
                     Ok(Some(_)) => self.record_resolution_step(
                         generation,
-                        "后台本地逐字升级",
+                        "后台本地歌词升级",
                         LyricsResolutionOutcome::Miss,
                         Some(format!(
-                            "仅找到逐行歌词 · {} ms",
+                            "本地歌词未提供更高精度或更多辅助内容 · {} ms",
                             duration_millis(upgrade_started_at.elapsed()),
                         )),
                     ),
                     Ok(None) => self.record_resolution_step(
                         generation,
-                        "后台本地逐字升级",
+                        "后台本地歌词升级",
                         LyricsResolutionOutcome::Miss,
                         Some(format!(
                             "未发现本地逐字歌词 · {} ms",
@@ -732,7 +734,7 @@ impl LyricsService {
                     Err(error) => {
                         self.record_resolution_step(
                             generation,
-                            "后台本地逐字升级",
+                            "后台本地歌词升级",
                             LyricsResolutionOutcome::Error,
                             Some(format!(
                                 "{error} · {} ms",
@@ -1436,6 +1438,16 @@ fn select_best_candidate(
                 source_priority(candidate.resolved.source.player),
             )
         })
+}
+
+/// 统计翻译和音译覆盖量，用于识别同精度歌词中的内容增强结果。
+fn auxiliary_content_count(lines: &[super::model::LyricLine]) -> usize {
+    lines
+        .iter()
+        .map(|line| {
+            usize::from(line.translation.is_some()) + usize::from(line.romanization.is_some())
+        })
+        .sum()
 }
 
 fn candidate_from_source(resolved: ResolvedLyrics) -> LyricsCandidate {

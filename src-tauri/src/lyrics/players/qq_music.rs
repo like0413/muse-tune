@@ -214,7 +214,7 @@ pub(super) fn resolve_local(
     let Some((_, original_path)) = best else {
         return Ok(None);
     };
-    let mut lines = decrypt_local_qrc(&original_path, LocalQrcKind::Primary)?;
+    let mut lines = decrypt_local_qrc(&original_path)?;
     let base = original_path
         .file_name()
         .and_then(|name| name.to_str())
@@ -225,10 +225,11 @@ pub(super) fn resolve_local(
         ("_qmRoma.qrc", AuxiliaryKind::Romanization),
     ] {
         let auxiliary_path = original_path.with_file_name(format!("{base}{suffix}"));
-        if auxiliary_path.is_file()
-            && let Ok(auxiliary) = decrypt_local_qrc(&auxiliary_path, LocalQrcKind::Auxiliary)
-        {
-            merge_auxiliary_lines(&mut lines, &auxiliary, kind);
+        if auxiliary_path.is_file() {
+            match decrypt_local_qrc(&auxiliary_path) {
+                Ok(auxiliary) => merge_auxiliary_lines(&mut lines, &auxiliary, kind),
+                Err(error) => log::debug!("QQ 本地辅助歌词不可用: {error}"),
+            }
         }
     }
     if lines.is_empty() {
@@ -300,17 +301,8 @@ pub(super) fn changed_paths_affect_track(track: &TrackDescriptor, paths: &[PathB
     })
 }
 
-#[derive(Clone, Copy)]
-enum LocalQrcKind {
-    Primary,
-    Auxiliary,
-}
-
-/// 解密 QQ 本地 QRC，并按主歌词与辅助歌词各自的真实格式解析。
-fn decrypt_local_qrc(
-    path: &Path,
-    kind: LocalQrcKind,
-) -> Result<Vec<super::super::model::LyricLine>, LyricsError> {
+/// 解密 QQ 本地 QRC，并按明文内容识别逐字 QRC 或逐行 LRC。
+fn decrypt_local_qrc(path: &Path) -> Result<Vec<super::super::model::LyricLine>, LyricsError> {
     let metadata = fs::metadata(path)?;
     if metadata.len() == 0 || metadata.len() > MAX_QRC_BYTES {
         return Err(LyricsError::InvalidData("QQ QRC 文件大小无效".to_owned()));
@@ -327,11 +319,21 @@ fn decrypt_local_qrc(
     let encrypted = hex::encode(&decoded[newline + 1..]);
     let text = lyrics_crypto::decrypter::qrc::decrypter::decrypt_lyrics(&encrypted)
         .ok_or_else(|| LyricsError::InvalidData("QQ QRC 解密失败".to_owned()))?;
-    match kind {
-        LocalQrcKind::Primary => parse_qrc_lines(&text),
-        // QQ 的 _qmts 与 _qmRoma 外层仍是 QRC 加密，但明文是行级 LRC。
-        LocalQrcKind::Auxiliary => parse_lrc_lines(&text),
+    if text.trim_start().starts_with("<?xml") || has_raw_qrc_timestamp(&text) {
+        parse_qrc_lines(&text)
+    } else {
+        parse_lrc_lines(&text)
     }
+}
+
+/// 裸 QRC 行以毫秒起点和时长组成方括号时间戳，区别于 LRC 的分秒时间戳。
+fn has_raw_qrc_timestamp(input: &str) -> bool {
+    input.lines().any(|line| {
+        line.trim_start()
+            .strip_prefix('[')
+            .and_then(|line| line.split_once(']'))
+            .is_some_and(|(timestamp, _)| timestamp.contains(',') && !timestamp.contains(':'))
+    })
 }
 
 fn decode_qmc_mask(bytes: &[u8]) -> Vec<u8> {

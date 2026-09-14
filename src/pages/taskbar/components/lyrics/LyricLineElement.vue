@@ -161,9 +161,9 @@ const displayWords = computed<DisplayWord[]>(() => {
 
 .lyric-content-animated {
   transition:
-    height 320ms cubic-bezier(0.22, 1, 0.36, 1),
-    line-height 320ms cubic-bezier(0.22, 1, 0.36, 1),
-    font-size 320ms cubic-bezier(0.22, 1, 0.36, 1);
+    height 350ms ease-out,
+    line-height 350ms ease-out,
+    font-size 350ms ease-out;
 }
 
 .lyric-word {
