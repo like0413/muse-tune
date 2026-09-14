@@ -13,7 +13,7 @@ use serde::de::DeserializeOwned;
 use super::error::LyricsError;
 
 const MAX_RESPONSE_BYTES: u64 = 2 * 1024 * 1024;
-pub(super) const API_USER_AGENT: &str = "MuseTune/0.1";
+pub(super) const API_USER_AGENT: &str = concat!("MuseTune/", env!("CARGO_PKG_VERSION"));
 const TOTAL_RESOLUTION_TIMEOUT: Duration = Duration::from_secs(12);
 const SINGLE_REQUEST_TIMEOUT: Duration = Duration::from_secs(4);
 

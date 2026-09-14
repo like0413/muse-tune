@@ -22,7 +22,7 @@ use super::super::{
 };
 
 const MAX_QUEUE_BYTES: u64 = 16 * 1024 * 1024;
-const USER_AGENT_VALUE: &str = "Mozilla/5.0 MuseTune/0.1";
+const USER_AGENT_VALUE: &str = concat!("Mozilla/5.0 MuseTune/", env!("CARGO_PKG_VERSION"));
 static LINE_PATTERN: LazyLock<Result<Regex, regex::Error>> =
     LazyLock::new(|| Regex::new(r"^\[(\d+),(\d+)](.*)$"));
 static WORD_PATTERN: LazyLock<Result<Regex, regex::Error>> =
