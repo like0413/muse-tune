@@ -16,7 +16,10 @@ import {
   type VolumePopupHoverPayload,
 } from '@/features/media/volume-popup'
 
-const props = defineProps<{ themeColor: string }>()
+const props = defineProps<{
+  themeColor: string
+  compact: boolean
+}>()
 const anchor = useTemplateRef<HTMLElement>('anchor')
 const triggerHovered = shallowRef(false)
 const popupHovered = shallowRef(false)
@@ -27,6 +30,7 @@ let unlistenPopupHover: UnlistenFn | undefined
 let disposed = false
 
 const percentage = computed(() => Math.round((volume.value?.level ?? 0) * 100))
+const controlSize = computed(() => (props.compact ? 'icon-xs' : 'icon-sm'))
 const volumeIcon = computed(() => {
   if (!volume.value) return Volume2
   if (volume.value.muted || percentage.value === 0) return VolumeX
@@ -117,7 +121,7 @@ onUnmounted(() => {
   >
     <Button
       variant="ghost"
-      size="icon-sm"
+      :size="controlSize"
       class="taskbar-volume-control"
       type="button"
       aria-label="调节播放器音量"

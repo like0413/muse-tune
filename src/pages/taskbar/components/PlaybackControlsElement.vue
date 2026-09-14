@@ -19,12 +19,14 @@ const props = defineProps<{
   session: MediaSessionSnapshot | null
   pending: boolean
   themeColor: string
+  compact: boolean
 }>()
 const emit = defineEmits<{ control: [action: MediaControlAction] }>()
 const visibility = shallowRef<TaskbarControlsVisibility>({ ...DEFAULT_TASKBAR_CONTROLS_VISIBILITY })
 let unlistenVisibilityChange: UnlistenFn | undefined
 
 const isPlaying = computed(() => props.session?.playback.status === 'playing')
+const controlSize = computed(() => (props.compact ? 'icon-xs' : 'icon-sm'))
 const canTogglePlayback = computed(() => {
   const playback = props.session?.playback
   if (!playback) return false
@@ -115,11 +117,15 @@ onUnmounted(() => unlistenVisibilityChange?.())
 <template>
   <div v-if="visibility.visible" class="flex shrink-0" aria-label="播放控制">
     <template v-for="item in controlItems" :key="item.key">
-      <VolumeControlElement v-if="item.kind === 'volume'" :theme-color="themeColor" />
+      <VolumeControlElement
+        v-if="item.kind === 'volume'"
+        :theme-color="themeColor"
+        :compact="compact"
+      />
       <Button
         v-else
         variant="ghost"
-        size="icon-sm"
+        :size="controlSize"
         class="taskbar-control"
         type="button"
         :aria-label="item.label"

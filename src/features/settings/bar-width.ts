@@ -1,4 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
+import type { UnlistenFn } from '@tauri-apps/api/event'
+import { emit, listen } from '@tauri-apps/api/event'
 import { clamp } from 'es-toolkit'
 
 import { settingsStore } from './store'
@@ -14,6 +16,7 @@ export const TASKBAR_WIDTH_PRESETS = {
 export type TaskbarWidthPreset = keyof typeof TASKBAR_WIDTH_PRESETS | 'custom'
 
 const TASKBAR_WIDTH_KEY = 'taskbar.width'
+const TASKBAR_WIDTH_CHANGED_EVENT = 'settings://taskbar-width-changed'
 const DEFAULT_TASKBAR_WIDTH = TASKBAR_WIDTH_MAX
 
 /** 根据已保存宽度还原预设；非精确预设值归入自由调整。 */
@@ -37,12 +40,25 @@ export async function getTaskbarWidth(): Promise<number> {
   return width ?? DEFAULT_TASKBAR_WIDTH
 }
 
-/** 仅将宽度应用到原生任务栏窗口，不写入持久化存储。 */
+/** 将宽度应用到原生任务栏窗口，并通知 bar 同步响应式布局。 */
 export async function applyTaskbarWidth(width: number): Promise<void> {
   const normalized = normalizeTaskbarWidth(width)
   if (normalized !== undefined) {
     await invoke('set_taskbar_width', { width: normalized })
+    await emit(TASKBAR_WIDTH_CHANGED_EVENT, normalized)
   }
+}
+
+/** 监听设置窗口发出的 bar 宽度变化，包括拖动预览与回滚。 */
+export async function listenTaskbarWidthChange(
+  handler: (width: number) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(TASKBAR_WIDTH_CHANGED_EVENT, ({ payload }) => {
+    const width = normalizeTaskbarWidth(payload)
+    if (width !== undefined) {
+      handler(width)
+    }
+  })
 }
 
 /** 立即应用 bar 宽度，并在成功后持久化。 */

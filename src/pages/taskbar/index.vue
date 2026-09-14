@@ -13,6 +13,11 @@ import {
   getTaskbarBackgroundTransparency,
   listenTaskbarBackgroundTransparencyChange,
 } from '@/features/settings/background-transparency'
+import {
+  getTaskbarWidth,
+  listenTaskbarWidthChange,
+  TASKBAR_WIDTH_PRESETS,
+} from '@/features/settings/bar-width'
 import { isTaskbarCoverVisibleInMode } from '@/features/settings/cover'
 import {
   DEFAULT_TASKBAR_ELEMENT_ORDER,
@@ -62,6 +67,8 @@ const normalLayer = useTemplateRef<HTMLElement>('normalLayer')
 const normalCoverAnchor = useTemplateRef<HTMLElement>('normalCoverAnchor')
 const lyricsCoverAnchor = useTemplateRef<HTMLElement>('lyricsCoverAnchor')
 const isTaskbarHovered = useElementHover(taskbarRoot)
+const taskbarWidth = shallowRef(TASKBAR_WIDTH_PRESETS.wide)
+const isCompact = computed(() => taskbarWidth.value <= TASKBAR_WIDTH_PRESETS.compact)
 // 所有播放器都必须提供有效时间线；能力出现或消失时自动在歌词与普通界面间切换。
 const hasReliableLyricsTimeline = computed(() => timeline.value !== null)
 const showLyrics = computed(
@@ -101,6 +108,8 @@ let unlistenBackgroundTransparencyChange: UnlistenFn | undefined
 let unlistenProgressStyleChange: UnlistenFn | undefined
 let unlistenProgressPositionChange: UnlistenFn | undefined
 let unlistenElementOrderChange: UnlistenFn | undefined
+let unlistenWidthChange: UnlistenFn | undefined
+let widthEventVersion = 0
 
 /** 普通层始终保持最终排列；封面位置由同尺寸锚点预留。 */
 const normalElementStyle = computed<Record<TaskbarElement, CSSProperties>>(() => ({
@@ -217,15 +226,34 @@ async function initializeElementOrder() {
   }
 }
 
+/** 从持久化设置恢复宽度，并通过跨窗口事件响应预览和保存。 */
+async function initializeWidth() {
+  try {
+    unlistenWidthChange = await listenTaskbarWidthChange((width) => {
+      widthEventVersion += 1
+      taskbarWidth.value = width
+    })
+    const versionBeforeRead = widthEventVersion
+    const savedWidth = await getTaskbarWidth()
+    if (widthEventVersion === versionBeforeRead) {
+      taskbarWidth.value = savedWidth
+    }
+  } catch (error) {
+    console.error('初始化任务栏宽度状态失败', error)
+  }
+}
+
 onMounted(initializeBackgroundTransparency)
 onMounted(initializeProgressStyle)
 onMounted(initializeElementOrder)
+onMounted(initializeWidth)
 onMounted(refreshCoverAnchors)
 onUnmounted(() => {
   unlistenBackgroundTransparencyChange?.()
   unlistenProgressStyleChange?.()
   unlistenProgressPositionChange?.()
   unlistenElementOrderChange?.()
+  unlistenWidthChange?.()
 })
 </script>
 
@@ -265,6 +293,7 @@ onUnmounted(() => {
           :session="mediaSession"
           :pending="controlPending"
           :theme-color="progressColor"
+          :compact="isCompact"
           :style="normalElementStyle.controls"
           @control="control"
         />

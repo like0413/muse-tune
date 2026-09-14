@@ -30,7 +30,7 @@ use super::{
 
 const RECOVERY_RETRY_DELAY: Duration = Duration::from_millis(400);
 const FULLSCREEN_STATE_CHECK_INTERVAL: Duration = Duration::from_millis(250);
-const UIA_FALLBACK_QUERY_INTERVAL: Duration = Duration::from_secs(1);
+const UIA_RECOVERY_QUERY_INTERVAL: Duration = Duration::from_secs(1);
 const MIN_CONTENT_WIDTH_DIP: i32 = 200;
 const MAX_CONTENT_WIDTH_DIP: i32 = 360;
 static TASKBAR_PLACEMENT: AtomicU8 = AtomicU8::new(TaskbarPlacement::Auto as u8);
@@ -130,7 +130,7 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
     let mut applied_layout: Option<BarLayout> = None;
     let mut immediate_layout_needed = active_priority == TaskbarOverlapPriority::Bar;
     let mut uia_watch_needed = active_priority == TaskbarOverlapPriority::TaskbarElements;
-    let mut next_uia_fallback_query = Instant::now() + UIA_FALLBACK_QUERY_INTERVAL;
+    let mut next_uia_recovery_query = Instant::now() + UIA_RECOVERY_QUERY_INTERVAL;
     let mut bar_was_suppressed = true;
     let mut z_order_refresh_needed = true;
     let mut fullscreen_monitor = FullscreenStateMonitor::new(taskbar, Instant::now());
@@ -198,13 +198,17 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
             uia_watch_needed = false;
         }
 
-        let uia_fallback_needed = active_priority == TaskbarOverlapPriority::TaskbarElements
-            && taskbar_elements
-                .as_ref()
-                .is_some_and(|elements| !elements.is_event_driven());
-        if uia_fallback_needed && now >= next_uia_fallback_query {
+        // 订阅成功只能证明事件处理器已注册；bar 仍被裁剪期间低频校验，恢复后自动停止。
+        let applied_layout_is_clipped = applied_layout
+            .is_some_and(|layout| layout.visible_rect.width() < layout.window_rect.width());
+        let uia_recovery_query_needed = active_priority == TaskbarOverlapPriority::TaskbarElements
+            && (applied_layout_is_clipped
+                || taskbar_elements
+                    .as_ref()
+                    .is_some_and(|elements| !elements.is_event_driven()));
+        if uia_recovery_query_needed && now >= next_uia_recovery_query {
             stabilizer.invalidate(now);
-            next_uia_fallback_query = now + UIA_FALLBACK_QUERY_INTERVAL;
+            next_uia_recovery_query = now + UIA_RECOVERY_QUERY_INTERVAL;
         }
 
         let auto_hide_enabled = taskbar_auto_hide_enabled();
@@ -290,8 +294,8 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
             retry_needed,
             hook_fallback_needed,
             &stabilizer,
-            uia_fallback_needed,
-            next_uia_fallback_query,
+            uia_recovery_query_needed,
+            next_uia_recovery_query,
             &mut fullscreen_monitor,
         ) {
             TaskbarChange::Layout => match active_priority {
@@ -316,8 +320,8 @@ fn wait_for_relevant_change(
     retry_needed: bool,
     hook_fallback_needed: bool,
     stabilizer: &LayoutStabilizer,
-    uia_fallback_needed: bool,
-    next_uia_fallback_query: Instant,
+    uia_recovery_query_needed: bool,
+    next_uia_recovery_query: Instant,
     fullscreen_monitor: &mut FullscreenStateMonitor,
 ) -> TaskbarChange {
     let recovery_deadline =
@@ -333,8 +337,8 @@ fn wait_for_relevant_change(
         if let Some(deadline) = stabilizer.next_sample_at() {
             wait_timeout = wait_timeout.min(deadline.saturating_duration_since(now));
         }
-        if uia_fallback_needed {
-            wait_timeout = wait_timeout.min(next_uia_fallback_query.saturating_duration_since(now));
+        if uia_recovery_query_needed {
+            wait_timeout = wait_timeout.min(next_uia_recovery_query.saturating_duration_since(now));
         }
 
         match wait_for_taskbar_change(wait_timeout) {
@@ -348,7 +352,7 @@ fn wait_for_relevant_change(
         }
         if recovery_deadline.is_some_and(|deadline| now >= deadline)
             || stabilizer.sample_due(now)
-            || (uia_fallback_needed && now >= next_uia_fallback_query)
+            || (uia_recovery_query_needed && now >= next_uia_recovery_query)
         {
             return TaskbarChange::Timeout;
         }
