@@ -77,20 +77,34 @@ pub fn run() {
             app.manage(media_service);
             let system_theme_service = system::initialize(app.handle().clone())?;
             app.manage(system_theme_service);
-            taskbar::initialize(app)?;
+            let taskbar_service = taskbar::initialize(app)?;
+            app.manage(taskbar_service);
             tray::initialize(app)?;
 
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("构建 Tauri 应用失败")
-        .run(|_app, event| {
-            if let tauri::RunEvent::ExitRequested {
+        .run(|app, event| match event {
+            tauri::RunEvent::ExitRequested {
                 code: None, api, ..
-            } = event
-            {
+            } => {
                 // Explorer 重启时会销毁由任务栏持有的 bar 窗口，因此保留进程，交由监控线程重建窗口。
                 api.prevent_exit();
             }
+            tauri::RunEvent::ExitRequested { code: Some(_), .. } => {
+                // 先发停止信号，让依赖主事件循环的后台操作有机会在最终 Exit 前返回。
+                app.state::<media::MediaService>().request_shutdown();
+                app.state::<taskbar::TaskbarService>().request_shutdown();
+                app.state::<lyrics::LyricsService>().shutdown();
+                app.state::<system::SystemThemeService>().shutdown();
+            }
+            tauri::RunEvent::Exit => {
+                app.state::<media::MediaService>().shutdown();
+                app.state::<taskbar::TaskbarService>().shutdown();
+                app.state::<lyrics::LyricsService>().shutdown();
+                app.state::<system::SystemThemeService>().shutdown();
+            }
+            _ => {}
         });
 }

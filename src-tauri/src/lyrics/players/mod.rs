@@ -3,6 +3,7 @@ mod kugou_music;
 mod netease_cloud_music;
 mod qq_music;
 mod registry;
+mod registry_watch;
 mod soda_music;
 
 use std::{
@@ -21,6 +22,7 @@ use super::{
     track::TrackDescriptor,
 };
 use registry::{ADAPTERS, LyricsAdapter, adapter};
+pub(super) use registry_watch::RegistryWatchHandle;
 
 type RegistryChangeCallback = Arc<dyn Fn(MediaPlayer) + Send + Sync>;
 
@@ -123,16 +125,26 @@ pub fn configuration_changed(player: MediaPlayer, paths: &[PathBuf]) -> bool {
 }
 
 /// 启动所有适配器声明的原生缓存路径设置监听。
-pub fn watch_registry_settings(on_change: RegistryChangeCallback) {
+pub(super) fn watch_registry_settings(
+    on_change: RegistryChangeCallback,
+) -> Vec<RegistryWatchHandle> {
+    let mut watchers = Vec::new();
     for adapter in ADAPTERS {
         let Some(watch) = adapter.registry_watcher() else {
             continue;
         };
         let on_change = Arc::clone(&on_change);
-        if let Err(error) = watch(Arc::new(move || on_change(adapter.player))) {
-            log::warn!("监听 {:?} 缓存目录设置失败: {error}", adapter.player);
+        match watch(Arc::new(move || on_change(adapter.player))) {
+            Ok(watcher) => watchers.push(watcher),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                log::debug!("{:?} 注册表配置不存在，跳过键值监听", adapter.player);
+            }
+            Err(error) => {
+                log::warn!("监听 {:?} 缓存目录设置失败: {error}", adapter.player);
+            }
         }
     }
+    watchers
 }
 
 #[cfg(test)]

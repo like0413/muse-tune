@@ -18,6 +18,7 @@ pub use model::{
 };
 pub(crate) use model::{
     MediaRuntimeDiagnostics, MediaRuntimeSessionDiagnostics, MediaSnapshotDiagnostics,
+    MediaWorkerMessageRuntimeDiagnostics, MediaWorkerRuntimeDiagnostics,
 };
 pub use monitor::MediaService;
 

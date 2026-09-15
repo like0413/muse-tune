@@ -2,7 +2,6 @@ use std::{
     fs, io,
     path::{Path, PathBuf},
     sync::{Arc, LazyLock},
-    thread,
 };
 
 use base64::Engine;
@@ -11,10 +10,7 @@ use reqwest::{
     header::{REFERER, USER_AGENT},
 };
 use serde::Deserialize;
-use windows::Win32::System::Registry::{
-    HKEY, HKEY_CURRENT_USER, KEY_NOTIFY, REG_NOTIFY_CHANGE_LAST_SET, RRF_RT_REG_SZ, RegCloseKey,
-    RegGetValueW, RegNotifyChangeKeyValue, RegOpenKeyExW,
-};
+use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_SZ, RegGetValueW};
 
 use crate::media::MediaPlayer;
 
@@ -26,7 +22,10 @@ use super::super::{
     parser::{AuxiliaryKind, merge_auxiliary_lines, parse_lrc_lines, parse_qrc_lines},
     track::{TrackDescriptor, split_artists},
 };
-use super::file_index::DirectoryFileIndex;
+use super::{
+    file_index::DirectoryFileIndex,
+    registry_watch::{RegistryWatchHandle, watch_current_user_value_changes},
+};
 
 mod online;
 
@@ -48,39 +47,14 @@ pub fn automatic_cache_path() -> Option<PathBuf> {
 }
 
 /// 使用 Windows 注册表原生通知监听 QQ 音乐缓存根目录调整。
-pub fn watch_cache_path_changes(on_change: Arc<dyn Fn() + Send + Sync>) -> Result<(), io::Error> {
-    thread::Builder::new()
-        .name("qq-music-cache-registry".to_owned())
-        .spawn(move || {
-            let mut key = HKEY::default();
-            // SAFETY: 只读打开当前用户的固定 QQ 音乐配置键，并仅申请通知权限。
-            let result = unsafe {
-                RegOpenKeyExW(
-                    HKEY_CURRENT_USER,
-                    windows::core::w!(r"Software\Tencent\QQMusic\LogConfig"),
-                    None,
-                    KEY_NOTIFY,
-                    &mut key,
-                )
-            };
-            if result.is_err() {
-                log::debug!("QQ 音乐注册表配置不存在，跳过键值监听");
-                return;
-            }
-            loop {
-                // SAFETY: key 在线程结束前保持有效；同步等待不需要事件句柄。
-                let result = unsafe {
-                    RegNotifyChangeKeyValue(key, false, REG_NOTIFY_CHANGE_LAST_SET, None, false)
-                };
-                if result.is_err() {
-                    break;
-                }
-                on_change();
-            }
-            // SAFETY: key 只由本线程持有且仅关闭一次。
-            let _ = unsafe { RegCloseKey(key) };
-        })?;
-    Ok(())
+pub fn watch_cache_path_changes(
+    on_change: Arc<dyn Fn() + Send + Sync>,
+) -> Result<RegistryWatchHandle, io::Error> {
+    watch_current_user_value_changes(
+        "qq-music-cache-registry",
+        r"Software\Tencent\QQMusic\LogConfig",
+        on_change,
+    )
 }
 
 /// 匿名搜索 QQ 曲目并读取行歌词。

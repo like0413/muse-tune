@@ -19,6 +19,14 @@ const controlCapabilities = computed(() => {
   ].filter(Boolean)
   return controls.length > 0 ? controls.join('、') : '播放器未声明可用控制'
 })
+
+const workerMessageSummary = computed(() => {
+  const worker = props.diagnostics.worker
+  if (!worker) return '媒体线程不可用'
+  const sent = worker.messages.reduce((total, message) => total + message.sent, 0)
+  const processed = worker.messages.reduce((total, message) => total + message.processed, 0)
+  return `入队 ${sent} · 已处理 ${processed}`
+})
 </script>
 
 <template>
@@ -57,6 +65,31 @@ const controlCapabilities = computed(() => {
       :value="diagnostics.discoveredSessionCount ?? '媒体线程不可用'"
     />
     <DiagnosticRow label="选择策略" :value="diagnostics.selectionStrategy ?? '不可用'" />
+    <DiagnosticRow label="消息累计" :value="workerMessageSummary" />
+    <DiagnosticRow
+      label="队列待处理"
+      :value="
+        diagnostics.worker
+          ? `当前 ${diagnostics.worker.pendingMessages} · 峰值 ${diagnostics.worker.pendingMessagesPeak}`
+          : '不可用'
+      "
+    />
+    <DiagnosticRow
+      label="控制请求最大排队"
+      :value="diagnostics.worker ? `${diagnostics.worker.maxCommandQueueWaitMs} ms` : '不可用'"
+    />
+    <DiagnosticRow
+      label="已合并事件"
+      :value="diagnostics.worker?.coalescedEventCount ?? '不可用'"
+    />
+    <DiagnosticRow
+      label="元数据稳定任务"
+      :value="
+        diagnostics.worker
+          ? `当前 ${diagnostics.worker.metadataSettlePending} · 峰值 ${diagnostics.worker.metadataSettlePendingPeak}`
+          : '不可用'
+      "
+    />
     <div v-if="diagnostics.sessions.length > 0" class="col-span-2 mt-3 space-y-2 border-t pt-3">
       <div class="text-muted-foreground text-xs font-medium">候选会话</div>
       <div

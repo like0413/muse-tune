@@ -11,7 +11,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use notify::RecommendedWatcher;
 use reqwest::{Url, blocking::Client, redirect};
 use tauri::{Emitter, Manager, Runtime};
 
@@ -30,7 +29,9 @@ use super::{
     network::ResolutionDeadline,
     players,
     track::TrackDescriptor,
+    watcher::{LyricsFileWatcher, LyricsWatcherMetrics},
 };
+use players::RegistryWatchHandle;
 
 mod pipeline;
 mod trace;
@@ -75,7 +76,10 @@ struct LyricsServiceInner {
     diagnostics_notifier: Arc<DiagnosticsNotifier>,
     runtime_state: RwLock<LyricsRuntimeState>,
     adapter_paths: RwLock<HashMap<MediaPlayer, Option<PathBuf>>>,
-    watchers: Mutex<HashMap<MediaPlayer, RecommendedWatcher>>,
+    watchers: Mutex<HashMap<MediaPlayer, LyricsFileWatcher>>,
+    watcher_metrics: Arc<LyricsWatcherMetrics>,
+    registry_watchers: Mutex<Vec<RegistryWatchHandle>>,
+    shutdown_requested: AtomicBool,
     resolver: Mutex<ResolverState>,
 }
 
@@ -168,12 +172,38 @@ impl LyricsService {
                 runtime_state: RwLock::new(LyricsRuntimeState::default()),
                 adapter_paths: RwLock::new(HashMap::new()),
                 watchers: Mutex::new(HashMap::new()),
+                watcher_metrics: Arc::new(LyricsWatcherMetrics::default()),
+                registry_watchers: Mutex::new(Vec::new()),
+                shutdown_requested: AtomicBool::new(false),
                 resolver: Mutex::new(ResolverState::default()),
             }),
         };
         service.refresh_watchers();
         service.start_registry_watcher();
         Ok(service)
+    }
+
+    /// 停止接收新的事件，取消活动解析，并同步回收全部监听线程。
+    pub(crate) fn shutdown(&self) {
+        if self.inner.shutdown_requested.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        self.cancel_resolution();
+        let watchers = self
+            .inner
+            .watchers
+            .lock()
+            .map(|mut watchers| std::mem::take(&mut *watchers))
+            .unwrap_or_default();
+        let registry_watchers = self
+            .inner
+            .registry_watchers
+            .lock()
+            .map(|mut watchers| std::mem::take(&mut *watchers))
+            .unwrap_or_default();
+        // 不在持有 service mutex 时 join，避免与正在结束的 callback 形成锁等待。
+        drop(watchers);
+        drop(registry_watchers);
     }
 
     /// 返回最近一次歌词快照。
@@ -280,6 +310,17 @@ impl LyricsService {
                 .cache
                 .diagnostics(current_track.as_ref().map(|track| track.key.as_str())),
             adapters,
+            watcher: {
+                let metrics = self.inner.watcher_metrics.snapshot();
+                super::model::LyricsWatcherDiagnostics {
+                    enqueued_batches: metrics.enqueued_batches,
+                    processed_batches: metrics.processed_batches,
+                    coalesced_batches: metrics.coalesced_batches,
+                    callback_count: metrics.callback_count,
+                    pending_batches: metrics.pending_batches,
+                    pending_batches_peak: metrics.pending_batches_peak,
+                }
+            },
         }
     }
 

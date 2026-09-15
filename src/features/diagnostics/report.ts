@@ -49,6 +49,7 @@ export function createSanitizedDiagnosticsReport(diagnostics: DiagnosticsSnapsho
         detail: sanitizeText(step.detail),
       })),
       cache: diagnostics.lyrics.cache,
+      watcher: diagnostics.lyrics.watcher,
       adapters: diagnostics.lyrics.adapters.map((adapter) => ({
         ...adapter,
         cachePath: adapter.cachePath ? '[available]' : null,

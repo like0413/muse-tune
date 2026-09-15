@@ -4,7 +4,7 @@ use windows::{
     Win32::{
         Foundation::HWND,
         Graphics::Gdi::{
-            CreateRectRgn, DeleteObject, HGDIOBJ, RDW_ALLCHILDREN, RDW_ERASE, RDW_FRAME,
+            CreateRectRgn, DeleteObject, HGDIOBJ, HRGN, RDW_ALLCHILDREN, RDW_ERASE, RDW_FRAME,
             RDW_INVALIDATE, RDW_UPDATENOW, RedrawWindow, SetWindowRgn,
         },
         System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW},
@@ -27,6 +27,41 @@ use windows::{
 };
 
 use super::geometry::{ScreenRect, monitor_rect, window_rect};
+
+/// 尚未转交给窗口系统的 GDI region。
+struct OwnedRegion(Option<HRGN>);
+
+impl OwnedRegion {
+    /// 创建矩形 region；空句柄表示系统资源不足。
+    fn rectangle(left: i32, top: i32, right: i32, bottom: i32) -> Option<Self> {
+        // SAFETY: 坐标是纯值参数，成功返回的 region 由 Self 接管。
+        let region = unsafe { CreateRectRgn(left, top, right, bottom) };
+        (!region.is_invalid()).then_some(Self(Some(region)))
+    }
+
+    /// SetWindowRgn 成功后将所有权转交给系统。
+    fn transfer_to_window(mut self, window: HWND, redraw: bool) -> bool {
+        let Some(region) = self.0 else {
+            return false;
+        };
+        // SAFETY: window 由同步循环验证；成功时系统接管 region，失败时仍由 Self 释放。
+        if unsafe { SetWindowRgn(window, Some(region), redraw) } == 0 {
+            return false;
+        }
+        self.0 = None;
+        true
+    }
+}
+
+impl Drop for OwnedRegion {
+    fn drop(&mut self) {
+        let Some(region) = self.0.take() else {
+            return;
+        };
+        // SAFETY: 仅释放尚未成功转交给 SetWindowRgn 的 owned region。
+        let _ = unsafe { DeleteObject(HGDIOBJ(region.0)) };
+    }
+}
 
 /// 读取 Windows 11 任务栏按钮对齐方式；读取失败时使用系统默认的居中布局。
 pub(super) fn taskbar_buttons_center_aligned() -> bool {
@@ -195,20 +230,10 @@ pub(super) fn clip_bar(bar: HWND, window_rect: ScreenRect, visible_rect: ScreenR
         return unsafe { SetWindowRgn(bar, None, true) } != 0;
     }
 
-    // SAFETY: 坐标已经限制在窗口客户区内；成功后 region 所有权转移给系统。
-    let region = unsafe { CreateRectRgn(left, 0, right, height) };
-    if region.is_invalid() {
+    let Some(region) = OwnedRegion::rectangle(left, 0, right, height) else {
         return false;
-    }
-
-    // SAFETY: `bar` 是同步循环验证过的窗口；失败时所有权仍属于调用方并在下方释放。
-    if unsafe { SetWindowRgn(bar, Some(region), true) } != 0 {
-        true
-    } else {
-        // SAFETY: SetWindowRgn 失败，region 所有权未转移，必须由调用方释放。
-        let _ = unsafe { DeleteObject(HGDIOBJ(region.0)) };
-        false
-    }
+    };
+    region.transfer_to_window(bar, true)
 }
 
 /// 使窗口及其 WebView 子窗口立即重绘新暴露的区域。

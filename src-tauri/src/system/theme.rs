@@ -1,4 +1,7 @@
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    Arc, RwLock,
+    atomic::{AtomicBool, Ordering},
+};
 
 use tauri::{AppHandle, Emitter, Runtime};
 use windows::{
@@ -20,13 +23,12 @@ pub(crate) struct SystemThemeService {
     settings: UISettings,
     color_changed_token: i64,
     colors: Arc<RwLock<SystemColors>>,
+    shutdown_requested: AtomicBool,
 }
 
 impl Drop for SystemThemeService {
     fn drop(&mut self) {
-        let _ = self
-            .settings
-            .RemoveColorValuesChanged(self.color_changed_token);
+        self.shutdown();
     }
 }
 
@@ -66,10 +68,20 @@ pub(crate) fn initialize<R: Runtime>(
         settings,
         color_changed_token,
         colors,
+        shutdown_requested: AtomicBool::new(false),
     })
 }
 
 impl SystemThemeService {
+    /// 在 Tauri 直接结束进程前显式注销系统颜色回调；重复调用保持幂等。
+    pub(crate) fn shutdown(&self) {
+        if !self.shutdown_requested.swap(true, Ordering::AcqRel) {
+            let _ = self
+                .settings
+                .RemoveColorValuesChanged(self.color_changed_token);
+        }
+    }
+
     /// 返回服务缓存的 Windows 当前强调色。
     pub(crate) fn accent_color(&self) -> Result<String, String> {
         self.colors

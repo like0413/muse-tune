@@ -87,4 +87,12 @@ export interface LyricsDiagnostics {
   resolutionSteps: LyricsResolutionStep[]
   cache: LyricsCacheDiagnostics
   adapters: LyricsAdapterDiagnostics[]
+  watcher: {
+    enqueuedBatches: number
+    processedBatches: number
+    coalescedBatches: number
+    callbackCount: number
+    pendingBatches: number
+    pendingBatchesPeak: number
+  }
 }

@@ -1,5 +1,7 @@
 //! 通过 Windows UI Automation 读取任务栏实际交互元素的边界。
 
+use std::{marker::PhantomData, rc::Rc};
+
 use windows::{
     Win32::{
         Foundation::{E_FAIL, HWND},
@@ -83,40 +85,60 @@ struct TaskbarQuery {
     cache: IUIAutomationCacheRequest,
 }
 
+/// 当前 taskbar sync worker 独占的 COM MTA。
+struct ComMta {
+    _thread_affinity: PhantomData<Rc<()>>,
+}
+
+impl ComMta {
+    /// 初始化当前线程 COM apartment。
+    fn initialize() -> windows::core::Result<Self> {
+        // SAFETY: taskbar sync worker 是独立线程，本类型不离开创建线程。
+        unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.ok()?;
+        Ok(Self {
+            _thread_affinity: PhantomData,
+        })
+    }
+}
+
+impl Drop for ComMta {
+    fn drop(&mut self) {
+        // SAFETY: initialize 成功后才构造 Self，且所有 COM 接口已由 TaskbarElements 先释放。
+        unsafe { CoUninitialize() };
+    }
+}
+
 /// 复用监控线程的 COM 单元与 UI Automation 客户端。
 pub(super) struct TaskbarElements {
     automation: Option<IUIAutomation>,
     query: Option<TaskbarQuery>,
     subscription: Option<TaskbarEventSubscription>,
+    _apartment: ComMta,
 }
 
 impl TaskbarElements {
     /// 在当前监控线程初始化 UI Automation；不可用时由调用方保持完整 bar。
     pub(super) fn new() -> Option<Self> {
-        // SAFETY: 任务栏监控使用独立线程，并在本类型 Drop 时于同一线程配对反初始化。
-        let initialize_result = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
-        if initialize_result.is_err() {
-            log::warn!("初始化任务栏 UI Automation 的 COM 单元失败: {initialize_result:?}");
-            return None;
-        }
+        let apartment = ComMta::initialize()
+            .inspect_err(|error| log::warn!("初始化任务栏 UI Automation 的 COM 单元失败: {error}"))
+            .ok()?;
 
         // SAFETY: CUIAutomation 是系统注册的进程内 COM 类，返回接口由 windows crate 管理。
-        let automation = unsafe {
+        let automation = match unsafe {
             CoCreateInstance::<_, IUIAutomation>(&CUIAutomation, None, CLSCTX_INPROC_SERVER)
-        };
-        match automation {
-            Ok(automation) => Some(Self {
-                automation: Some(automation),
-                query: None,
-                subscription: None,
-            }),
+        } {
+            Ok(automation) => automation,
             Err(error) => {
                 log::warn!("创建任务栏 UI Automation 客户端失败: {error}");
-                // SAFETY: 上方 CoInitializeEx 已成功，且当前线程尚未持有 COM 接口。
-                unsafe { CoUninitialize() };
-                None
+                return None;
             }
-        }
+        };
+        Some(Self {
+            automation: Some(automation),
+            query: None,
+            subscription: None,
+            _apartment: apartment,
+        })
     }
 
     /// 订阅任务栏 Provider 的布局事件；Explorer 重建时替换旧订阅。
@@ -192,9 +214,8 @@ impl Drop for TaskbarElements {
     fn drop(&mut self) {
         self.remove_subscription();
         // 必须先释放 COM 接口，再反初始化创建它们的线程单元。
+        drop(self.query.take());
         drop(self.automation.take());
-        // SAFETY: new 仅在 CoInitializeEx 成功后构造 Self，且 Drop 与构造发生在同一线程。
-        unsafe { CoUninitialize() };
     }
 }
 

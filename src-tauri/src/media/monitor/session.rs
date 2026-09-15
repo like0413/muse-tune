@@ -1,6 +1,6 @@
 //! GSMTC 管理器和单会话事件订阅。
 
-use std::{sync::mpsc::Sender, thread, time::Duration};
+use std::time::Instant;
 
 use windows::{
     Foundation::TypedEventHandler,
@@ -11,14 +11,13 @@ use windows::{
     },
 };
 
-use super::WorkerMessage;
+use super::{metrics::WorkerSender, pending_events::WorkerEvent};
 use crate::media::{
     MediaControlAction, MediaMetadata, MediaPlayback, MediaPlaybackControls, MediaSessionSnapshot,
     MediaTimeline, players::identify, source_icon::read_source_icon_data_url,
     thumbnail::read_thumbnail_data_url,
 };
 
-const METADATA_SETTLE_DELAY: Duration = Duration::from_millis(300);
 const TICKS_PER_MILLISECOND: i64 = 10_000;
 
 pub(super) struct ManagerRegistration {
@@ -63,7 +62,7 @@ impl Drop for SessionRegistration {
 
 /// 获取 GSMTC 管理器并订阅当前会话与会话列表变化。
 pub(super) fn register_manager(
-    sender: &Sender<WorkerMessage>,
+    sender: &WorkerSender,
 ) -> windows::core::Result<ManagerRegistration> {
     let manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync()?.get()?;
     let current_sender = sender.clone();
@@ -72,7 +71,7 @@ pub(super) fn register_manager(
             GlobalSystemMediaTransportControlsSessionManager,
             CurrentSessionChangedEventArgs,
         >::new(move |_, _| {
-            let _ = current_sender.send(WorkerMessage::ManagerChanged);
+            current_sender.send_event(WorkerEvent::Manager);
             Ok(())
         }))?;
     let sessions_sender = sender.clone();
@@ -80,7 +79,7 @@ pub(super) fn register_manager(
         GlobalSystemMediaTransportControlsSessionManager,
         SessionsChangedEventArgs,
     >::new(move |_, _| {
-        let _ = sessions_sender.send(WorkerMessage::ManagerChanged);
+        sessions_sender.send_event(WorkerEvent::Manager);
         Ok(())
     })) {
         Ok(token) => token,
@@ -101,7 +100,7 @@ pub(super) fn register_manager(
 pub(super) fn bind_session(
     session: GlobalSystemMediaTransportControlsSession,
     session_id: u64,
-    sender: &Sender<WorkerMessage>,
+    sender: &WorkerSender,
 ) -> Option<SessionRegistration> {
     let metadata_sender = sender.clone();
     let media_properties_changed_token = session
@@ -109,14 +108,10 @@ pub(super) fn bind_session(
             GlobalSystemMediaTransportControlsSession,
             MediaPropertiesChangedEventArgs,
         >::new(move |_, _| {
-            let _ = metadata_sender.send(WorkerMessage::MediaPropertiesChanged(session_id));
-            let settled_sender = metadata_sender.clone();
-            let _ = thread::Builder::new()
-                .name("media-metadata-settle".to_owned())
-                .spawn(move || {
-                    thread::sleep(METADATA_SETTLE_DELAY);
-                    let _ = settled_sender.send(WorkerMessage::MediaPropertiesChanged(session_id));
-                });
+            metadata_sender.send_event(WorkerEvent::MediaProperties {
+                session_id,
+                observed_at: Instant::now(),
+            });
             Ok(())
         }))
         .ok()?;
@@ -125,7 +120,7 @@ pub(super) fn bind_session(
         GlobalSystemMediaTransportControlsSession,
         PlaybackInfoChangedEventArgs,
     >::new(move |_, _| {
-        let _ = playback_sender.send(WorkerMessage::PlaybackInfoChanged(session_id));
+        playback_sender.send_event(WorkerEvent::PlaybackInfo(session_id));
         Ok(())
     })) {
         Ok(token) => token,
@@ -140,7 +135,7 @@ pub(super) fn bind_session(
             GlobalSystemMediaTransportControlsSession,
             TimelinePropertiesChangedEventArgs,
         >::new(move |_, _| {
-            let _ = timeline_sender.send(WorkerMessage::TimelinePropertiesChanged(session_id));
+            timeline_sender.send_event(WorkerEvent::TimelineProperties(session_id));
             Ok(())
         }))
         .ok();

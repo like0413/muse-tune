@@ -1,6 +1,6 @@
 //! 使用 Windows Core Audio 控制当前播放器的单应用音量，绝不修改系统端点音量。
 
-use std::{collections::HashSet, sync::mpsc::Sender, thread, time::Duration};
+use std::collections::HashSet;
 
 use windows::{
     Win32::{
@@ -16,27 +16,24 @@ use windows::{
     core::{BOOL, GUID, Interface, PCWSTR, Ref, implement},
 };
 
-use super::{MediaVolumeSnapshot, monitor::WorkerMessage, process::find_process_ids};
+use super::{
+    MediaVolumeSnapshot,
+    monitor::{metrics::WorkerSender, pending_events::WorkerEvent},
+    process::find_process_ids,
+};
 
 const VOLUME_EVENT_CONTEXT: GUID = GUID::from_u128(0x16c5b57c_2d31_45a5_9c9e_f97a63d20f31);
-const INITIAL_VOLUME_REBIND_DELAYS: [Duration; 4] = [
-    Duration::from_millis(300),
-    Duration::from_millis(800),
-    Duration::from_millis(1_600),
-    Duration::from_millis(3_200),
-];
-
 /// 当前播放器跨输出设备的全部应用音频会话。
 pub(super) struct ApplicationVolumeController {
     target_id: Option<u64>,
     device_registrations: Vec<DeviceRegistration>,
     session_registrations: Vec<VolumeSessionRegistration>,
-    sender: Sender<WorkerMessage>,
+    sender: WorkerSender,
 }
 
 impl ApplicationVolumeController {
     /// 创建尚未绑定播放器的控制器。
-    pub(super) fn new(sender: Sender<WorkerMessage>) -> Self {
+    pub(super) fn new(sender: WorkerSender) -> Self {
         Self {
             target_id: None,
             device_registrations: Vec::new(),
@@ -87,31 +84,6 @@ impl ApplicationVolumeController {
             .find(|registration| registration.is_active())
             .or_else(|| self.session_registrations.first())
             .and_then(VolumeSessionRegistration::snapshot)
-    }
-
-    /// 初次绑定尚无音频会话时启动有限退避重绑，兜底 Core Audio 漏发或过早发出的通知。
-    pub(super) fn schedule_initial_rebind(&self) {
-        self.schedule_rebind(0);
-    }
-
-    /// 按退避序号安排下一次重绑；成功、切换播放器或达到上限后不再继续。
-    pub(super) fn schedule_rebind(&self, attempt: usize) {
-        let Some(target_id) = self.target_id.filter(|_| self.snapshot().is_none()) else {
-            return;
-        };
-        let Some(delay) = INITIAL_VOLUME_REBIND_DELAYS.get(attempt).copied() else {
-            return;
-        };
-        let sender = self.sender.clone();
-        if let Err(error) = thread::Builder::new()
-            .name("media-volume-settle".to_owned())
-            .spawn(move || {
-                thread::sleep(delay);
-                let _ = sender.send(WorkerMessage::VolumeRebindDue { target_id, attempt });
-            })
-        {
-            log::warn!("启动播放器应用音量重绑任务失败: {error}");
-        }
     }
 
     /// 同步设置该播放器的全部音频会话；拖动音量时自动解除静音。
@@ -246,7 +218,7 @@ impl VolumeSessionRegistration {
     fn new(
         control: IAudioSessionControl,
         process_id: u32,
-        sender: Sender<WorkerMessage>,
+        sender: WorkerSender,
         target_id: u64,
     ) -> windows::core::Result<Self> {
         let volume: ISimpleAudioVolume = control.cast()?;
@@ -306,7 +278,7 @@ impl Drop for VolumeSessionRegistration {
 /// 把 Core Audio 回调压缩为媒体工作线程消息，避免在系统回调线程执行 IPC。
 #[implement(IAudioSessionEvents)]
 struct VolumeSessionEvents {
-    sender: Sender<WorkerMessage>,
+    sender: WorkerSender,
     target_id: u64,
 }
 
@@ -318,16 +290,12 @@ impl IAudioSessionEvents_Impl for VolumeSessionEvents_Impl {
         _newmute: BOOL,
         _eventcontext: *const GUID,
     ) -> windows::core::Result<()> {
-        let _ = self
-            .sender
-            .send(WorkerMessage::VolumeChanged(self.target_id));
+        self.sender.send_event(WorkerEvent::Volume(self.target_id));
         Ok(())
     }
 
     fn OnStateChanged(&self, _newstate: AudioSessionState) -> windows::core::Result<()> {
-        let _ = self
-            .sender
-            .send(WorkerMessage::VolumeChanged(self.target_id));
+        self.sender.send_event(WorkerEvent::Volume(self.target_id));
         Ok(())
     }
 
@@ -335,9 +303,8 @@ impl IAudioSessionEvents_Impl for VolumeSessionEvents_Impl {
         &self,
         _disconnectreason: AudioSessionDisconnectReason,
     ) -> windows::core::Result<()> {
-        let _ = self
-            .sender
-            .send(WorkerMessage::VolumeSessionsChanged(self.target_id));
+        self.sender
+            .send_event(WorkerEvent::VolumeSessions(self.target_id));
         Ok(())
     }
 
@@ -379,7 +346,7 @@ impl IAudioSessionEvents_Impl for VolumeSessionEvents_Impl {
 /// 新会话出现时通知工作线程重新匹配 PID；不在回调线程枚举进程。
 #[implement(IAudioSessionNotification)]
 struct SessionNotification {
-    sender: Sender<WorkerMessage>,
+    sender: WorkerSender,
     target_id: u64,
 }
 
@@ -389,9 +356,8 @@ impl IAudioSessionNotification_Impl for SessionNotification_Impl {
         &self,
         _newsession: Ref<'_, IAudioSessionControl>,
     ) -> windows::core::Result<()> {
-        let _ = self
-            .sender
-            .send(WorkerMessage::VolumeSessionsChanged(self.target_id));
+        self.sender
+            .send_event(WorkerEvent::VolumeSessions(self.target_id));
         Ok(())
     }
 }

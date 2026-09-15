@@ -16,6 +16,7 @@ use super::super::{
     network::ResolutionDeadline,
     track::TrackDescriptor,
 };
+use super::registry_watch::RegistryWatchHandle;
 use super::{kugou_music, netease_cloud_music, qq_music, soda_music};
 
 type LookupResult = Result<LyricsLookupOutcome, LyricsError>;
@@ -29,7 +30,7 @@ type LocalIndexInvalidator = fn(&Path);
 type CacheChangeMatcher =
     fn(&TrackDescriptor, Option<&Path>, &[PathBuf], Option<&LyricsSource>, bool) -> bool;
 type RegistryChangeCallback = Arc<dyn Fn() + Send + Sync>;
-type RegistryWatcher = fn(RegistryChangeCallback) -> Result<(), io::Error>;
+type RegistryWatcher = fn(RegistryChangeCallback) -> Result<RegistryWatchHandle, io::Error>;
 
 /// 本地歌词读取能力。
 #[derive(Clone, Copy)]

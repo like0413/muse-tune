@@ -47,6 +47,7 @@ export interface MediaDiagnostics {
   muted: boolean | null
   spectrumEnabled: boolean | null
   spectrumActive: boolean | null
+  worker: MediaWorkerDiagnostics | null
   runtimeError: string | null
   sessions: Array<{
     player: MediaPlayer
@@ -56,6 +57,20 @@ export interface MediaDiagnostics {
     timelineAvailable: boolean
     selected: boolean
   }>
+}
+
+export interface MediaWorkerDiagnostics {
+  messages: Array<{
+    kind: string
+    sent: number
+    processed: number
+  }>
+  pendingMessages: number
+  pendingMessagesPeak: number
+  coalescedEventCount: number
+  maxCommandQueueWaitMs: number
+  metadataSettlePending: number
+  metadataSettlePendingPeak: number
 }
 
 export interface StorageDiagnostics {

@@ -3,6 +3,8 @@
 use std::{
     cell::Cell,
     collections::HashMap,
+    marker::PhantomData,
+    rc::Rc,
     sync::{
         Arc, LazyLock, Mutex,
         atomic::{AtomicBool, AtomicU32, Ordering},
@@ -87,10 +89,27 @@ pub(super) enum TaskbarChange {
 
 /// 持有当前线程安装的 WinEvent 钩子，并在离开同步循环时自动释放。
 pub(super) struct WinEventHooks {
-    foreground: Option<HWINEVENTHOOK>,
-    structure: Option<HWINEVENTHOOK>,
-    location: Option<HWINEVENTHOOK>,
+    foreground: Option<OwnedWinEventHook>,
+    structure: Option<OwnedWinEventHook>,
+    location: Option<OwnedWinEventHook>,
     topology_events: bool,
+}
+
+/// 线程绑定的 WinEvent hook；析构必须发生在安装线程。
+struct OwnedWinEventHook {
+    handle: HWINEVENTHOOK,
+    owner_thread_id: u32,
+    _thread_affinity: PhantomData<Rc<()>>,
+}
+
+impl Drop for OwnedWinEventHook {
+    fn drop(&mut self) {
+        // SAFETY: WinEventHooks 由所属同步 worker 持有并在该线程退出前释放。
+        let current_thread_id = unsafe { GetCurrentThreadId() };
+        debug_assert_eq!(current_thread_id, self.owner_thread_id);
+        // SAFETY: handle 由当前线程 SetWinEventHook 成功创建，且只在这里注销一次。
+        let _ = unsafe { UnhookWinEvent(self.handle) };
+    }
 }
 
 impl WinEventHooks {
@@ -136,9 +155,6 @@ impl Drop for WinEventHooks {
             threads.remove(&thread_id);
         }
         WATCHED_TASKBAR.set(HWND::default());
-        uninstall_win_event_hook(self.foreground.take());
-        uninstall_win_event_hook(self.structure.take());
-        uninstall_win_event_hook(self.location.take());
         if self.topology_events {
             TOPOLOGY_EVENT_HOOKS.fetch_sub(1, Ordering::AcqRel);
         }
@@ -188,7 +204,7 @@ pub(super) fn wait_for_taskbar_change(timeout: Duration) -> TaskbarChange {
 }
 
 /// 安装指定范围的进程外 WinEvent 钩子。
-fn install_win_event_hook(event_min: u32, event_max: u32) -> Option<HWINEVENTHOOK> {
+fn install_win_event_hook(event_min: u32, event_max: u32) -> Option<OwnedWinEventHook> {
     // SAFETY: 回调是静态函数，进程外投递模式仍在本进程执行；当前监控线程在钩子存续期间持有 Win32 消息循环。
     let hook = unsafe {
         SetWinEventHook(
@@ -201,15 +217,12 @@ fn install_win_event_hook(event_min: u32, event_max: u32) -> Option<HWINEVENTHOO
             WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
         )
     };
-    (!hook.is_invalid()).then_some(hook)
-}
-
-/// 释放由当前线程安装的 WinEvent 钩子。
-fn uninstall_win_event_hook(hook: Option<HWINEVENTHOOK>) {
-    if let Some(hook) = hook {
-        // SAFETY: 钩子由当前监控线程创建，并且只在这里释放一次。
-        let _ = unsafe { UnhookWinEvent(hook) };
-    }
+    (!hook.is_invalid()).then(|| OwnedWinEventHook {
+        handle: hook,
+        // SAFETY: 只记录创建 hook 的当前线程 ID，用于析构时验证线程归属。
+        owner_thread_id: unsafe { GetCurrentThreadId() },
+        _thread_affinity: PhantomData,
+    })
 }
 
 /// 将 WinEvent 回调归并为同步循环需要的两类状态信号。

@@ -1,3 +1,4 @@
+use std::sync::atomic::Ordering;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use crate::lyrics::{
@@ -10,6 +11,9 @@ use super::{LyricsService, MediaPlayer, is_plausible_timeline, lookup_hit, playe
 impl LyricsService {
     /// 按播放器分别重建非递归监听器，避免其他播放器的写入刷新当前歌词。
     pub(super) fn refresh_watchers(&self) {
+        if self.inner.shutdown_requested.load(Ordering::Acquire) {
+            return;
+        }
         let next_paths = players::supported_players()
             .map(|player| (player, players::automatic_cache_path(player)))
             .collect::<HashMap<_, _>>();
@@ -25,6 +29,9 @@ impl LyricsService {
                 let Some(inner) = weak_inner.upgrade() else {
                     return;
                 };
+                if inner.shutdown_requested.load(Ordering::Acquire) {
+                    return;
+                }
                 let service = LyricsService { inner };
                 let configuration_changed = players::configuration_changed(player, &paths);
                 let result = if configuration_changed {
@@ -36,7 +43,7 @@ impl LyricsService {
                     log::warn!("响应 {player:?} 歌词缓存变化失败: {error}");
                 }
             });
-            match watcher::create(paths, callback) {
+            match watcher::create(paths, callback, Arc::clone(&self.inner.watcher_metrics)) {
                 Ok(Some(watcher)) => {
                     next_watchers.insert(player, watcher);
                 }
@@ -44,23 +51,39 @@ impl LyricsService {
                 Err(error) => log::warn!("建立 {player:?} 歌词缓存监听失败: {error}"),
             }
         }
-        if let Ok(mut current) = self.inner.watchers.lock() {
-            *current = next_watchers;
-        }
+        let previous = self.inner.watchers.lock().ok().map(|mut current| {
+            if self.inner.shutdown_requested.load(Ordering::Acquire) {
+                return next_watchers;
+            }
+            std::mem::replace(&mut *current, next_watchers)
+        });
+        // watcher Drop 会 join；必须在释放 service mutex 后执行。
+        drop(previous);
     }
 
     /// 启动适配器声明的原生缓存路径设置监听；回调只持有服务的弱引用。
     pub(super) fn start_registry_watcher(&self) {
         let weak_inner = Arc::downgrade(&self.inner);
-        players::watch_registry_settings(Arc::new(move |player| {
+        let next_watchers = players::watch_registry_settings(Arc::new(move |player| {
             let Some(inner) = weak_inner.upgrade() else {
                 return;
             };
+            if inner.shutdown_requested.load(Ordering::Acquire) {
+                return;
+            }
             let service = LyricsService { inner };
             if let Err(error) = service.handle_configuration_change(player) {
                 log::warn!("响应 {player:?} 缓存目录设置变化失败: {error}");
             }
         }));
+        let previous = self.inner.registry_watchers.lock().ok().map(|mut current| {
+            if self.inner.shutdown_requested.load(Ordering::Acquire) {
+                return next_watchers;
+            }
+            std::mem::replace(&mut *current, next_watchers)
+        });
+        // watcher Drop 会 join；必须在释放 service mutex 后执行。
+        drop(previous);
     }
 
     /// 播放器目录配置变化属于低频事件，需要重建监听并淘汰旧来源结果。

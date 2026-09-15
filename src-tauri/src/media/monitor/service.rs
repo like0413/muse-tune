@@ -1,15 +1,16 @@
 use std::{
     sync::{
-        Arc, RwLock,
-        mpsc::{self, Sender},
+        Arc, Mutex, RwLock,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
     },
-    thread,
+    thread::{self, JoinHandle},
     time::Duration,
 };
 
 use tauri::{AppHandle, Runtime};
 
-use super::{MediaSnapshotSubscriber, WorkerMessage, run_worker};
+use super::{MediaSnapshotSubscriber, WorkerMessage, metrics, metrics::WorkerSender, run_worker};
 use crate::media::{
     MediaControlAction, MediaRuntimeDiagnostics, MediaSessionSelectionPolicy, MediaSessionSnapshot,
     MediaSnapshotDiagnostics, MediaVolumeSnapshot,
@@ -25,8 +26,10 @@ pub struct MediaService {
 }
 
 struct MediaServiceInner {
-    sender: Sender<WorkerMessage>,
+    sender: WorkerSender,
     snapshot: Arc<RwLock<Option<MediaSessionSnapshot>>>,
+    shutdown_requested: AtomicBool,
+    worker: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl MediaService {
@@ -35,26 +38,42 @@ impl MediaService {
         app: AppHandle<R>,
         snapshot_subscriber: MediaSnapshotSubscriber,
     ) -> Result<Self, std::io::Error> {
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver, worker_metrics) = metrics::channel();
         let snapshot = Arc::new(RwLock::new(None));
         let worker_sender = sender.clone();
         let worker_snapshot = Arc::clone(&snapshot);
 
-        thread::Builder::new()
+        let worker = thread::Builder::new()
             .name("media-session-monitor".to_owned())
             .spawn(move || {
                 run_worker(
                     app,
                     worker_sender,
                     receiver,
+                    worker_metrics,
                     worker_snapshot,
                     snapshot_subscriber,
                 );
             })?;
 
         Ok(Self {
-            inner: Arc::new(MediaServiceInner { sender, snapshot }),
+            inner: Arc::new(MediaServiceInner {
+                sender,
+                snapshot,
+                shutdown_requested: AtomicBool::new(false),
+                worker: Mutex::new(Some(worker)),
+            }),
         })
+    }
+
+    /// 非阻塞请求媒体 worker 退出，供 Tauri `ExitRequested` 提前释放回调源。
+    pub(crate) fn request_shutdown(&self) {
+        self.inner.request_shutdown();
+    }
+
+    /// 等待媒体 worker 完成事件注销、频谱停止和 WinRT 反初始化。
+    pub(crate) fn shutdown(&self) {
+        self.inner.shutdown();
     }
 
     /// 返回最近发布的媒体会话快照。
@@ -161,9 +180,37 @@ impl MediaService {
     }
 }
 
+impl MediaServiceInner {
+    /// 保证无论收到多少次退出事件，都只向 worker 投递一次终止消息。
+    fn request_shutdown(&self) {
+        if !self.shutdown_requested.swap(true, Ordering::AcqRel) {
+            let _ = self.sender.send(WorkerMessage::Shutdown);
+        }
+    }
+
+    /// 回收唯一 worker；重复调用保持幂等，且不会错误等待当前线程自身。
+    fn shutdown(&self) {
+        self.request_shutdown();
+        let worker = self
+            .worker
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(worker) = worker {
+            if worker.thread().id() == thread::current().id() {
+                log::error!("媒体 worker 尝试等待自身，已跳过 join");
+                return;
+            }
+            if worker.join().is_err() {
+                log::warn!("媒体会话监控线程异常退出");
+            }
+        }
+    }
+}
+
 impl Drop for MediaServiceInner {
-    /// 最后一个服务句柄释放时请求唯一 worker 正常退出。
+    /// 显式退出编排遗漏时仍尝试停止并回收唯一 worker。
     fn drop(&mut self) {
-        let _ = self.sender.send(WorkerMessage::Shutdown);
+        self.shutdown();
     }
 }

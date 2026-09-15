@@ -80,8 +80,30 @@ pub struct MediaDiagnostics {
     pub muted: Option<bool>,
     pub spectrum_enabled: Option<bool>,
     pub spectrum_active: Option<bool>,
+    pub worker: Option<MediaWorkerDiagnostics>,
     pub runtime_error: Option<String>,
     pub sessions: Vec<MediaSessionDiagnostics>,
+}
+
+/// media worker 的累计背压观测；所有计数均从本次进程启动开始。
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaWorkerDiagnostics {
+    pub messages: Vec<MediaWorkerMessageDiagnostics>,
+    pub pending_messages: usize,
+    pub pending_messages_peak: usize,
+    pub coalesced_event_count: u64,
+    pub max_command_queue_wait_ms: u64,
+    pub metadata_settle_pending: usize,
+    pub metadata_settle_pending_peak: usize,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaWorkerMessageDiagnostics {
+    pub kind: &'static str,
+    pub sent: u64,
+    pub processed: u64,
 }
 
 #[derive(serde::Serialize)]
@@ -109,10 +131,29 @@ impl MediaDiagnostics {
             muted,
             spectrum_enabled,
             spectrum_active,
+            worker,
             sessions,
         ) = runtime.map_or(
-            (None, None, None, None, None, None, None, Vec::new()),
+            (None, None, None, None, None, None, None, None, Vec::new()),
             |runtime| {
+                let worker = MediaWorkerDiagnostics {
+                    messages: runtime
+                        .worker
+                        .messages
+                        .into_iter()
+                        .map(|message| MediaWorkerMessageDiagnostics {
+                            kind: message.kind,
+                            sent: message.sent,
+                            processed: message.processed,
+                        })
+                        .collect(),
+                    pending_messages: runtime.worker.pending_messages,
+                    pending_messages_peak: runtime.worker.pending_messages_peak,
+                    coalesced_event_count: runtime.worker.coalesced_event_count,
+                    max_command_queue_wait_ms: runtime.worker.max_command_queue_wait_ms,
+                    metadata_settle_pending: runtime.worker.metadata_settle_pending,
+                    metadata_settle_pending_peak: runtime.worker.metadata_settle_pending_peak,
+                };
                 (
                     Some(runtime.session_count),
                     Some(selection_strategy_label(runtime.selection_strategy).to_owned()),
@@ -121,6 +162,7 @@ impl MediaDiagnostics {
                     runtime.volume.map(|volume| volume.muted),
                     Some(runtime.spectrum_enabled),
                     Some(runtime.spectrum_active),
+                    Some(worker),
                     runtime
                         .sessions
                         .into_iter()
@@ -159,6 +201,7 @@ impl MediaDiagnostics {
                 muted,
                 spectrum_enabled,
                 spectrum_active,
+                worker,
                 runtime_error,
                 sessions,
             };
@@ -202,6 +245,7 @@ impl MediaDiagnostics {
             muted,
             spectrum_enabled,
             spectrum_active,
+            worker,
             runtime_error,
             sessions,
         }

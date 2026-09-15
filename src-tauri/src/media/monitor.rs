@@ -1,17 +1,11 @@
 use std::{
-    sync::{
-        Arc, RwLock, mpsc,
-        mpsc::{Receiver, Sender},
-    },
+    sync::{Arc, RwLock, mpsc, mpsc::RecvTimeoutError},
     time::Instant,
 };
 
 use tauri::{AppHandle, Runtime};
-use windows::{
-    Media::Control::{
-        GlobalSystemMediaTransportControlsSession, GlobalSystemMediaTransportControlsSessionManager,
-    },
-    Win32::System::WinRT::{RO_INIT_MULTITHREADED, RoInitialize, RoUninitialize},
+use windows::Media::Control::{
+    GlobalSystemMediaTransportControlsSession, GlobalSystemMediaTransportControlsSessionManager,
 };
 
 use super::{
@@ -24,10 +18,17 @@ use super::{
     volume::ApplicationVolumeController,
 };
 
+mod apartment;
+mod deadlines;
+pub(super) mod metrics;
+pub(in crate::media) mod pending_events;
 mod publisher;
 mod service;
 mod session;
 
+use apartment::WinRtMta;
+use deadlines::{ScheduledWorkerTask, WorkerDeadlines};
+use metrics::{WorkerMessageKind, WorkerMetrics, WorkerReceiver, WorkerSender};
 use publisher::{
     MediaSnapshotPublisher, publish_selected_snapshot, publish_selected_timeline, publish_volume,
 };
@@ -35,10 +36,7 @@ pub use service::MediaService;
 use session::SessionRegistration;
 
 pub(super) enum WorkerMessage {
-    ManagerChanged,
-    MediaPropertiesChanged(u64),
-    PlaybackInfoChanged(u64),
-    TimelinePropertiesChanged(u64),
+    EventsReady,
     SelectionPolicyChanged(
         MediaSessionSelectionPolicy,
         mpsc::SyncSender<Result<(), String>>,
@@ -49,12 +47,6 @@ pub(super) enum WorkerMessage {
     ToggleMute(mpsc::SyncSender<Result<MediaVolumeSnapshot, String>>),
     GetDiagnostics(mpsc::SyncSender<super::MediaRuntimeDiagnostics>),
     SpectrumEnabled(bool, mpsc::SyncSender<Result<(), String>>),
-    VolumeChanged(u64),
-    VolumeSessionsChanged(u64),
-    VolumeRebindDue {
-        target_id: u64,
-        attempt: usize,
-    },
     Shutdown,
 }
 
@@ -93,23 +85,24 @@ struct MetadataRefresh {
 /// 初始化并运行串行事件循环；轮询不参与媒体状态同步。
 fn run_worker<R: Runtime>(
     app: AppHandle<R>,
-    sender: Sender<WorkerMessage>,
-    receiver: Receiver<WorkerMessage>,
+    sender: WorkerSender,
+    receiver: WorkerReceiver,
+    mut worker_metrics: WorkerMetrics,
     snapshot: Arc<RwLock<Option<MediaSessionSnapshot>>>,
     snapshot_subscriber: MediaSnapshotSubscriber,
 ) {
-    // SAFETY: 此处运行在新建专用线程，成功初始化后在线程退出前成对调用 RoUninitialize。
-    if let Err(error) = unsafe { RoInitialize(RO_INIT_MULTITHREADED) } {
-        log::error!("初始化媒体会话 WinRT 线程失败: {error}");
-        return;
-    }
+    let _apartment = match WinRtMta::initialize() {
+        Ok(apartment) => apartment,
+        Err(error) => {
+            log::error!("初始化媒体会话 WinRT 线程失败: {error}");
+            return;
+        }
+    };
 
     let manager = match session::register_manager(&sender) {
         Ok(manager) => manager,
         Err(error) => {
             log::error!("连接 Windows 媒体会话管理器失败: {error}");
-            // SAFETY: 本线程上方的 RoInitialize 已成功。
-            unsafe { RoUninitialize() };
             return;
         }
     };
@@ -122,6 +115,7 @@ fn run_worker<R: Runtime>(
         volume: ApplicationVolumeController::new(sender.clone()),
         spectrum: AudioSpectrumController::new(app.clone()),
     };
+    let mut deadlines = WorkerDeadlines::default();
     let snapshot_publisher = MediaSnapshotPublisher {
         app: &app,
         snapshot: &snapshot,
@@ -141,116 +135,182 @@ fn run_worker<R: Runtime>(
         &manager.manager,
         &sessions,
         &mut selected,
+        &mut deadlines,
         &selection_policy,
         true,
     );
 
-    while let Ok(message) = receiver.recv() {
+    loop {
+        for task in deadlines.take_due(Instant::now()) {
+            match task {
+                ScheduledWorkerTask::MetadataSettle(session_id) => {
+                    handle_media_properties_change(
+                        &snapshot_publisher,
+                        &manager.manager,
+                        &mut sessions,
+                        &mut selected,
+                        &mut deadlines,
+                        &selection_policy,
+                        session_id,
+                    );
+                }
+                ScheduledWorkerTask::VolumeRebind { target_id, attempt } => {
+                    handle_volume_rebind_due(
+                        &app,
+                        &sessions,
+                        &mut selected,
+                        &mut deadlines,
+                        target_id,
+                        attempt,
+                    );
+                }
+            }
+        }
+        let envelope = if let Some(timeout) = deadlines.next_timeout(Instant::now()) {
+            match receiver.recv_timeout(timeout) {
+                Ok(envelope) => envelope,
+                Err(RecvTimeoutError::Timeout) => continue,
+                Err(RecvTimeoutError::Disconnected) => break,
+            }
+        } else {
+            let Ok(envelope) = receiver.recv() else {
+                break;
+            };
+            envelope
+        };
+        worker_metrics.record_received(&envelope);
+        let message = envelope.into_message();
         match message {
-            WorkerMessage::ManagerChanged => {
-                synchronize_sessions(
-                    &manager.manager,
-                    &sender,
-                    &mut sessions,
-                    &mut next_session_id,
-                    &mut next_activity_order,
-                    true,
-                    selection_policy.only_supported_players,
-                );
-                let selected_was_refreshed =
-                    refresh_all_playback(&mut sessions, &mut next_activity_order, selected.id);
-                reconcile_selection_and_volume(
-                    &snapshot_publisher,
-                    &manager.manager,
-                    &sessions,
-                    &mut selected,
-                    &selection_policy,
-                    selected_was_refreshed,
-                );
-            }
-            WorkerMessage::MediaPropertiesChanged(session_id) => {
-                let metadata_refresh = refresh_metadata(&mut sessions, session_id);
-                let timeline_refresh = refresh_timeline(&mut sessions, session_id);
-                reset_stale_timeline_at_track_boundary(
-                    &mut sessions,
-                    session_id,
-                    metadata_refresh.track_boundary,
-                    timeline_refresh.track_boundary,
-                );
-                if metadata_refresh.changed || timeline_refresh.availability_changed {
-                    let selected_was_refreshed = selected.id == Some(session_id);
+            WorkerMessage::EventsReady => {
+                let events = sender.take_pending_events();
+                if events.manager_changed {
+                    worker_metrics.record_event_processed(WorkerMessageKind::ManagerChanged);
+                    synchronize_sessions(
+                        &manager.manager,
+                        &sender,
+                        &mut sessions,
+                        &mut next_session_id,
+                        &mut next_activity_order,
+                        true,
+                        selection_policy.only_supported_players,
+                    );
+                    let selected_was_refreshed =
+                        refresh_all_playback(&mut sessions, &mut next_activity_order, selected.id);
                     reconcile_selection_and_volume(
                         &snapshot_publisher,
                         &manager.manager,
                         &sessions,
                         &mut selected,
+                        &mut deadlines,
                         &selection_policy,
                         selected_was_refreshed,
                     );
-                } else if timeline_refresh.changed && selected.id == Some(session_id) {
-                    publish_selected_timeline(&app, &snapshot, &sessions, selected.id);
                 }
-            }
-            WorkerMessage::PlaybackInfoChanged(session_id) => {
-                let playback_changed =
-                    refresh_playback(&mut sessions, session_id, &mut next_activity_order);
-                let metadata_refresh = if playback_changed {
-                    refresh_metadata(&mut sessions, session_id)
-                } else {
-                    MetadataRefresh::default()
-                };
-                let timeline_refresh = refresh_timeline(&mut sessions, session_id);
-                reset_stale_timeline_at_track_boundary(
-                    &mut sessions,
-                    session_id,
-                    metadata_refresh.track_boundary,
-                    timeline_refresh.track_boundary,
-                );
-                if playback_changed
-                    || metadata_refresh.changed
-                    || timeline_refresh.availability_changed
-                {
-                    let selected_was_refreshed = selected.id == Some(session_id);
-                    reconcile_selection_and_volume(
+                for (session_id, observed_at) in events.media_properties_changed {
+                    worker_metrics
+                        .record_event_processed(WorkerMessageKind::MediaPropertiesChanged);
+                    if deadlines.schedule_metadata_settle(session_id, observed_at) {
+                        worker_metrics.record_coalesced_event();
+                    }
+                    worker_metrics
+                        .observe_metadata_settle_pending(deadlines.metadata_settle_pending_count());
+                    handle_media_properties_change(
                         &snapshot_publisher,
                         &manager.manager,
-                        &sessions,
+                        &mut sessions,
                         &mut selected,
+                        &mut deadlines,
                         &selection_policy,
-                        selected_was_refreshed,
+                        session_id,
                     );
-                } else if timeline_refresh.changed && selected.id == Some(session_id) {
-                    publish_selected_timeline(&app, &snapshot, &sessions, selected.id);
                 }
-            }
-            WorkerMessage::TimelinePropertiesChanged(session_id) => {
-                let timeline_refresh = refresh_timeline(&mut sessions, session_id);
-                let metadata_refresh = if timeline_refresh.track_boundary {
-                    refresh_metadata(&mut sessions, session_id)
-                } else {
-                    MetadataRefresh::default()
-                };
-                reset_stale_timeline_at_track_boundary(
-                    &mut sessions,
-                    session_id,
-                    metadata_refresh.track_boundary,
-                    timeline_refresh.track_boundary,
-                );
-                if metadata_refresh.changed
-                    || timeline_refresh.availability_changed
-                    || timeline_refresh.track_boundary
-                {
-                    let selected_was_refreshed = selected.id == Some(session_id);
-                    reconcile_selection_and_volume(
-                        &snapshot_publisher,
-                        &manager.manager,
-                        &sessions,
-                        &mut selected,
-                        &selection_policy,
-                        selected_was_refreshed,
+                for session_id in events.playback_info_changed {
+                    worker_metrics.record_event_processed(WorkerMessageKind::PlaybackInfoChanged);
+                    let playback_changed =
+                        refresh_playback(&mut sessions, session_id, &mut next_activity_order);
+                    let metadata_refresh = if playback_changed {
+                        refresh_metadata(&mut sessions, session_id)
+                    } else {
+                        MetadataRefresh::default()
+                    };
+                    let timeline_refresh = refresh_timeline(&mut sessions, session_id);
+                    reset_stale_timeline_at_track_boundary(
+                        &mut sessions,
+                        session_id,
+                        metadata_refresh.track_boundary,
+                        timeline_refresh.track_boundary,
                     );
-                } else if timeline_refresh.changed && selected.id == Some(session_id) {
-                    publish_selected_timeline(&app, &snapshot, &sessions, selected.id);
+                    if playback_changed
+                        || metadata_refresh.changed
+                        || timeline_refresh.availability_changed
+                    {
+                        let selected_was_refreshed = selected.id == Some(session_id);
+                        reconcile_selection_and_volume(
+                            &snapshot_publisher,
+                            &manager.manager,
+                            &sessions,
+                            &mut selected,
+                            &mut deadlines,
+                            &selection_policy,
+                            selected_was_refreshed,
+                        );
+                    } else if timeline_refresh.changed && selected.id == Some(session_id) {
+                        publish_selected_timeline(&app, &snapshot, &sessions, selected.id);
+                    }
+                }
+                for session_id in events.timeline_properties_changed {
+                    worker_metrics
+                        .record_event_processed(WorkerMessageKind::TimelinePropertiesChanged);
+                    let timeline_refresh = refresh_timeline(&mut sessions, session_id);
+                    let metadata_refresh = if timeline_refresh.track_boundary {
+                        refresh_metadata(&mut sessions, session_id)
+                    } else {
+                        MetadataRefresh::default()
+                    };
+                    reset_stale_timeline_at_track_boundary(
+                        &mut sessions,
+                        session_id,
+                        metadata_refresh.track_boundary,
+                        timeline_refresh.track_boundary,
+                    );
+                    if metadata_refresh.changed
+                        || timeline_refresh.availability_changed
+                        || timeline_refresh.track_boundary
+                    {
+                        let selected_was_refreshed = selected.id == Some(session_id);
+                        reconcile_selection_and_volume(
+                            &snapshot_publisher,
+                            &manager.manager,
+                            &sessions,
+                            &mut selected,
+                            &mut deadlines,
+                            &selection_policy,
+                            selected_was_refreshed,
+                        );
+                    } else if timeline_refresh.changed && selected.id == Some(session_id) {
+                        publish_selected_timeline(&app, &snapshot, &sessions, selected.id);
+                    }
+                }
+                for target_id in events.volume_sessions_changed {
+                    worker_metrics.record_event_processed(WorkerMessageKind::VolumeSessionsChanged);
+                    if selected.id == Some(target_id) {
+                        rebind_selected_volume(&mut selected.volume, &sessions, target_id);
+                        if selected.volume.snapshot().is_some() {
+                            deadlines.cancel_volume_rebind();
+                        }
+                        selected.spectrum.bind(selected.volume.capture_process_id());
+                        publish_volume(&app, selected.volume.snapshot());
+                    }
+                }
+                for target_id in events.volume_changed {
+                    worker_metrics.record_event_processed(WorkerMessageKind::VolumeChanged);
+                    if selected.id == Some(target_id) {
+                        if selected.volume.snapshot().is_some() {
+                            deadlines.cancel_volume_rebind();
+                        }
+                        selected.spectrum.bind(selected.volume.capture_process_id());
+                        publish_volume(&app, selected.volume.snapshot());
+                    }
                 }
             }
             WorkerMessage::SelectionPolicyChanged(policy, result_sender) => {
@@ -271,6 +331,7 @@ fn run_worker<R: Runtime>(
                         &manager.manager,
                         &sessions,
                         &mut selected,
+                        &mut deadlines,
                         &selection_policy,
                         true,
                     );
@@ -293,6 +354,9 @@ fn run_worker<R: Runtime>(
                     && let Some(target_id) = selected.id
                 {
                     rebind_selected_volume(&mut selected.volume, &sessions, target_id);
+                    if selected.volume.snapshot().is_some() {
+                        deadlines.cancel_volume_rebind();
+                    }
                     selected.spectrum.bind(selected.volume.capture_process_id());
                     publish_volume(&app, selected.volume.snapshot());
                 }
@@ -332,32 +396,12 @@ fn run_worker<R: Runtime>(
                     audio_process_id: selected.volume.capture_process_id(),
                     spectrum_enabled,
                     spectrum_active,
+                    worker: worker_metrics.snapshot(deadlines.metadata_settle_pending_count()),
                 });
             }
             WorkerMessage::SpectrumEnabled(enabled, result_sender) => {
                 let result = selected.spectrum.set_enabled(enabled);
                 let _ = result_sender.send(result);
-            }
-            WorkerMessage::VolumeChanged(target_id) => {
-                if selected.id == Some(target_id) {
-                    selected.spectrum.bind(selected.volume.capture_process_id());
-                    publish_volume(&app, selected.volume.snapshot());
-                }
-            }
-            WorkerMessage::VolumeSessionsChanged(target_id) => {
-                if selected.id == Some(target_id) {
-                    rebind_selected_volume(&mut selected.volume, &sessions, target_id);
-                    selected.spectrum.bind(selected.volume.capture_process_id());
-                    publish_volume(&app, selected.volume.snapshot());
-                }
-            }
-            WorkerMessage::VolumeRebindDue { target_id, attempt } => {
-                if selected.id == Some(target_id) && selected.volume.snapshot().is_none() {
-                    rebind_selected_volume(&mut selected.volume, &sessions, target_id);
-                    selected.spectrum.bind(selected.volume.capture_process_id());
-                    publish_volume(&app, selected.volume.snapshot());
-                    selected.volume.schedule_rebind(attempt.saturating_add(1));
-                }
             }
             WorkerMessage::Shutdown => break,
         }
@@ -365,8 +409,63 @@ fn run_worker<R: Runtime>(
 
     drop(sessions);
     drop(manager);
-    // SAFETY: 本线程上的 RoInitialize 已成功，且 WinRT 对象和事件处理器均已释放。
-    unsafe { RoUninitialize() };
+}
+
+/// 刷新单会话元数据与时间线，并保持选择、音量目标和发布结果一致。
+fn handle_media_properties_change<R: Runtime>(
+    publisher: &MediaSnapshotPublisher<'_, R>,
+    manager: &GlobalSystemMediaTransportControlsSessionManager,
+    sessions: &mut [SessionEntry],
+    selected: &mut SelectedMedia<R>,
+    deadlines: &mut WorkerDeadlines,
+    selection_policy: &MediaSessionSelectionPolicy,
+    session_id: u64,
+) {
+    let metadata_refresh = refresh_metadata(sessions, session_id);
+    let timeline_refresh = refresh_timeline(sessions, session_id);
+    reset_stale_timeline_at_track_boundary(
+        sessions,
+        session_id,
+        metadata_refresh.track_boundary,
+        timeline_refresh.track_boundary,
+    );
+    if metadata_refresh.changed || timeline_refresh.availability_changed {
+        let selected_was_refreshed = selected.id == Some(session_id);
+        reconcile_selection_and_volume(
+            publisher,
+            manager,
+            sessions,
+            selected,
+            deadlines,
+            selection_policy,
+            selected_was_refreshed,
+        );
+    } else if timeline_refresh.changed && selected.id == Some(session_id) {
+        publish_selected_timeline(publisher.app, publisher.snapshot, sessions, selected.id);
+    }
+}
+
+/// 执行一次到期的音量重绑，并仅在仍未找到音频会话时安排下一档退避。
+fn handle_volume_rebind_due<R: Runtime>(
+    app: &AppHandle<R>,
+    sessions: &[SessionEntry],
+    selected: &mut SelectedMedia<R>,
+    deadlines: &mut WorkerDeadlines,
+    target_id: u64,
+    attempt: usize,
+) {
+    if selected.id != Some(target_id) || selected.volume.snapshot().is_some() {
+        return;
+    }
+    rebind_selected_volume(&mut selected.volume, sessions, target_id);
+    selected.spectrum.bind(selected.volume.capture_process_id());
+    let volume = selected.volume.snapshot();
+    publish_volume(app, volume);
+    if volume.is_none() {
+        deadlines.schedule_volume_rebind(target_id, attempt.saturating_add(1));
+    } else {
+        deadlines.cancel_volume_rebind();
+    }
 }
 
 fn non_empty_metadata(value: &str) -> Option<String> {
@@ -377,7 +476,7 @@ fn non_empty_metadata(value: &str) -> Option<String> {
 /// 同步当前全部 GSMTC 会话，并为新增会话建立独立事件订阅。
 fn synchronize_sessions(
     manager: &GlobalSystemMediaTransportControlsSessionManager,
-    sender: &Sender<WorkerMessage>,
+    sender: &WorkerSender,
     entries: &mut Vec<SessionEntry>,
     next_session_id: &mut u64,
     next_activity_order: &mut u64,
@@ -635,6 +734,7 @@ fn reconcile_selection_and_volume<R: Runtime>(
     manager: &GlobalSystemMediaTransportControlsSessionManager,
     entries: &[SessionEntry],
     selected: &mut SelectedMedia<R>,
+    deadlines: &mut WorkerDeadlines,
     policy: &MediaSessionSelectionPolicy,
     force_publish: bool,
 ) {
@@ -646,7 +746,7 @@ fn reconcile_selection_and_volume<R: Runtime>(
         policy,
         force_publish,
     ) {
-        bind_selected_volume(&mut selected.volume, entries, selected.id);
+        bind_selected_volume(&mut selected.volume, deadlines, entries, selected.id);
         selected.spectrum.bind(selected.volume.capture_process_id());
         publish_volume(publisher.app, selected.volume.snapshot());
     }
@@ -655,11 +755,13 @@ fn reconcile_selection_and_volume<R: Runtime>(
 /// 按已选 GSMTC 来源绑定对应播放器的 Windows 应用音频会话。
 fn bind_selected_volume(
     volume: &mut ApplicationVolumeController,
+    deadlines: &mut WorkerDeadlines,
     entries: &[SessionEntry],
     selected_id: Option<u64>,
 ) {
     let Some(entry) = entries.iter().find(|entry| Some(entry.id) == selected_id) else {
         volume.bind(None, "", &[]);
+        deadlines.cancel_volume_rebind();
         return;
     };
     let source_app_id = entry
@@ -670,7 +772,11 @@ fn bind_selected_volume(
         .unwrap_or_default();
     let player = identify(&source_app_id);
     volume.bind(selected_id, &source_app_id, player.executable_names());
-    volume.schedule_initial_rebind();
+    if volume.snapshot().is_none() {
+        deadlines.schedule_volume_rebind(entry.id, 0);
+    } else {
+        deadlines.cancel_volume_rebind();
+    }
 }
 
 /// Core Audio 通知会话集合变化后重新匹配当前播放器进程。

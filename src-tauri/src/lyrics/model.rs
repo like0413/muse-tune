@@ -182,6 +182,19 @@ pub struct LyricsDiagnostics {
     pub resolution_steps: Vec<LyricsResolutionStep>,
     pub cache: LyricsCacheDiagnostics,
     pub adapters: Vec<LyricsAdapterDiagnostics>,
+    pub watcher: LyricsWatcherDiagnostics,
+}
+
+/// 歌词目录 watcher 的累计背压指标，不包含任何实际路径或文件名。
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsWatcherDiagnostics {
+    pub enqueued_batches: u64,
+    pub processed_batches: u64,
+    pub coalesced_batches: u64,
+    pub callback_count: u64,
+    pub pending_batches: usize,
+    pub pending_batches_peak: usize,
 }
 
 /// 歌词诊断只传递摘要，避免正文和逐字数组进入 IPC。

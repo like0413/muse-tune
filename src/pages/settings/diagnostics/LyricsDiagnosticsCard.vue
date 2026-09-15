@@ -125,6 +125,18 @@ const resolutionStages = computed(() => {
       </span>
     </DiagnosticRow>
     <DiagnosticRow label="解析队列" :value="resolverStatus" />
+    <DiagnosticRow
+      label="文件事件批次"
+      :value="`入队 ${diagnostics.watcher.enqueuedBatches} · 已处理 ${diagnostics.watcher.processedBatches}`"
+    />
+    <DiagnosticRow
+      label="文件事件待处理"
+      :value="`当前 ${diagnostics.watcher.pendingBatches} · 峰值 ${diagnostics.watcher.pendingBatchesPeak}`"
+    />
+    <DiagnosticRow
+      label="文件事件合并"
+      :value="`${diagnostics.watcher.coalescedBatches} 批 · ${diagnostics.watcher.callbackCount} 次回调`"
+    />
     <DiagnosticRow label="解析链路">
       <ol v-if="resolutionStages.length > 0" class="grid gap-1.5">
         <li v-for="(stage, index) in resolutionStages" :key="stage.key">

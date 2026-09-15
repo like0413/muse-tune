@@ -1,20 +1,77 @@
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
-    sync::{Arc, mpsc},
-    thread,
-    time::Duration,
+    sync::{Arc, Condvar, Mutex},
+    thread::{self, JoinHandle},
+    time::{Duration, Instant},
 };
 
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 
+mod metrics;
+
+pub(super) use metrics::LyricsWatcherMetrics;
+
 const WRITE_SETTLE_TIME: Duration = Duration::from_millis(400);
+
+/// 同时拥有原生目录监听器和事件归并线程，保证释放时先断开生产者再回收消费者。
+pub struct LyricsFileWatcher {
+    watcher: Option<RecommendedWatcher>,
+    signal: Arc<WatcherSignal>,
+    metrics: Arc<LyricsWatcherMetrics>,
+    worker: Option<JoinHandle<()>>,
+}
+
+#[derive(Default)]
+struct WatcherState {
+    changed_paths: HashSet<PathBuf>,
+    pending_batches: usize,
+    last_change: Option<Instant>,
+    stopped: bool,
+}
+
+#[derive(Default)]
+struct WatcherSignal {
+    state: Mutex<WatcherState>,
+    changed: Condvar,
+}
+
+impl Drop for LyricsFileWatcher {
+    fn drop(&mut self) {
+        // 先释放 notify watcher，确保停止信号之后不会再有生产者写入。
+        drop(self.watcher.take());
+        let discarded_batches = {
+            let mut state = self
+                .signal
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            state.stopped = true;
+            state.changed_paths.clear();
+            state.last_change = None;
+            std::mem::take(&mut state.pending_batches)
+        };
+        self.metrics.discard_pending_batches(discarded_batches);
+        self.signal.changed.notify_one();
+        if let Some(worker) = self.worker.take() {
+            if worker.thread().id() == thread::current().id() {
+                // 缓存根目录变化可由本 worker 触发 watcher 重建；当前线程将在 callback 返回后自然退出。
+                log::debug!("歌词文件监听 worker 正在重建自身，跳过自 join");
+                return;
+            }
+            if worker.join().is_err() {
+                log::warn!("歌词文件监听线程异常退出");
+            }
+        }
+    }
+}
 
 /// 建立非递归目录监听，并在一轮连续写入安静后只回调一次。
 pub fn create(
     paths: impl IntoIterator<Item = PathBuf>,
     on_change: Arc<dyn Fn(Vec<PathBuf>) + Send + Sync>,
-) -> Result<Option<RecommendedWatcher>, notify::Error> {
+    metrics: Arc<LyricsWatcherMetrics>,
+) -> Result<Option<LyricsFileWatcher>, notify::Error> {
     let requested_paths = paths.into_iter().collect::<HashSet<_>>();
     let watch_roots = requested_paths
         .iter()
@@ -24,8 +81,10 @@ pub fn create(
         return Ok(None);
     }
 
-    let (sender, receiver) = mpsc::channel::<Vec<PathBuf>>();
+    let signal = Arc::new(WatcherSignal::default());
     let event_targets = requested_paths.clone();
+    let producer_metrics = Arc::clone(&metrics);
+    let producer_signal = Arc::clone(&signal);
     let mut watcher = notify::recommended_watcher(move |result: notify::Result<Event>| {
         if let Ok(event) = result
             && is_content_change(&event.kind)
@@ -46,7 +105,20 @@ pub fn create(
                 })
                 .collect::<Vec<_>>();
             if !paths.is_empty() {
-                let _ = sender.send(paths);
+                {
+                    let mut state = producer_signal
+                        .state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    if state.stopped {
+                        return;
+                    }
+                    state.changed_paths.extend(paths);
+                    state.pending_batches = state.pending_batches.saturating_add(1);
+                    state.last_change = Some(Instant::now());
+                    producer_metrics.record_enqueue();
+                }
+                producer_signal.changed.notify_one();
             }
         }
     })?;
@@ -54,19 +126,58 @@ pub fn create(
         watcher.watch(&path, RecursiveMode::NonRecursive)?;
     }
 
-    thread::Builder::new()
+    let worker_signal = Arc::clone(&signal);
+    let worker_metrics = Arc::clone(&metrics);
+    let worker = thread::Builder::new()
         .name("lyrics-cache-events".to_owned())
         .spawn(move || {
-            while let Ok(paths) = receiver.recv() {
-                let mut changed_paths = paths.into_iter().collect::<HashSet<_>>();
-                while let Ok(paths) = receiver.recv_timeout(WRITE_SETTLE_TIME) {
-                    changed_paths.extend(paths);
-                }
+            while let Some((changed_paths, batch_count)) = wait_for_quiet_batch(&worker_signal) {
+                worker_metrics.record_processed_batches(batch_count);
+                worker_metrics.record_callback();
                 on_change(changed_paths.into_iter().collect());
             }
         })
         .map_err(notify::Error::io)?;
-    Ok(Some(watcher))
+    Ok(Some(LyricsFileWatcher {
+        watcher: Some(watcher),
+        signal,
+        metrics,
+        worker: Some(worker),
+    }))
+}
+
+/// 等待至少一个文件事件，并以最后一批事件为起点保持完整安静窗口。
+fn wait_for_quiet_batch(signal: &WatcherSignal) -> Option<(HashSet<PathBuf>, usize)> {
+    let mut state = signal
+        .state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    while state.changed_paths.is_empty() && !state.stopped {
+        state = signal
+            .changed
+            .wait(state)
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+    }
+    loop {
+        if state.stopped {
+            return None;
+        }
+        let Some(last_change) = state.last_change else {
+            continue;
+        };
+        let remaining = (last_change + WRITE_SETTLE_TIME).saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            let paths = std::mem::take(&mut state.changed_paths);
+            let batch_count = std::mem::take(&mut state.pending_batches);
+            state.last_change = None;
+            return Some((paths, batch_count));
+        }
+        let (next_state, _) = signal
+            .changed
+            .wait_timeout(state, remaining)
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state = next_state;
+    }
 }
 
 /// 比较 Windows 路径时忽略扩展长度前缀、分隔符形式和大小写差异。

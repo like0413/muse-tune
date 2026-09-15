@@ -15,7 +15,7 @@ use std::{
         Arc, Condvar, LazyLock, Mutex,
         atomic::{AtomicBool, Ordering},
     },
-    thread,
+    thread::{self, JoinHandle},
     time::Duration,
 };
 
@@ -55,6 +55,63 @@ struct ManagedBar<R: Runtime> {
     window: WebviewWindow<R>,
     taskbar: isize,
     stop: Arc<AtomicBool>,
+    worker: Option<JoinHandle<()>>,
+}
+
+impl<R: Runtime> Drop for ManagedBar<R> {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        events::request_all_layout_updates();
+        if let Some(worker) = self.worker.take() {
+            if worker.thread().id() == thread::current().id() {
+                log::error!("任务栏同步 worker 尝试等待自身，已跳过 join");
+            } else if worker.join().is_err() {
+                log::warn!("任务栏同步线程异常退出");
+            }
+        }
+        // 保持窗口存活直至 worker 释放 UIA、WinEvent 和借用 HWND。
+        let _ = self.window.close();
+    }
+}
+
+/// 拥有任务栏窗口管理线程，并协调应用退出时的停止与回收。
+pub(crate) struct TaskbarService {
+    stop: Arc<AtomicBool>,
+    worker: Mutex<Option<JoinHandle<()>>>,
+}
+
+impl TaskbarService {
+    /// 非阻塞通知 monitor 和所有 sync worker 结束等待。
+    pub(crate) fn request_shutdown(&self) {
+        self.stop.store(true, Ordering::Release);
+        DISPLAY_TARGET.1.notify_all();
+        events::request_all_layout_updates();
+    }
+
+    /// 等待 monitor 回收所有 bar worker 及其原生资源。
+    pub(crate) fn shutdown(&self) {
+        self.request_shutdown();
+        let worker = self
+            .worker
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(worker) = worker {
+            if worker.thread().id() == thread::current().id() {
+                log::error!("任务栏 monitor 尝试等待自身，已跳过 join");
+                return;
+            }
+            if worker.join().is_err() {
+                log::warn!("任务栏窗口管理线程异常退出");
+            }
+        }
+    }
+}
+
+impl Drop for TaskbarService {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize)]
@@ -166,15 +223,22 @@ fn mark_display_state_changed(state: &mut DisplayTargetState, changed: &Condvar)
 }
 
 /// 启动独立监控线程，持续维护任务栏与播放器窗口的所有者关系。
-pub fn initialize<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn initialize<R: Runtime>(
+    app: &mut tauri::App<R>,
+) -> Result<TaskbarService, Box<dyn std::error::Error>> {
     restore_native_settings(app);
     let app_handle = app.handle().clone();
+    let stop = Arc::new(AtomicBool::new(false));
+    let worker_stop = Arc::clone(&stop);
 
-    thread::Builder::new()
+    let worker = thread::Builder::new()
         .name("taskbar-monitor".to_owned())
-        .spawn(move || maintain_bar_windows(app_handle))?;
+        .spawn(move || maintain_bar_windows(app_handle, worker_stop))?;
 
-    Ok(())
+    Ok(TaskbarService {
+        stop,
+        worker: Mutex::new(Some(worker)),
+    })
 }
 
 /// 在创建动态 bar 前直接从官方 Store 恢复原生窗口所需的全局设置。
@@ -217,7 +281,7 @@ fn restore_native_settings<R: Runtime>(app: &tauri::App<R>) {
 }
 
 /// 获取或重建播放器窗口，并在 Explorer 生命周期内持续恢复同步。
-fn maintain_bar_windows<R: Runtime>(app: AppHandle<R>) {
+fn maintain_bar_windows<R: Runtime>(app: AppHandle<R>, stop: Arc<AtomicBool>) {
     let Some(base_config) = app
         .config()
         .app
@@ -230,7 +294,7 @@ fn maintain_bar_windows<R: Runtime>(app: AppHandle<R>) {
     };
     let mut bars: HashMap<String, ManagedBar<R>> = HashMap::new();
 
-    loop {
+    while !stop.load(Ordering::Acquire) {
         let (target, observed_revision) = display_target_snapshot();
         let displays = displays::taskbar_displays();
         let primary_was_managed = bars
@@ -247,8 +311,6 @@ fn maintain_bar_windows<R: Runtime>(app: AppHandle<R>) {
                     && (target == ALL_DISPLAYS || target == *id)
             });
             if !remains_selected {
-                bar.stop.store(true, Ordering::Release);
-                let _ = bar.window.close();
                 stopped_bar = true;
             }
             remains_selected
@@ -302,21 +364,22 @@ fn maintain_bar_windows<R: Runtime>(app: AppHandle<R>) {
             let worker = thread::Builder::new()
                 .name(format!("taskbar-sync-{label}"))
                 .spawn(move || sync::run(bar, taskbar, worker_stop));
-            if worker.is_err() {
+            let Ok(worker) = worker else {
                 let _ = window.close();
                 continue;
-            }
+            };
             bars.insert(
                 display.display.id,
                 ManagedBar {
                     window,
                     taskbar,
                     stop,
+                    worker: Some(worker),
                 },
             );
         }
 
-        wait_for_display_change(observed_revision, !bars.is_empty());
+        wait_for_display_change(observed_revision, !bars.is_empty(), &stop);
     }
 }
 
@@ -329,7 +392,7 @@ fn display_target_snapshot() -> (String, u64) {
 }
 
 /// 优先等待设置或 WinEvent；没有可用事件源时才低频轮询恢复任务栏。
-fn wait_for_display_change(observed_revision: u64, has_managed_bar: bool) {
+fn wait_for_display_change(observed_revision: u64, has_managed_bar: bool, stop: &AtomicBool) {
     let Ok(state) = DISPLAY_TARGET.0.lock() else {
         thread::sleep(RECOVERY_RETRY_DELAY);
         return;
@@ -338,13 +401,15 @@ fn wait_for_display_change(observed_revision: u64, has_managed_bar: bool) {
     let wait_failed = if event_driven {
         DISPLAY_TARGET
             .1
-            .wait_while(state, |state| state.revision == observed_revision)
+            .wait_while(state, |state| {
+                state.revision == observed_revision && !stop.load(Ordering::Acquire)
+            })
             .is_err()
     } else {
         DISPLAY_TARGET
             .1
             .wait_timeout_while(state, DISPLAY_TOPOLOGY_CHECK_INTERVAL, |state| {
-                state.revision == observed_revision
+                state.revision == observed_revision && !stop.load(Ordering::Acquire)
             })
             .is_err()
     };
