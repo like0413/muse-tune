@@ -19,7 +19,12 @@ use windows::{
 use super::{MediaVolumeSnapshot, monitor::WorkerMessage, process::find_process_ids};
 
 const VOLUME_EVENT_CONTEXT: GUID = GUID::from_u128(0x16c5b57c_2d31_45a5_9c9e_f97a63d20f31);
-const INITIAL_VOLUME_REBIND_DELAY: Duration = Duration::from_millis(800);
+const INITIAL_VOLUME_REBIND_DELAYS: [Duration; 4] = [
+    Duration::from_millis(300),
+    Duration::from_millis(800),
+    Duration::from_millis(1_600),
+    Duration::from_millis(3_200),
+];
 
 /// 当前播放器跨输出设备的全部应用音频会话。
 pub(super) struct ApplicationVolumeController {
@@ -84,21 +89,29 @@ impl ApplicationVolumeController {
             .and_then(VolumeSessionRegistration::snapshot)
     }
 
-    /// 初次绑定尚无音频会话时安排一次重绑，覆盖播放器进程与 Core Audio 建立的竞态窗口。
+    /// 初次绑定尚无音频会话时启动有限退避重绑，兜底 Core Audio 漏发或过早发出的通知。
     pub(super) fn schedule_initial_rebind(&self) {
-        let Some(target_id) = self
-            .target_id
-            .filter(|_| self.session_registrations.is_empty())
-        else {
+        self.schedule_rebind(0);
+    }
+
+    /// 按退避序号安排下一次重绑；成功、切换播放器或达到上限后不再继续。
+    pub(super) fn schedule_rebind(&self, attempt: usize) {
+        let Some(target_id) = self.target_id.filter(|_| self.snapshot().is_none()) else {
+            return;
+        };
+        let Some(delay) = INITIAL_VOLUME_REBIND_DELAYS.get(attempt).copied() else {
             return;
         };
         let sender = self.sender.clone();
-        let _ = thread::Builder::new()
+        if let Err(error) = thread::Builder::new()
             .name("media-volume-settle".to_owned())
             .spawn(move || {
-                thread::sleep(INITIAL_VOLUME_REBIND_DELAY);
-                let _ = sender.send(WorkerMessage::VolumeSessionsChanged(target_id));
-            });
+                thread::sleep(delay);
+                let _ = sender.send(WorkerMessage::VolumeRebindDue { target_id, attempt });
+            })
+        {
+            log::warn!("启动播放器应用音量重绑任务失败: {error}");
+        }
     }
 
     /// 同步设置该播放器的全部音频会话；拖动音量时自动解除静音。
