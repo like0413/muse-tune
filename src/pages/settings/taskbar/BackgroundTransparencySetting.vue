@@ -12,6 +12,7 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { Slider } from '@/components/ui/slider'
+import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import {
   getTaskbarBackgroundTransparency,
   normalizeTaskbarBackgroundTransparency,
@@ -20,7 +21,6 @@ import {
   TASKBAR_TRANSPARENCY_MAX,
   TASKBAR_TRANSPARENCY_MIN,
 } from '@/features/settings/background-transparency'
-import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const selectedBackgroundTransparency = shallowRef(0)
 const committedBackgroundTransparency = shallowRef(0)

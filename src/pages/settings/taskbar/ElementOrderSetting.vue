@@ -6,13 +6,13 @@ import { nextTick, onMounted, shallowRef, useTemplateRef } from 'vue'
 
 import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
+import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_ELEMENT_ORDER,
   getTaskbarElementOrder,
   setTaskbarElementOrder,
   type TaskbarElement,
 } from '@/features/settings/element-order'
-import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const elementOptions = {
   cover: { label: '封面', icon: Disc3, widthClass: 'w-28 flex-none' },

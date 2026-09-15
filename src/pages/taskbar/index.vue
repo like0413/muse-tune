@@ -1,43 +1,20 @@
 <script setup lang="ts">
-import type { UnlistenFn } from '@tauri-apps/api/event'
 import { useElementBounding, useElementHover, useMutationObserver } from '@vueuse/core'
 import type { CSSProperties } from 'vue'
-import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
 
 import { useLyrics } from '@/features/lyrics/useLyrics'
 import { useTaskbarLyricsSettings } from '@/features/lyrics/useTaskbarLyricsSettings'
 import { useMediaProgress } from '@/features/media/useMediaProgress'
 import { useMediaSession } from '@/features/media/useMediaSession'
 import { useMediaSessionSelectionPolicy } from '@/features/media/useMediaSessionSelectionPolicy'
-import {
-  getTaskbarBackgroundTransparency,
-  listenTaskbarBackgroundTransparencyChange,
-} from '@/features/settings/background-transparency'
-import {
-  getTaskbarWidth,
-  listenTaskbarWidthChange,
-  TASKBAR_WIDTH_PRESETS,
-} from '@/features/settings/bar-width'
+import { TASKBAR_WIDTH_PRESETS } from '@/features/settings/bar-width'
 import { isTaskbarCoverVisibleInMode } from '@/features/settings/cover'
-import {
-  DEFAULT_TASKBAR_ELEMENT_ORDER,
-  getTaskbarElementOrder,
-  listenTaskbarElementOrderChange,
-  type TaskbarElement,
-} from '@/features/settings/element-order'
-import {
-  DEFAULT_TASKBAR_PROGRESS_POSITION,
-  DEFAULT_TASKBAR_PROGRESS_STYLE,
-  getTaskbarProgressPosition,
-  getTaskbarProgressStyle,
-  listenTaskbarProgressPositionChange,
-  listenTaskbarProgressStyleChange,
-  type TaskbarProgressPosition,
-  type TaskbarProgressStyle,
-} from '@/features/settings/progress-style'
+import { type TaskbarElement } from '@/features/settings/element-order'
 import { useTaskbarAutoHide } from '@/features/taskbar/useTaskbarAutoHide'
 import { useTaskbarCoverAppearance } from '@/features/taskbar/useTaskbarCoverAppearance'
 import { useTaskbarNativeMenu } from '@/features/taskbar/useTaskbarNativeMenu'
+import { useTaskbarViewSettings } from '@/features/taskbar/useTaskbarViewSettings'
 import { useTaskbarForegroundColor } from '@/features/theme/useTaskbarForegroundColor'
 import { useTaskbarProgressColor } from '@/features/theme/useTaskbarProgressColor'
 import { useAutomaticUpdateMonitor } from '@/features/updater/useAutomaticUpdateMonitor'
@@ -68,7 +45,8 @@ const normalLayer = useTemplateRef<HTMLElement>('normalLayer')
 const normalCoverAnchor = useTemplateRef<HTMLElement>('normalCoverAnchor')
 const lyricsCoverAnchor = useTemplateRef<HTMLElement>('lyricsCoverAnchor')
 const isTaskbarHovered = useElementHover(taskbarRoot)
-const taskbarWidth = shallowRef<number>(TASKBAR_WIDTH_PRESETS.wide)
+const { backgroundTransparency, progressStyle, progressPosition, elementOrder, taskbarWidth } =
+  useTaskbarViewSettings()
 const isCompact = computed(() => taskbarWidth.value <= TASKBAR_WIDTH_PRESETS.compact)
 // 所有解析入口都要求有效播放器时间线；纯音乐结论本身不伪装成歌词行。
 const hasReliableLyricsTimeline = computed(() => timeline.value !== null)
@@ -104,17 +82,7 @@ const { show: showNativeMenu } = useTaskbarNativeMenu()
 const thumbnailDataUrl = computed(() => mediaSession.value?.metadata.thumbnailDataUrl ?? null)
 const { progressColor } = useTaskbarProgressColor(thumbnailDataUrl)
 
-const backgroundTransparency = shallowRef(0)
 const { foregroundColor } = useTaskbarForegroundColor(backgroundTransparency)
-const progressStyle = shallowRef<TaskbarProgressStyle>(DEFAULT_TASKBAR_PROGRESS_STYLE)
-const progressPosition = shallowRef<TaskbarProgressPosition>(DEFAULT_TASKBAR_PROGRESS_POSITION)
-const elementOrder = shallowRef<TaskbarElement[]>([...DEFAULT_TASKBAR_ELEMENT_ORDER])
-let unlistenBackgroundTransparencyChange: UnlistenFn | undefined
-let unlistenProgressStyleChange: UnlistenFn | undefined
-let unlistenProgressPositionChange: UnlistenFn | undefined
-let unlistenElementOrderChange: UnlistenFn | undefined
-let unlistenWidthChange: UnlistenFn | undefined
-let widthEventVersion = 0
 
 /** 普通层始终保持最终排列；封面位置由同尺寸锚点预留。 */
 const normalElementStyle = computed<Record<TaskbarElement, CSSProperties>>(() => ({
@@ -186,81 +154,7 @@ const verticalProgressStyle = computed(() => ({
     'linear-gradient(to right, transparent 0%, color-mix(in srgb, var(--taskbar-progress-color) 40%, var(--taskbar-background)) 100%)',
 }))
 
-/** 恢复背景透明度并订阅设置窗口的实时预览。 */
-async function initializeBackgroundTransparency() {
-  try {
-    unlistenBackgroundTransparencyChange = await listenTaskbarBackgroundTransparencyChange(
-      (transparency) => {
-        backgroundTransparency.value = transparency
-      },
-    )
-    backgroundTransparency.value = await getTaskbarBackgroundTransparency()
-  } catch (error) {
-    console.error('初始化任务栏背景透明度失败', error)
-  }
-}
-
-/** 恢复播放进度样式并订阅设置窗口的实时切换。 */
-async function initializeProgressStyle() {
-  try {
-    unlistenProgressStyleChange = await listenTaskbarProgressStyleChange((style) => {
-      progressStyle.value = style
-    })
-    unlistenProgressPositionChange = await listenTaskbarProgressPositionChange((position) => {
-      progressPosition.value = position
-    })
-    ;[progressStyle.value, progressPosition.value] = await Promise.all([
-      getTaskbarProgressStyle(),
-      getTaskbarProgressPosition(),
-    ])
-  } catch (error) {
-    console.error('初始化播放进度样式失败', error)
-  }
-}
-
-/** 恢复区块排列并订阅设置窗口的实时更新。 */
-async function initializeElementOrder() {
-  try {
-    unlistenElementOrderChange = await listenTaskbarElementOrderChange((order) => {
-      elementOrder.value = order
-      refreshCoverAnchors()
-    })
-    elementOrder.value = await getTaskbarElementOrder()
-    refreshCoverAnchors()
-  } catch (error) {
-    console.error('初始化任务栏区块顺序失败', error)
-  }
-}
-
-/** 从持久化设置恢复宽度，并通过跨窗口事件响应预览和保存。 */
-async function initializeWidth() {
-  try {
-    unlistenWidthChange = await listenTaskbarWidthChange((width) => {
-      widthEventVersion += 1
-      taskbarWidth.value = width
-    })
-    const versionBeforeRead = widthEventVersion
-    const savedWidth = await getTaskbarWidth()
-    if (widthEventVersion === versionBeforeRead) {
-      taskbarWidth.value = savedWidth
-    }
-  } catch (error) {
-    console.error('初始化任务栏宽度状态失败', error)
-  }
-}
-
-onMounted(initializeBackgroundTransparency)
-onMounted(initializeProgressStyle)
-onMounted(initializeElementOrder)
-onMounted(initializeWidth)
 onMounted(refreshCoverAnchors)
-onUnmounted(() => {
-  unlistenBackgroundTransparencyChange?.()
-  unlistenProgressStyleChange?.()
-  unlistenProgressPositionChange?.()
-  unlistenElementOrderChange?.()
-  unlistenWidthChange?.()
-})
 </script>
 
 <template>

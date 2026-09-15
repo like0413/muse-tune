@@ -11,7 +11,7 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { notifySettingSaveFailed } from '@/features/settings/feedback'
+import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import {
   applyTaskbarPlacement,
   getTaskbarPlacement,

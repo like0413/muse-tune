@@ -14,6 +14,7 @@ import {
   ItemHeader,
   ItemTitle,
 } from '@/components/ui/item'
+import { getErrorMessage } from '@/features/feedback/errors'
 
 const PROJECT_URL = 'https://github.com/like0413/muse-tune'
 const ISSUES_URL = `${PROJECT_URL}/issues`
@@ -26,7 +27,7 @@ async function openProjectUrl(url: string) {
     await openUrl(url)
     errorMessage.value = null
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error)
+    errorMessage.value = getErrorMessage(error, '无法使用系统浏览器打开链接')
   }
 }
 </script>

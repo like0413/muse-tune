@@ -11,7 +11,7 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
-import { notifySettingSaveFailed } from '@/features/settings/feedback'
+import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import {
   getReducedMotionOverride,
   setReducedMotionOverride,

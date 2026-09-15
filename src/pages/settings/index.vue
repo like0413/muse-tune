@@ -121,7 +121,7 @@ onMounted(async () => {
       <Separator />
 
       <div class="settings-scrollbar flex-1 overflow-y-auto p-4">
-        <KeepAlive>
+        <KeepAlive :max="navigationItems.length">
           <component :is="activePanel" class="w-full" />
         </KeepAlive>
       </div>

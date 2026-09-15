@@ -14,6 +14,7 @@ import {
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_COVER_APPEARANCE,
   getTaskbarCoverAppearance,
@@ -22,7 +23,6 @@ import {
   setTaskbarCoverAppearance,
   type TaskbarCoverAppearance,
 } from '@/features/settings/cover'
-import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const shapeOptions = [
   { value: 'square', label: '方形' },

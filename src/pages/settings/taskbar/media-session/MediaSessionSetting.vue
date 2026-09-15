@@ -22,13 +22,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import { getMediaPlayerPresentation } from '@/features/media/players'
 import type {
   MediaPlayer,
   MediaSessionSelectionPolicy,
   MediaSessionSelectionStrategy,
 } from '@/features/media/types'
-import { notifySettingSaveFailed } from '@/features/settings/feedback'
 import {
   DEFAULT_MEDIA_SESSION_SELECTION_POLICY,
   getMediaSessionSelectionPolicy,

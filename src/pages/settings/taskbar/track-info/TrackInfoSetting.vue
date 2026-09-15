@@ -16,7 +16,7 @@ import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { notifySettingSaveFailed } from '@/features/settings/feedback'
+import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import {
   applyTaskbarTrackInfoScrolling,
   DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT,

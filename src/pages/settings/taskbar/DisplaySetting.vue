@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import {
   ALL_TASKBAR_DISPLAYS,
   applyTaskbarDisplayTarget,
@@ -26,7 +27,6 @@ import {
   setTaskbarDisplayTarget,
   type TaskbarDisplay,
 } from '@/features/settings/display'
-import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const taskbarDisplays = shallowRef<TaskbarDisplay[]>([])
 const selectedDisplayTarget = shallowRef(ALL_TASKBAR_DISPLAYS)

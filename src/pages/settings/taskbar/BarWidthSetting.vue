@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/item'
 import { Slider } from '@/components/ui/slider'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import {
   applyTaskbarWidth,
   getTaskbarWidth,
@@ -24,7 +25,6 @@ import {
   TASKBAR_WIDTH_PRESETS,
   type TaskbarWidthPreset,
 } from '@/features/settings/bar-width'
-import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const WIDTH_PREVIEW_INTERVAL_MS = 50
 const selectedWidth = shallowRef(TASKBAR_WIDTH_MAX)

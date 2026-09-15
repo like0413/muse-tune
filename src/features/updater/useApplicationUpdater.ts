@@ -5,6 +5,8 @@ import { check } from '@tauri-apps/plugin-updater'
 import type { DownloadEvent, Update } from '@tauri-apps/plugin-updater'
 import { computed, onActivated, onUnmounted, readonly, shallowRef } from 'vue'
 
+import { getErrorMessage } from '@/features/feedback/errors'
+
 import {
   DEFAULT_UPDATE_CHECK_FREQUENCY,
   getAutomaticUpdateCheck,
@@ -112,7 +114,7 @@ export function useApplicationUpdater() {
         return
       }
       status.value = 'error'
-      errorMessage.value = error instanceof Error ? error.message : String(error)
+      errorMessage.value = getErrorMessage(error, '检查更新失败')
     } finally {
       if (!silent) isChecking.value = false
     }
@@ -123,7 +125,7 @@ export function useApplicationUpdater() {
     try {
       await openUrl(UPDATE_RELEASES_URL)
     } catch (error) {
-      errorMessage.value = error instanceof Error ? error.message : String(error)
+      errorMessage.value = getErrorMessage(error, '打开更新日志失败')
     }
   }
 
@@ -168,7 +170,7 @@ export function useApplicationUpdater() {
       await update.downloadAndInstall(handleDownloadEvent, { restartAfterInstall: true })
     } catch (error) {
       status.value = 'available'
-      const reason = error instanceof Error ? error.message : String(error)
+      const reason = getErrorMessage(error, '安装程序未能启动')
       errorMessage.value = `更新安装失败：${reason}`
     } finally {
       isDownloading.value = false
@@ -186,7 +188,7 @@ export function useApplicationUpdater() {
       automaticCheck.value = await setAutomaticUpdateCheck(enabled)
     } catch (error) {
       automaticCheck.value = previous
-      errorMessage.value = error instanceof Error ? error.message : String(error)
+      errorMessage.value = getErrorMessage(error, '保存自动检测设置失败')
     } finally {
       automaticCheckSaving.value = false
     }
@@ -202,7 +204,7 @@ export function useApplicationUpdater() {
       updateCheckFrequency.value = await setUpdateCheckFrequency(frequency)
     } catch (error) {
       updateCheckFrequency.value = previous
-      errorMessage.value = error instanceof Error ? error.message : String(error)
+      errorMessage.value = getErrorMessage(error, '保存检测周期失败')
     } finally {
       updateCheckFrequencySaving.value = false
     }
@@ -234,7 +236,7 @@ export function useApplicationUpdater() {
       if (resultRevision === revisionBeforeRead) applyAutomaticResult(result)
     } catch (error) {
       status.value = 'error'
-      errorMessage.value = error instanceof Error ? error.message : String(error)
+      errorMessage.value = getErrorMessage(error, '初始化更新设置失败')
     }
   }
 

@@ -11,13 +11,13 @@ import {
 } from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
+import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_AUTO_HIDE,
   getTaskbarAutoHide,
   setTaskbarAutoHide,
   type TaskbarAutoHide,
 } from '@/features/settings/bar-visibility'
-import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const selectedPreference = shallowRef<TaskbarAutoHide>({ ...DEFAULT_TASKBAR_AUTO_HIDE })
 const committedPreference = shallowRef<TaskbarAutoHide>({ ...DEFAULT_TASKBAR_AUTO_HIDE })

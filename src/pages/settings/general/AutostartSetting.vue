@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Rocket } from '@lucide/vue'
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
-import { onMounted, shallowRef } from 'vue'
+import { onActivated, shallowRef } from 'vue'
 
 import {
   Item,
@@ -12,7 +12,7 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
-import { notifySettingSaveFailed } from '@/features/settings/feedback'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 
 const autostartEnabled = shallowRef(false)
 
@@ -36,7 +36,11 @@ async function setAutostart(enabledValue: boolean) {
   }
 }
 
-onMounted(loadAutostartState)
+onActivated(() => {
+  void loadAutostartState().catch((error) => {
+    reportBackgroundFailure('读取 Windows 开机自启状态失败', error)
+  })
+})
 </script>
 
 <template>

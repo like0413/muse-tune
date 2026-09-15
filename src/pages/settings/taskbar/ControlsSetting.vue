@@ -17,6 +17,7 @@ import {
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_CONTROLS_VISIBILITY,
   getTaskbarControlsVisibility,
@@ -24,7 +25,6 @@ import {
   type TaskbarControlButton,
   type TaskbarControlsVisibility,
 } from '@/features/settings/controls'
-import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const buttonOptions: Record<TaskbarControlButton, { label: string }> = {
   previous: { label: '上一曲' },

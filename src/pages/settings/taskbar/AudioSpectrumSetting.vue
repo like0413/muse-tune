@@ -16,6 +16,7 @@ import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import {
   applyTaskbarAudioSpectrumSettings,
   DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS,
@@ -35,7 +36,6 @@ import {
   TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MIN,
   type TaskbarAudioSpectrumSettings,
 } from '@/features/settings/audio-spectrum'
-import { notifySettingSaveFailed } from '@/features/settings/feedback'
 
 const alignmentOptions = [
   { value: 'center', label: '居中' },

@@ -2,6 +2,7 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
 import { useDebounceFn } from '@vueuse/core'
 
+import { getErrorMessage } from '@/features/feedback/errors'
 import { LYRICS_DIAGNOSTICS_CHANGED_EVENT } from '@/features/lyrics/client'
 import { MEDIA_SESSION_CHANGED_EVENT } from '@/features/media/client'
 
@@ -27,6 +28,7 @@ export function useDiagnostics() {
   let refreshQueued = false
   let storageRefreshQueued = false
   let unlisteners: UnlistenFn[] = []
+  let reportCopiedTimer: number | undefined
 
   /** 合并歌曲切换时相邻的媒体与歌词事件，避免重复读取磁盘和媒体线程。 */
   const scheduleRefresh = useDebounceFn(
@@ -60,7 +62,7 @@ export function useDiagnostics() {
           }
         } catch (error) {
           if (!disposed && currentLifecycle === lifecycleId) {
-            errorMessage.value = error instanceof Error ? error.message : String(error)
+            errorMessage.value = getErrorMessage(error, '读取诊断信息失败')
           }
         }
       }
@@ -90,7 +92,7 @@ export function useDiagnostics() {
       await refresh(true)
     } catch (error) {
       if (!disposed && currentLifecycle === lifecycleId) {
-        errorMessage.value = error instanceof Error ? error.message : String(error)
+        errorMessage.value = getErrorMessage(error, '初始化诊断监听失败')
       }
     }
   }
@@ -103,6 +105,8 @@ export function useDiagnostics() {
     storageRefreshQueued = false
     unlisteners.forEach((unlisten) => unlisten())
     unlisteners = []
+    window.clearTimeout(reportCopiedTimer)
+    reportCopied.value = false
     refreshing.value = false
   }
 
@@ -112,9 +116,10 @@ export function useDiagnostics() {
     try {
       await navigator.clipboard.writeText(createSanitizedDiagnosticsReport(diagnostics.value))
       reportCopied.value = true
-      window.setTimeout(() => (reportCopied.value = false), 2_000)
+      window.clearTimeout(reportCopiedTimer)
+      reportCopiedTimer = window.setTimeout(() => (reportCopied.value = false), 2_000)
     } catch (error) {
-      errorMessage.value = error instanceof Error ? error.message : String(error)
+      errorMessage.value = getErrorMessage(error, '复制诊断报告失败')
     }
   }
 
