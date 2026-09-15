@@ -9,6 +9,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { TASKBAR_THEME_PRESET_COLORS } from '@/features/settings/theme-color'
 
+const { t } = useI18n({ useScope: 'global' })
+
 defineProps<{
   selectedColor: string
   draft: string
@@ -31,10 +33,10 @@ function selectNativeColor(event: Event) {
 <template>
   <Field orientation="horizontal">
     <FieldContent>
-      <FieldTitle>候选颜色</FieldTitle>
-      <FieldDescription>选择常用颜色，点击后立即应用</FieldDescription>
+      <FieldTitle>{{ t('settings.taskbar.theme.presets') }}</FieldTitle>
+      <FieldDescription>{{ t('settings.taskbar.theme.presetsDescription') }}</FieldDescription>
     </FieldContent>
-    <div class="flex w-56 flex-nowrap justify-end gap-1" aria-label="候选主题色">
+    <div class="flex w-56 flex-nowrap justify-end gap-1">
       <button
         v-for="color in TASKBAR_THEME_PRESET_COLORS"
         :key="color"
@@ -43,7 +45,7 @@ function selectNativeColor(event: Event) {
         :class="selectedColor === color ? 'ring-ring ring-2 ring-offset-2' : ''"
         :style="{ backgroundColor: color }"
         :disabled="disabled"
-        :aria-label="`使用颜色 ${color}`"
+        :aria-label="t('settings.taskbar.theme.useColor', { color })"
         @click="emit('selectColor', color)"
       />
     </div>
@@ -51,8 +53,8 @@ function selectNativeColor(event: Event) {
 
   <Field orientation="horizontal" :data-invalid="!!error">
     <FieldContent>
-      <FieldTitle>自定义颜色值</FieldTitle>
-      <FieldDescription>支持 #RRGGBB 格式</FieldDescription>
+      <FieldTitle>{{ t('settings.taskbar.theme.customValue') }}</FieldTitle>
+      <FieldDescription>{{ t('settings.taskbar.theme.customDescription') }}</FieldDescription>
       <FieldError v-if="error">{{ error }}</FieldError>
     </FieldContent>
     <div class="flex w-56 items-center gap-2">
@@ -61,7 +63,7 @@ function selectNativeColor(event: Event) {
         class="border-input h-9 w-11 cursor-pointer rounded-md border bg-transparent p-1 disabled:cursor-not-allowed disabled:opacity-50"
         :value="selectedColor"
         :disabled="disabled"
-        aria-label="选择自定义主题色"
+        :aria-label="t('settings.taskbar.theme.selectCustom')"
         @change="selectNativeColor"
       />
       <Input
@@ -69,7 +71,7 @@ function selectNativeColor(event: Event) {
         :model-value="draft"
         :disabled="disabled"
         :aria-invalid="!!error"
-        aria-label="自定义主题色十六进制值"
+        :aria-label="t('common.hexValue', { item: t('settings.taskbar.theme.title') })"
         @update:model-value="emit('updateDraft', $event)"
         @blur="emit('commit')"
         @keydown.enter="emit('commit')"

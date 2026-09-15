@@ -25,11 +25,16 @@ import {
 
 import CustomThemeColorFields from './theme-color/CustomThemeColorFields.vue'
 
-const themeSourceOptions = [
-  { value: 'cover', label: '封面主色' },
-  { value: 'system', label: '系统色' },
-  { value: 'custom', label: '自定义' },
-] as const satisfies ReadonlyArray<{ value: TaskbarThemeColorSource; label: string }>
+const { t } = useI18n({ useScope: 'global' })
+
+const themeSourceOptions = computed(
+  () =>
+    [
+      { value: 'cover', label: t('settings.taskbar.theme.cover') },
+      { value: 'system', label: t('settings.taskbar.theme.system') },
+      { value: 'custom', label: t('common.custom') },
+    ] as const satisfies ReadonlyArray<{ value: TaskbarThemeColorSource; label: string }>,
+)
 
 const selectedTheme = shallowRef<TaskbarThemeColor>({ ...DEFAULT_TASKBAR_THEME_COLOR })
 const committedTheme = shallowRef<TaskbarThemeColor>({ ...DEFAULT_TASKBAR_THEME_COLOR })
@@ -68,7 +73,7 @@ async function updateThemeColor(patch: Partial<TaskbarThemeColor>) {
   } catch (error) {
     selectedTheme.value = { ...committedTheme.value }
     customColorDraft.value = committedTheme.value.customColor
-    notifySettingSaveFailed('任务栏主题色', error)
+    notifySettingSaveFailed(t('settings.taskbar.theme.title'), error)
   } finally {
     themeSaving.value = false
   }
@@ -89,7 +94,7 @@ function updateCustomColorDraft(value: string | number) {
 function commitCustomColor() {
   const color = normalizeHexColor(customColorDraft.value)
   if (!color) {
-    customColorError.value = '请输入六位十六进制颜色，例如 #1677ff'
+    customColorError.value = t('settings.taskbar.theme.invalidColor')
     return
   }
   customColorError.value = ''
@@ -113,19 +118,19 @@ onMounted(loadThemeColor)
       <Palette />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>组件主题色</ItemTitle>
-      <ItemDescription>影响进度条、频谱、音量条等元素的颜色</ItemDescription>
+      <ItemTitle>{{ t('settings.taskbar.theme.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.taskbar.theme.description') }}</ItemDescription>
     </ItemContent>
 
     <template #content>
       <FieldGroup>
         <Field orientation="horizontal">
           <FieldContent>
-            <FieldTitle>颜色来源</FieldTitle>
-            <FieldDescription>封面主色会随当前歌曲切换，系统色跟随 Windows</FieldDescription>
+            <FieldTitle>{{ t('settings.taskbar.theme.source') }}</FieldTitle>
+            <FieldDescription>{{ t('settings.taskbar.theme.sourceDescription') }}</FieldDescription>
           </FieldContent>
           <Tabs :model-value="selectedTheme.source" @update:model-value="selectThemeSource">
-            <TabsList aria-label="Bar 主题色来源">
+            <TabsList>
               <TabsTrigger
                 v-for="option in themeSourceOptions"
                 :key="option.value"

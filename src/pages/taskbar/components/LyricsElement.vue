@@ -139,7 +139,6 @@ const displayLines = computed<DisplayLine[]>(() => {
 })
 
 const transitionName = computed(() => `lyrics-${props.settings.animation}`)
-const accessibleText = computed(() => displayLines.value.map(({ text }) => text).join('，'))
 
 /** 将配色方案与动态主题色解析为单一组 CSS 变量。 */
 const appearance = computed(() => resolveTaskbarLyricsAppearance(props.settings, props.themeColor))
@@ -163,7 +162,6 @@ const displayStyle = computed<CSSProperties>(() => {
     class="lyric-display relative flex h-full min-w-0 flex-1 flex-col justify-start overflow-hidden"
     :name="transitionName"
     :css="settings.animation !== 'none'"
-    :aria-label="accessibleText || '当前歌词'"
     :style="displayStyle"
   >
     <LyricLineElement

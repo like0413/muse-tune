@@ -20,10 +20,15 @@ import {
   type TaskbarOverlapPriority,
 } from '@/features/settings/overlap-priority'
 
-const overlapPriorityOptions = [
-  { value: 'bar', label: '组件优先' },
-  { value: 'taskbar', label: '任务栏优先' },
-] as const satisfies ReadonlyArray<{ value: TaskbarOverlapPriority; label: string }>
+const { t } = useI18n({ useScope: 'global' })
+
+const overlapPriorityOptions = computed(
+  () =>
+    [
+      { value: 'bar', label: t('settings.taskbar.overlap.bar') },
+      { value: 'taskbar', label: t('settings.taskbar.overlap.taskbar') },
+    ] as const satisfies ReadonlyArray<{ value: TaskbarOverlapPriority; label: string }>,
+)
 
 const selectedOverlapPriority = shallowRef<TaskbarOverlapPriority>('bar')
 const overlapPrioritySaving = shallowRef(false)
@@ -55,7 +60,7 @@ async function selectOverlapPriority(value: unknown) {
     await setTaskbarOverlapPriority(value)
   } catch (error) {
     selectedOverlapPriority.value = previousPriority
-    notifySettingSaveFailed('遮挡优先级', error)
+    notifySettingSaveFailed(t('settings.taskbar.overlap.title'), error)
     try {
       await applyTaskbarOverlapPriority(previousPriority)
     } catch (rollbackError) {
@@ -75,12 +80,12 @@ onMounted(loadOverlapPriority)
       <Layers2 />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>遮挡优先级</ItemTitle>
-      <ItemDescription>空间不足时，组件与任务栏元素谁显示在上方</ItemDescription>
+      <ItemTitle>{{ t('settings.taskbar.overlap.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.taskbar.overlap.description') }}</ItemDescription>
     </ItemContent>
     <ItemActions>
       <Tabs :model-value="selectedOverlapPriority" @update:model-value="selectOverlapPriority">
-        <TabsList aria-label="元素显示顺序">
+        <TabsList>
           <TabsTrigger
             v-for="option in overlapPriorityOptions"
             :key="option.value"

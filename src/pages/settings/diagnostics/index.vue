@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDiagnostics } from '@/features/diagnostics/useDiagnostics'
+import { getApplicationLocaleTag } from '@/features/i18n/locales'
 
 import AudioDiagnosticsCard from './AudioDiagnosticsCard.vue'
 import IssuesDiagnosticsCard from './IssuesDiagnosticsCard.vue'
@@ -15,29 +16,36 @@ import TaskbarDiagnosticsCard from './TaskbarDiagnosticsCard.vue'
 
 const { diagnostics, refreshing, errorMessage, updatedAt, reportCopied, refresh, copyReport } =
   useDiagnostics()
+const { locale, t } = useI18n({ useScope: 'global' })
 
-const updatedAtLabel = computed(() => updatedAt.value?.toLocaleTimeString() ?? '尚未采集')
+const updatedAtLabel = computed(
+  () =>
+    updatedAt.value?.toLocaleTimeString(getApplicationLocaleTag(locale.value)) ??
+    t('diagnostics.notCollected'),
+)
 </script>
 
 <template>
   <div class="flex w-full flex-col gap-3">
     <div class="flex items-center justify-between gap-4 px-1">
-      <p class="text-muted-foreground text-sm">媒体与歌词变化时自动刷新 · {{ updatedAtLabel }}</p>
+      <p class="text-muted-foreground text-sm">
+        {{ t('diagnostics.autoRefresh', { time: updatedAtLabel }) }}
+      </p>
       <div class="flex gap-2">
         <Button variant="outline" size="sm" :disabled="!diagnostics" @click="copyReport">
           <Check v-if="reportCopied" class="size-4" />
           <Copy v-else class="size-4" />
-          {{ reportCopied ? '已复制' : '复制脱敏报告' }}
+          {{ reportCopied ? t('common.copied') : t('diagnostics.copyReport') }}
         </Button>
         <Button variant="outline" size="sm" :disabled="refreshing" @click="refresh">
           <RefreshCw :class="['size-4', { 'animate-spin': refreshing }]" />
-          刷新
+          {{ t('common.refresh') }}
         </Button>
       </div>
     </div>
 
     <Alert v-if="errorMessage" variant="destructive">
-      <AlertTitle>读取诊断失败</AlertTitle>
+      <AlertTitle>{{ t('diagnostics.readFailed') }}</AlertTitle>
       <AlertDescription>{{ errorMessage }}</AlertDescription>
     </Alert>
 

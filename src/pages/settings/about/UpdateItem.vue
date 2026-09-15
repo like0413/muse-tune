@@ -24,9 +24,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { getApplicationLocaleTag } from '@/features/i18n/locales'
 import { isUpdateCheckFrequency, type UpdateCheckFrequency } from '@/features/updater/settings'
 import type { AvailableUpdateView, UpdateStatus } from '@/features/updater/types'
 import { UPDATE_RELEASES_URL } from '@/features/updater/useApplicationUpdater'
+
+const { locale, t } = useI18n({ useScope: 'global' })
 
 const props = defineProps<{
   status: UpdateStatus
@@ -54,7 +57,9 @@ const emit = defineEmits<{
 const updateDate = computed(() => {
   if (!props.update?.date) return null
   const date = new Date(props.update.date)
-  return Number.isNaN(date.getTime()) ? props.update.date : date.toLocaleDateString('zh-CN')
+  return Number.isNaN(date.getTime())
+    ? props.update.date
+    : date.toLocaleDateString(getApplicationLocaleTag(locale.value))
 })
 
 const statusVariant = computed<BadgeVariants['variant']>(() => {
@@ -65,9 +70,11 @@ const statusVariant = computed<BadgeVariants['variant']>(() => {
 })
 
 const installButtonLabel = computed(() => {
-  if (!props.isDownloading) return '下载并安装'
-  if (props.downloadProgress === null) return '正在下载'
-  return `正在下载 ${Math.round(props.downloadProgress)}%`
+  if (!props.isDownloading) return t('settings.about.update.install')
+  if (props.downloadProgress === null) return t('settings.about.update.downloading')
+  return t('settings.about.update.downloadingProgress', {
+    progress: Math.round(props.downloadProgress),
+  })
 })
 
 /** 仅接受选择器声明的三个检测周期。 */
@@ -85,7 +92,7 @@ function selectUpdateCheckFrequency(value: unknown) {
         <div class="flex flex-wrap items-center gap-2">
           <ItemTitle>
             <RefreshCw class="size-4 text-sky-500" />
-            应用更新
+            {{ t('settings.about.update.title') }}
           </ItemTitle>
           <Badge v-if="statusLabel" :variant="statusVariant">{{ statusLabel }}</Badge>
           <p v-if="errorMessage" class="text-destructive text-xs">{{ errorMessage }}</p>
@@ -93,15 +100,22 @@ function selectUpdateCheckFrequency(value: unknown) {
         <ItemDescription>
           <span>
             <template v-if="update">
-              当前 {{ update.currentVersion }} · 最新 {{ update.version }}
+              {{
+                t('settings.about.update.versions', {
+                  current: update.currentVersion,
+                  latest: update.version,
+                })
+              }}
               <template v-if="updateDate"> · {{ updateDate }}</template>
             </template>
-            <template v-else-if="detectedVersion">自动检测发现 {{ detectedVersion }}</template>
-            <template v-else>通过 GitHub Releases 获取正式版本</template>
+            <template v-else-if="detectedVersion">{{
+              t('settings.about.update.detected', { version: detectedVersion })
+            }}</template>
+            <template v-else>{{ t('settings.about.update.source') }}</template>
           </span>
-          <a :href="UPDATE_RELEASES_URL" @click.prevent="emit('openReleaseNotes')" class="ml-2"
-            >查看更新日志</a
-          >
+          <a :href="UPDATE_RELEASES_URL" @click.prevent="emit('openReleaseNotes')" class="ml-2">{{
+            t('settings.about.update.releaseNotes')
+          }}</a>
         </ItemDescription>
       </ItemContent>
       <ItemActions>
@@ -113,7 +127,7 @@ function selectUpdateCheckFrequency(value: unknown) {
         >
           <LoaderCircle v-if="isChecking" data-icon="inline-start" class="animate-spin" />
           <RefreshCw v-else data-icon="inline-start" />
-          检查更新
+          {{ t('settings.about.update.check') }}
         </Button>
         <Button v-if="update" size="sm" :disabled="isDownloading" @click="emit('install')">
           <LoaderCircle v-if="isDownloading" data-icon="inline-start" class="animate-spin" />
@@ -125,8 +139,10 @@ function selectUpdateCheckFrequency(value: unknown) {
     <ItemFooter class="flex-col items-stretch gap-3">
       <Item variant="muted" class="w-full">
         <ItemContent class="gap-0.5">
-          <Label for="automatic-update-check" class="text-sm">自动检测更新</Label>
-          <ItemDescription>应用运行期间按所选周期检查</ItemDescription>
+          <Label for="automatic-update-check" class="text-sm">{{
+            t('settings.about.update.automatic')
+          }}</Label>
+          <ItemDescription>{{ t('settings.about.update.automaticDescription') }}</ItemDescription>
         </ItemContent>
         <ItemActions>
           <Switch
@@ -140,14 +156,14 @@ function selectUpdateCheckFrequency(value: unknown) {
             :disabled="!automaticCheck || updateCheckFrequencySaving || isDownloading"
             @update:model-value="selectUpdateCheckFrequency"
           >
-            <SelectTrigger class="w-24" aria-label="自动检测更新频率">
+            <SelectTrigger class="w-24" :aria-label="t('settings.about.update.frequency')">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectItem value="daily">每天</SelectItem>
-                <SelectItem value="weekly">每周</SelectItem>
-                <SelectItem value="monthly">每月</SelectItem>
+                <SelectItem value="daily">{{ t('settings.about.update.daily') }}</SelectItem>
+                <SelectItem value="weekly">{{ t('settings.about.update.weekly') }}</SelectItem>
+                <SelectItem value="monthly">{{ t('settings.about.update.monthly') }}</SelectItem>
               </SelectGroup>
             </SelectContent>
           </Select>
@@ -156,7 +172,7 @@ function selectUpdateCheckFrequency(value: unknown) {
       <Progress
         v-if="isDownloading && downloadProgress !== null"
         :model-value="downloadProgress"
-        aria-label="更新下载进度"
+        :aria-label="t('settings.about.update.downloadProgress')"
       />
     </ItemFooter>
   </Item>

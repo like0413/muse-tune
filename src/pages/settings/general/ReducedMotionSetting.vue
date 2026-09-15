@@ -17,6 +17,8 @@ import {
   setReducedMotionOverride,
 } from '@/features/settings/reduced-motion'
 
+const { t } = useI18n({ useScope: 'global' })
+
 const enabled = shallowRef(false)
 const saving = shallowRef(false)
 
@@ -39,7 +41,7 @@ async function updateEnabled(next: boolean) {
     await setReducedMotionOverride(next)
   } catch (error) {
     enabled.value = previous
-    notifySettingSaveFailed('减少动态效果', error)
+    notifySettingSaveFailed(t('settings.general.reducedMotion.title'), error)
   } finally {
     saving.value = false
   }
@@ -50,12 +52,12 @@ async function updateEnabled(next: boolean) {
   <Item>
     <ItemMedia class="icon-tone-sky-500"><Accessibility /></ItemMedia>
     <ItemContent>
-      <ItemTitle>减少动态效果</ItemTitle>
-      <ItemDescription>强制关闭歌词、封面与界面过渡；关闭时仍跟随 Windows 设置</ItemDescription>
+      <ItemTitle>{{ t('settings.general.reducedMotion.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.general.reducedMotion.description') }}</ItemDescription>
     </ItemContent>
     <ItemActions>
       <Switch
-        aria-label="减少动态效果"
+        :aria-label="t('settings.general.reducedMotion.title')"
         :model-value="enabled"
         :disabled="saving"
         @update:model-value="updateEnabled"

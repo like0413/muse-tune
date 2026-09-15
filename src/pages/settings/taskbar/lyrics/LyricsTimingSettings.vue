@@ -25,6 +25,8 @@ import {
   type TaskbarLyricsSettings,
 } from '@/features/settings/lyrics'
 
+const { t } = useI18n({ useScope: 'global' })
+
 defineProps<{
   settings: DeepReadonly<TaskbarLyricsSettings>
   saving: boolean
@@ -36,10 +38,13 @@ const emit = defineEmits<{
   commitTimingOffset: [values: number[] | undefined]
 }>()
 
-const animationOptions = [
-  { value: 'none', label: '无' },
-  { value: 'up', label: '向上渐变' },
-] as const
+const animationOptions = computed(
+  () =>
+    [
+      { value: 'none', label: t('common.none') },
+      { value: 'up', label: t('settings.taskbar.lyrics.animationUp') },
+    ] as const,
+)
 
 /** 接收下拉框的歌词动画值。 */
 function selectAnimation(value: unknown) {
@@ -50,16 +55,16 @@ function selectAnimation(value: unknown) {
 <template>
   <Field orientation="horizontal" :data-disabled="!settings.enabled">
     <FieldContent>
-      <FieldTitle>动画效果</FieldTitle>
-      <FieldDescription>切换到下一句时的移动和渐变方式</FieldDescription>
+      <FieldTitle>{{ t('settings.taskbar.lyrics.animation') }}</FieldTitle>
+      <FieldDescription>{{ t('settings.taskbar.lyrics.animationDescription') }}</FieldDescription>
     </FieldContent>
     <Select
       :model-value="settings.animation"
       :disabled="saving || !settings.enabled"
       @update:model-value="selectAnimation"
     >
-      <SelectTrigger class="w-40" aria-label="歌词动画效果">
-        <SelectValue placeholder="选择动画" />
+      <SelectTrigger class="w-40" :aria-label="t('settings.taskbar.lyrics.animation')">
+        <SelectValue :placeholder="t('settings.taskbar.lyrics.animationPlaceholder')" />
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>
@@ -76,10 +81,12 @@ function selectAnimation(value: unknown) {
     :data-disabled="!settings.enabled || settings.animation === 'none'"
   >
     <FieldContent>
-      <FieldLabel for="taskbar-lyrics-animation-pre-roll">动画提前完成</FieldLabel>
+      <FieldLabel for="taskbar-lyrics-animation-pre-roll">{{
+        t('settings.taskbar.lyrics.preRoll')
+      }}</FieldLabel>
       <FieldDescription>
-        <div>开启：人声前完成动画，更跟拍，但连续演唱时上一句会提前离场；</div>
-        <div>关闭：按时间戳切换，不提前上一句，但动画会与人声同时开始</div>
+        <div>{{ t('settings.taskbar.lyrics.preRollOn') }}</div>
+        <div>{{ t('settings.taskbar.lyrics.preRollOff') }}</div>
       </FieldDescription>
     </FieldContent>
     <Switch
@@ -92,8 +99,8 @@ function selectAnimation(value: unknown) {
 
   <Field orientation="horizontal" :data-disabled="!settings.enabled">
     <FieldContent>
-      <FieldTitle>时间偏移</FieldTitle>
-      <FieldDescription>校准歌词源时间；正值延后、负值提前，不改变动画提前完成</FieldDescription>
+      <FieldTitle>{{ t('settings.taskbar.lyrics.offset') }}</FieldTitle>
+      <FieldDescription>{{ t('settings.taskbar.lyrics.offsetDescription') }}</FieldDescription>
     </FieldContent>
     <div class="flex w-56 items-center gap-3">
       <Slider
@@ -102,7 +109,7 @@ function selectAnimation(value: unknown) {
         :max="TASKBAR_LYRICS_TIMING_OFFSET_MAX"
         :step="50"
         :disabled="saving || !settings.enabled"
-        aria-label="歌词时间偏移"
+        :aria-label="t('settings.taskbar.lyrics.offset')"
         @update:model-value="emit('previewTimingOffset', $event)"
         @value-commit="emit('commitTimingOffset', $event)"
       />

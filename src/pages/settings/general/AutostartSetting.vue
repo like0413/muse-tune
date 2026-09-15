@@ -14,6 +14,8 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 
+const { t } = useI18n({ useScope: 'global' })
+
 const autostartEnabled = shallowRef(false)
 
 /** 读取 Windows 中真实的开机自启状态。 */
@@ -32,7 +34,7 @@ async function setAutostart(enabledValue: boolean) {
     }
     autostartEnabled.value = enabledValue
   } catch (error) {
-    notifySettingSaveFailed('开机自启', error)
+    notifySettingSaveFailed(t('settings.general.autostart.title'), error)
   }
 }
 
@@ -49,12 +51,12 @@ onActivated(() => {
       <Rocket />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>开机自启</ItemTitle>
-      <ItemDescription>开机后自动启动 Muse Tune</ItemDescription>
+      <ItemTitle>{{ t('settings.general.autostart.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.general.autostart.description') }}</ItemDescription>
     </ItemContent>
     <ItemActions>
       <Switch
-        aria-label="开机自启"
+        :aria-label="t('settings.general.autostart.title')"
         :model-value="autostartEnabled"
         @update:model-value="setAutostart"
       />

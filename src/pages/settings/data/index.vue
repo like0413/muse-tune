@@ -8,6 +8,8 @@ import CacheDataItem from './CacheDataItem.vue'
 import ConfigDataItem from './ConfigDataItem.vue'
 import LogsDataItem from './LogsDataItem.vue'
 
+const { t } = useI18n({ useScope: 'global' })
+
 const {
   overview,
   clearing,
@@ -31,7 +33,7 @@ const {
 <template>
   <div class="flex w-full flex-col gap-3">
     <Alert v-if="errorMessage" variant="destructive">
-      <AlertTitle>操作失败</AlertTitle>
+      <AlertTitle>{{ t('feedback.operationFailed') }}</AlertTitle>
       <AlertDescription>{{ errorMessage }}</AlertDescription>
     </Alert>
     <template v-if="overview">

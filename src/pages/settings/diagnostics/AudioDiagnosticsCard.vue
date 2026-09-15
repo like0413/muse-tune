@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Volume2 } from '@lucide/vue'
+import type { DeepReadonly } from 'vue'
 
 import { Badge } from '@/components/ui/badge'
 import type { MediaDiagnostics } from '@/features/diagnostics/types'
@@ -7,43 +8,57 @@ import type { MediaDiagnostics } from '@/features/diagnostics/types'
 import DiagnosticRow from './DiagnosticRow.vue'
 import DiagnosticsCard from './DiagnosticsCard.vue'
 
-const props = defineProps<{ diagnostics: MediaDiagnostics }>()
+const props = defineProps<{ diagnostics: DeepReadonly<MediaDiagnostics> }>()
+const { t } = useI18n({ useScope: 'global' })
 
 const volumeLabel = computed(() => {
-  if (props.diagnostics.volumeLevel === null) return '暂无应用音频会话'
+  if (props.diagnostics.volumeLevel === null) return t('diagnostics.audio.noSession')
   const volume = `${Math.round(props.diagnostics.volumeLevel * 100)}%`
-  return props.diagnostics.muted ? `${volume} · 已静音` : volume
+  return props.diagnostics.muted ? t('diagnostics.audio.muted', { volume }) : volume
 })
 </script>
 
 <template>
-  <DiagnosticsCard title="音频能力" description="Windows 应用音频会话与按进程频谱采集状态">
+  <DiagnosticsCard
+    :title="t('diagnostics.audio.title')"
+    :description="t('diagnostics.audio.description')"
+  >
     <template #icon><Volume2 class="size-4 text-cyan-500" /></template>
     <template #badge>
-      <Badge variant="outline">{{ diagnostics.audioSessionBound ? '已绑定' : '未绑定' }}</Badge>
+      <Badge variant="outline">{{
+        diagnostics.audioSessionBound
+          ? t('diagnostics.values.bound')
+          : t('diagnostics.values.unbound')
+      }}</Badge>
     </template>
-    <DiagnosticRow label="应用音频" :value="volumeLabel" />
-    <DiagnosticRow label="音频进程" :value="diagnostics.audioProcessId ?? '未匹配'" />
+    <DiagnosticRow :label="t('diagnostics.audio.applicationAudio')" :value="volumeLabel" />
     <DiagnosticRow
-      label="频谱开关"
+      :label="t('diagnostics.audio.process')"
+      :value="diagnostics.audioProcessId ?? t('diagnostics.values.unmatched')"
+    />
+    <DiagnosticRow
+      :label="t('diagnostics.audio.spectrumSwitch')"
       :value="
         diagnostics.spectrumEnabled === null
-          ? '不可用'
+          ? t('diagnostics.values.unavailable')
           : diagnostics.spectrumEnabled
-            ? '已开启'
-            : '已关闭'
+            ? t('diagnostics.values.enabled')
+            : t('diagnostics.values.disabled')
       "
     />
     <DiagnosticRow
-      label="频谱采集"
+      :label="t('diagnostics.audio.spectrumCapture')"
       :value="
         diagnostics.spectrumActive === null
-          ? '不可用'
+          ? t('diagnostics.values.unavailable')
           : diagnostics.spectrumActive
-            ? '运行中'
-            : '未运行'
+            ? t('diagnostics.values.running')
+            : t('diagnostics.values.notRunning')
       "
     />
-    <DiagnosticRow label="媒体线程" :value="diagnostics.runtimeError ?? '正常'" />
+    <DiagnosticRow
+      :label="t('diagnostics.audio.mediaThread')"
+      :value="diagnostics.runtimeError ?? t('diagnostics.values.normal')"
+    />
   </DiagnosticsCard>
 </template>

@@ -1,24 +1,22 @@
-import messages from '@intlify/unplugin-vue-i18n/messages'
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
-import { createI18n } from 'vue-i18n'
 
 import App from './App.vue'
+import { i18n, initializeApplicationLocale } from './features/i18n'
 import './lib/color-mode'
 import router from './router'
 
 import './style.css'
 
-const i18n = createI18n({
-  locale: 'zh',
-  fallbackLocale: 'zh',
-  messages,
-})
+/** 恢复应用级设置后再挂载根组件。 */
+async function bootstrap() {
+  await initializeApplicationLocale()
 
-const app = createApp(App)
+  const app = createApp(App)
+  app.use(createPinia())
+  app.use(router)
+  app.use(i18n)
+  app.mount('#app')
+}
 
-app.use(createPinia())
-app.use(router)
-app.use(i18n)
-
-app.mount('#app')
+void bootstrap()

@@ -14,23 +14,25 @@ import PlacementSetting from './PlacementSetting.vue'
 import ProgressStyleSetting from './ProgressStyleSetting.vue'
 import ThemeColorSetting from './ThemeColorSetting.vue'
 import TrackInfoSetting from './track-info/TrackInfoSetting.vue'
+
+const { t } = useI18n({ useScope: 'global' })
 </script>
 
 <template>
   <div class="flex w-full flex-col gap-3">
-    <div class="pl-2 text-sm font-bold">位置与行为</div>
+    <div class="pl-2 text-sm font-bold">{{ t('settings.taskbar.groups.placement') }}</div>
     <PlacementSetting />
     <OverlapPrioritySetting />
     <BarVisibilitySetting />
     <DisplaySetting />
 
-    <div class="pl-2 text-sm font-bold">布局与外观</div>
+    <div class="pl-2 text-sm font-bold">{{ t('settings.taskbar.groups.appearance') }}</div>
     <BarWidthSetting />
     <ElementOrderSetting />
     <ThemeColorSetting />
     <BackgroundTransparencySetting />
 
-    <div class="pl-2 text-sm font-bold">内容组件</div>
+    <div class="pl-2 text-sm font-bold">{{ t('settings.taskbar.groups.content') }}</div>
     <CoverSetting />
     <TrackInfoSetting />
     <LyricsDisplaySetting />
@@ -38,7 +40,7 @@ import TrackInfoSetting from './track-info/TrackInfoSetting.vue'
     <ProgressStyleSetting />
     <AudioSpectrumSetting />
 
-    <div class="pl-2 text-sm font-bold">高级设置</div>
+    <div class="pl-2 text-sm font-bold">{{ t('settings.taskbar.groups.advanced') }}</div>
     <MediaSessionSetting />
   </div>
 </template>

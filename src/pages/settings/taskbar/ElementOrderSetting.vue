@@ -14,11 +14,21 @@ import {
   type TaskbarElement,
 } from '@/features/settings/element-order'
 
-const elementOptions = {
-  cover: { label: '封面', icon: Disc3, widthClass: 'w-28 flex-none' },
-  'track-info': { label: '歌曲信息', icon: ListMusic, widthClass: 'min-w-32 flex-1' },
-  controls: { label: '控制按钮组', icon: Radio, widthClass: 'w-40 flex-none' },
-} as const
+const { t } = useI18n({ useScope: 'global' })
+
+const elementOptions = computed(() => ({
+  cover: { label: t('settings.taskbar.cover.title'), icon: Disc3, widthClass: 'w-28 flex-none' },
+  'track-info': {
+    label: t('settings.taskbar.trackInfo.title'),
+    icon: ListMusic,
+    widthClass: 'min-w-32 flex-1',
+  },
+  controls: {
+    label: t('settings.taskbar.controls.title'),
+    icon: Radio,
+    widthClass: 'w-40 flex-none',
+  },
+}))
 
 const selectedOrder = shallowRef<TaskbarElement[]>([...DEFAULT_TASKBAR_ELEMENT_ORDER])
 const committedOrder = shallowRef<TaskbarElement[]>([...DEFAULT_TASKBAR_ELEMENT_ORDER])
@@ -64,7 +74,7 @@ async function saveElementOrder(order: TaskbarElement[]) {
     committedOrder.value = [...order]
   } catch (error) {
     selectedOrder.value = [...committedOrder.value]
-    notifySettingSaveFailed('任务栏区块顺序', error)
+    notifySettingSaveFailed(t('settings.taskbar.elementOrder.title'), error)
     try {
       await setTaskbarElementOrder(committedOrder.value)
     } catch (rollbackError) {
@@ -86,16 +96,12 @@ onMounted(loadElementOrder)
       <LayoutPanelLeft />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>元素排列</ItemTitle>
-      <ItemDescription>拖动调整封面、歌曲信息和控制按钮组的显示顺序</ItemDescription>
+      <ItemTitle>{{ t('settings.taskbar.elementOrder.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.taskbar.elementOrder.description') }}</ItemDescription>
     </ItemContent>
 
     <template #content>
-      <div
-        ref="sortableContainer"
-        class="bg-muted/50 flex gap-2 rounded-lg p-2"
-        aria-label="任务栏元素排列"
-      >
+      <div ref="sortableContainer" class="bg-muted/50 flex gap-2 rounded-lg p-2">
         <div
           v-for="element in selectedOrder"
           :key="element"
@@ -113,7 +119,7 @@ onMounted(loadElementOrder)
             type="button"
             data-drag-handle
             :disabled="orderSaving"
-            :aria-label="`拖动${elementOptions[element].label}`"
+            :aria-label="t('common.dragItem', { item: elementOptions[element].label })"
           >
             <GripVertical class="size-4" aria-hidden="true" />
           </button>

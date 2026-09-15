@@ -19,6 +19,8 @@ import {
   type TaskbarAutoHide,
 } from '@/features/settings/bar-visibility'
 
+const { t } = useI18n({ useScope: 'global' })
+
 const selectedPreference = shallowRef<TaskbarAutoHide>({ ...DEFAULT_TASKBAR_AUTO_HIDE })
 const committedPreference = shallowRef<TaskbarAutoHide>({ ...DEFAULT_TASKBAR_AUTO_HIDE })
 const saving = shallowRef(false)
@@ -45,7 +47,7 @@ async function updatePreference(patch: Partial<TaskbarAutoHide>) {
     committedPreference.value = { ...nextPreference }
   } catch (error) {
     selectedPreference.value = { ...committedPreference.value }
-    notifySettingSaveFailed('任务栏播放器自动隐藏', error)
+    notifySettingSaveFailed(t('settings.taskbar.autoHide.title'), error)
   } finally {
     saving.value = false
   }
@@ -60,16 +62,20 @@ onMounted(loadPreference)
       <EyeOff />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>自动隐藏</ItemTitle>
-      <ItemDescription>根据媒体会话和播放状态自动隐藏组件</ItemDescription>
+      <ItemTitle>{{ t('settings.taskbar.autoHide.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.taskbar.autoHide.description') }}</ItemDescription>
     </ItemContent>
 
     <template #content>
       <FieldGroup>
         <Field orientation="horizontal">
           <FieldContent>
-            <FieldLabel for="taskbar-hide-without-session">无媒体会话时隐藏</FieldLabel>
-            <FieldDescription>Windows 没有任何可用媒体会话时隐藏</FieldDescription>
+            <FieldLabel for="taskbar-hide-without-session">{{
+              t('settings.taskbar.autoHide.noSession')
+            }}</FieldLabel>
+            <FieldDescription>{{
+              t('settings.taskbar.autoHide.noSessionDescription')
+            }}</FieldDescription>
           </FieldContent>
           <Switch
             id="taskbar-hide-without-session"
@@ -81,8 +87,12 @@ onMounted(loadPreference)
 
         <Field orientation="horizontal">
           <FieldContent>
-            <FieldLabel for="taskbar-hide-when-paused">暂停时隐藏</FieldLabel>
-            <FieldDescription>Windows 有可用媒体会话且处于暂停状态时隐藏</FieldDescription>
+            <FieldLabel for="taskbar-hide-when-paused">{{
+              t('settings.taskbar.autoHide.paused')
+            }}</FieldLabel>
+            <FieldDescription>{{
+              t('settings.taskbar.autoHide.pausedDescription')
+            }}</FieldDescription>
           </FieldContent>
           <Switch
             id="taskbar-hide-when-paused"

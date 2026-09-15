@@ -22,6 +22,8 @@ import {
   TASKBAR_TRANSPARENCY_MIN,
 } from '@/features/settings/background-transparency'
 
+const { t } = useI18n({ useScope: 'global' })
+
 const selectedBackgroundTransparency = shallowRef(0)
 const committedBackgroundTransparency = shallowRef(0)
 const backgroundTransparencySaving = shallowRef(false)
@@ -78,7 +80,7 @@ async function commitBackgroundTransparency(values: number[]) {
     await setTaskbarBackgroundTransparency(transparency)
     committedBackgroundTransparency.value = transparency
   } catch (error) {
-    notifySettingSaveFailed('任务栏背景透明度', error)
+    notifySettingSaveFailed(t('settings.taskbar.transparency.title'), error)
     const committedTransparency = committedBackgroundTransparency.value
     selectedBackgroundTransparency.value = committedTransparency
     previewTransparency(committedTransparency)
@@ -101,8 +103,8 @@ onMounted(loadBackgroundTransparency)
       <Blend />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>背景透明度</ItemTitle>
-      <ItemDescription>仅调组件背景，文字与控件保持清晰</ItemDescription>
+      <ItemTitle>{{ t('settings.taskbar.transparency.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.taskbar.transparency.description') }}</ItemDescription>
     </ItemContent>
     <ItemActions class="w-56">
       <Slider
@@ -111,7 +113,7 @@ onMounted(loadBackgroundTransparency)
         :max="TASKBAR_TRANSPARENCY_MAX"
         :step="1"
         :disabled="backgroundTransparencySaving"
-        aria-label="背景透明度"
+        :aria-label="t('settings.taskbar.transparency.title')"
         @update:model-value="updateBackgroundTransparency"
         @value-commit="commitBackgroundTransparency"
       />

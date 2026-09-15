@@ -35,7 +35,6 @@ const noticeStyle = computed<CSSProperties>(() => {
     class="flex h-full min-w-0 flex-1 items-center overflow-hidden font-medium"
     :class="alignmentClasses[settings.alignment]"
     :style="noticeStyle"
-    :aria-label="text"
   >
     <span class="w-full truncate">{{ text }}</span>
   </div>

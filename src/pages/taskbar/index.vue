@@ -26,6 +26,8 @@ import LyricsElement from './components/LyricsElement.vue'
 import PlaybackControlsElement from './components/PlaybackControlsElement.vue'
 import TrackInfoElement from './components/TrackInfoElement.vue'
 
+const { t } = useI18n({ useScope: 'global' })
+
 const { session: mediaSession, timeline, controlPending, control } = useMediaSession()
 const playbackStatus = computed(() => mediaSession.value?.playback.status ?? 'unknown')
 const { positionMs, progress } = useMediaProgress(timeline, playbackStatus)
@@ -162,7 +164,6 @@ onMounted(refreshCoverAnchors)
     ref="taskbarRoot"
     class="text-taskbar-foreground relative flex size-full items-center gap-2 overflow-hidden px-2 py-1 shadow-sm select-none"
     :style="[backgroundStyle, progressColorStyle]"
-    aria-label="Muse Tune 任务栏播放器"
     @contextmenu.prevent="openNativeMenu"
     @mousemove="restoreTaskbarHover"
   >
@@ -220,7 +221,7 @@ onMounted(refreshCoverAnchors)
         />
         <LyricsNoticeElement
           v-else-if="lyrics.status === 'instrumental'"
-          text="纯音乐，请欣赏"
+          :text="t('taskbar.lyrics.instrumental')"
           :settings="lyricsSettings"
           :theme-color="progressColor"
         />
@@ -239,7 +240,7 @@ onMounted(refreshCoverAnchors)
       v-if="timeline"
       class="pointer-events-none absolute inset-0"
       role="progressbar"
-      aria-label="播放进度"
+      :aria-label="t('media.progress')"
       aria-valuemin="0"
       aria-valuemax="100"
       :aria-valuenow="progress"

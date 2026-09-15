@@ -22,6 +22,8 @@ import {
 
 import LyricsAppearanceSettings from './LyricsAppearanceSettings.vue'
 
+const { t } = useI18n({ useScope: 'global' })
+
 defineProps<{
   settings: DeepReadonly<TaskbarLyricsSettings>
   saving: boolean
@@ -33,20 +35,29 @@ const emit = defineEmits<{
   commitFontSize: [values: number[] | undefined]
 }>()
 
-const alignmentOptions = [
-  { value: 'left', label: '左' },
-  { value: 'center', label: '中' },
-  { value: 'right', label: '右' },
-] as const
-const lineModeOptions = [
-  { value: 'single', label: '单行' },
-  { value: 'double', label: '双行' },
-] as const
-const secondaryLineOptions = [
-  { value: 'translation_only', label: '仅翻译' },
-  { value: 'next', label: '下一句' },
-  { value: 'translation_or_next', label: '翻译优先' },
-] as const
+const alignmentOptions = computed(
+  () =>
+    [
+      { value: 'left', label: t('common.left') },
+      { value: 'center', label: t('common.center') },
+      { value: 'right', label: t('common.right') },
+    ] as const,
+)
+const lineModeOptions = computed(
+  () =>
+    [
+      { value: 'single', label: t('settings.taskbar.lyrics.single') },
+      { value: 'double', label: t('settings.taskbar.lyrics.double') },
+    ] as const,
+)
+const secondaryLineOptions = computed(
+  () =>
+    [
+      { value: 'translation_only', label: t('settings.taskbar.lyrics.translationOnly') },
+      { value: 'next', label: t('settings.taskbar.lyrics.nextLine') },
+      { value: 'translation_or_next', label: t('settings.taskbar.lyrics.translationFirst') },
+    ] as const,
+)
 
 /** 接收单选组件的对齐值。 */
 function selectAlignment(value: unknown) {
@@ -67,8 +78,10 @@ function selectSecondaryLine(value: unknown) {
 <template>
   <Field orientation="horizontal">
     <FieldContent>
-      <FieldLabel for="taskbar-lyrics-enabled">开启歌词</FieldLabel>
-      <FieldDescription>关闭后恢复显示歌曲信息和控制按钮</FieldDescription>
+      <FieldLabel for="taskbar-lyrics-enabled">{{
+        t('settings.taskbar.lyrics.enabled')
+      }}</FieldLabel>
+      <FieldDescription>{{ t('settings.taskbar.lyrics.enabledDescription') }}</FieldDescription>
     </FieldContent>
     <Switch
       id="taskbar-lyrics-enabled"
@@ -80,11 +93,11 @@ function selectSecondaryLine(value: unknown) {
 
   <Field orientation="horizontal" :data-disabled="!settings.enabled">
     <FieldContent>
-      <FieldTitle>显示行数</FieldTitle>
-      <FieldDescription>双行时可指定第二行优先显示的内容</FieldDescription>
+      <FieldTitle>{{ t('settings.taskbar.lyrics.lines') }}</FieldTitle>
+      <FieldDescription>{{ t('settings.taskbar.lyrics.linesDescription') }}</FieldDescription>
     </FieldContent>
     <Tabs :model-value="settings.lineMode" @update:model-value="selectLineMode">
-      <TabsList aria-label="歌词显示行数">
+      <TabsList>
         <TabsTrigger
           v-for="option in lineModeOptions"
           :key="option.value"
@@ -102,11 +115,11 @@ function selectSecondaryLine(value: unknown) {
     :data-disabled="!settings.enabled || settings.lineMode !== 'double'"
   >
     <FieldContent>
-      <FieldTitle>第二行回退规则</FieldTitle>
-      <FieldDescription>仅“翻译优先”会在没有翻译时显示下一句</FieldDescription>
+      <FieldTitle>{{ t('settings.taskbar.lyrics.secondary') }}</FieldTitle>
+      <FieldDescription>{{ t('settings.taskbar.lyrics.secondaryDescription') }}</FieldDescription>
     </FieldContent>
     <Tabs :model-value="settings.secondaryLine" @update:model-value="selectSecondaryLine">
-      <TabsList aria-label="双行歌词第二行优先内容">
+      <TabsList>
         <TabsTrigger
           v-for="option in secondaryLineOptions"
           :key="option.value"
@@ -121,8 +134,12 @@ function selectSecondaryLine(value: unknown) {
 
   <Field orientation="horizontal" :data-disabled="!settings.enabled">
     <FieldContent>
-      <FieldLabel for="taskbar-lyrics-word-highlight">逐字高亮</FieldLabel>
-      <FieldDescription>仅在歌词源包含逐字时间轴时生效</FieldDescription>
+      <FieldLabel for="taskbar-lyrics-word-highlight">{{
+        t('settings.taskbar.lyrics.wordHighlight')
+      }}</FieldLabel>
+      <FieldDescription>{{
+        t('settings.taskbar.lyrics.wordHighlightDescription')
+      }}</FieldDescription>
     </FieldContent>
     <Switch
       id="taskbar-lyrics-word-highlight"
@@ -134,11 +151,11 @@ function selectSecondaryLine(value: unknown) {
 
   <Field orientation="horizontal" :data-disabled="!settings.enabled">
     <FieldContent>
-      <FieldTitle>对齐方式</FieldTitle>
-      <FieldDescription>歌词在空白区域内的水平位置</FieldDescription>
+      <FieldTitle>{{ t('common.alignment') }}</FieldTitle>
+      <FieldDescription>{{ t('settings.taskbar.lyrics.alignmentDescription') }}</FieldDescription>
     </FieldContent>
     <Tabs :model-value="settings.alignment" @update:model-value="selectAlignment">
-      <TabsList aria-label="歌词对齐方式">
+      <TabsList>
         <TabsTrigger
           v-for="option in alignmentOptions"
           :key="option.value"
@@ -153,8 +170,8 @@ function selectSecondaryLine(value: unknown) {
 
   <Field orientation="horizontal" :data-disabled="!settings.enabled">
     <FieldContent>
-      <FieldTitle>歌词大小</FieldTitle>
-      <FieldDescription>字号范围为 10–18px，双行时自动收紧行距</FieldDescription>
+      <FieldTitle>{{ t('settings.taskbar.lyrics.size') }}</FieldTitle>
+      <FieldDescription>{{ t('settings.taskbar.lyrics.sizeDescription') }}</FieldDescription>
     </FieldContent>
     <div class="flex w-56 items-center gap-3">
       <Slider
@@ -163,7 +180,7 @@ function selectSecondaryLine(value: unknown) {
         :max="TASKBAR_LYRICS_FONT_SIZE_MAX"
         :step="1"
         :disabled="saving || !settings.enabled"
-        aria-label="歌词大小"
+        :aria-label="t('settings.taskbar.lyrics.size')"
         @update:model-value="emit('previewFontSize', $event)"
         @value-commit="emit('commitFontSize', $event)"
       />

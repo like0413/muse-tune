@@ -1,11 +1,13 @@
 import { toast } from 'vue-sonner'
 
+import { translateGlobal } from '@/features/i18n'
 import { isIpcError } from '@/features/ipc/errors'
 
-const DEFAULT_ERROR_MESSAGE = '操作未完成，请稍后重试'
-
 /** 将未知异常收敛为可展示的一行文案，避免直接显示对象序列化结果。 */
-export function getErrorMessage(error: unknown, fallback = DEFAULT_ERROR_MESSAGE): string {
+export function getErrorMessage(
+  error: unknown,
+  fallback = translateGlobal('feedback.defaultError'),
+): string {
   if (isIpcError(error) && error.message.trim()) return error.message
   if (error instanceof Error && error.message.trim()) return error.message
   if (typeof error === 'string' && error.trim()) return error
@@ -39,9 +41,9 @@ export function notifyActionFailed(
 
 /** 统一提示设置保存失败，设置读取失败仍按页面重要性单独处理。 */
 export function notifySettingSaveFailed(label: string, error: unknown): void {
-  notifyActionFailed('设置保存失败', error, {
+  notifyActionFailed(translateGlobal('feedback.settingSaveFailed'), error, {
     context: `保存${label}失败`,
     descriptionPrefix: label,
-    fallbackMessage: '未能保存此项设置',
+    fallbackMessage: translateGlobal('feedback.settingSaveFallback'),
   })
 }

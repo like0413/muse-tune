@@ -20,11 +20,16 @@ import {
   type TaskbarPlacement,
 } from '@/features/settings/placement'
 
-const placementOptions = [
-  { value: 'left', label: '左侧' },
-  { value: 'auto', label: '自动' },
-  { value: 'right', label: '右侧' },
-] as const satisfies ReadonlyArray<{ value: TaskbarPlacement; label: string }>
+const { t } = useI18n({ useScope: 'global' })
+
+const placementOptions = computed(
+  () =>
+    [
+      { value: 'left', label: t('settings.taskbar.placement.left') },
+      { value: 'auto', label: t('settings.taskbar.placement.auto') },
+      { value: 'right', label: t('settings.taskbar.placement.right') },
+    ] as const satisfies ReadonlyArray<{ value: TaskbarPlacement; label: string }>,
+)
 
 const selectedPlacement = shallowRef<TaskbarPlacement>('auto')
 const placementSaving = shallowRef(false)
@@ -52,7 +57,7 @@ async function selectPlacement(value: unknown) {
     await setTaskbarPlacement(value)
   } catch (error) {
     selectedPlacement.value = previousPlacement
-    notifySettingSaveFailed('播放器位置', error)
+    notifySettingSaveFailed(t('settings.taskbar.placement.title'), error)
     try {
       await applyTaskbarPlacement(previousPlacement)
     } catch (rollbackError) {
@@ -72,12 +77,12 @@ onMounted(loadPlacement)
       <PanelTop />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>组件位置</ItemTitle>
-      <ItemDescription>自动模式会根据 Windows 任务栏设置自动切换位置</ItemDescription>
+      <ItemTitle>{{ t('settings.taskbar.placement.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.taskbar.placement.description') }}</ItemDescription>
     </ItemContent>
     <ItemActions>
       <Tabs :model-value="selectedPlacement" @update:model-value="selectPlacement">
-        <TabsList aria-label="播放器位置">
+        <TabsList>
           <TabsTrigger
             v-for="option in placementOptions"
             :key="option.value"

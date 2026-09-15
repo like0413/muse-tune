@@ -29,19 +29,50 @@ import DataSettingsPanel from './data/index.vue'
 import DiagnosticsSettingsPanel from './diagnostics/index.vue'
 import GeneralSettingsPanel from './general/index.vue'
 import type { NavigationItem, SettingsSection } from './model'
-import { SETTINGS_SECTION_META } from './model'
 import TaskbarSettingsPanel from './taskbar/index.vue'
 
 const activeSection = shallowRef<SettingsSection>('general')
 const applicationVersion = shallowRef('—')
+const { t } = useI18n({ useScope: 'global' })
 
-const navigationItems: Array<NavigationItem> = [
-  { id: 'general', label: '常规', icon: Settings2 },
-  { id: 'taskbar', label: '任务栏', icon: PanelLeft },
-  { id: 'data', label: '数据', icon: Database },
-  { id: 'diagnostics', label: '诊断', icon: Activity },
-  { id: 'about', label: '关于', icon: Info },
-]
+const sectionPresentations = computed<
+  Record<SettingsSection, { title: string; description: string; icon: Component }>
+>(() => ({
+  general: {
+    title: t('settings.sections.general.title'),
+    description: t('settings.sections.general.description'),
+    icon: Settings2,
+  },
+  taskbar: {
+    title: t('settings.sections.taskbar.title'),
+    description: t('settings.sections.taskbar.description'),
+    icon: PanelLeft,
+  },
+  data: {
+    title: t('settings.sections.data.title'),
+    description: t('settings.sections.data.description'),
+    icon: Database,
+  },
+  diagnostics: {
+    title: t('settings.sections.diagnostics.title'),
+    description: t('settings.sections.diagnostics.description'),
+    icon: Activity,
+  },
+  about: {
+    title: t('settings.sections.about.title'),
+    description: t('settings.sections.about.description'),
+    icon: Info,
+  },
+}))
+
+const sectionOrder: SettingsSection[] = ['general', 'taskbar', 'data', 'diagnostics', 'about']
+const navigationItems = computed<Array<NavigationItem>>(() =>
+  sectionOrder.map((id) => ({
+    id,
+    label: sectionPresentations.value[id].title,
+    icon: sectionPresentations.value[id].icon,
+  })),
+)
 
 const panels: Record<SettingsSection, Component> = {
   general: GeneralSettingsPanel,
@@ -52,7 +83,7 @@ const panels: Record<SettingsSection, Component> = {
 }
 
 const activePanel = computed(() => panels[activeSection.value])
-const activeSectionMeta = computed(() => SETTINGS_SECTION_META[activeSection.value])
+const activeSectionMeta = computed(() => sectionPresentations.value[activeSection.value])
 const toasterTheme = computed(() => (colorMode.value === 'dark' ? 'dark' : 'light'))
 
 function selectSection(section: SettingsSection) {

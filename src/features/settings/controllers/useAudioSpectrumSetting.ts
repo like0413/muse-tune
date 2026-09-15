@@ -21,6 +21,7 @@ type SpectrumSliderKey =
 
 /** 管理任务栏频谱设置的预览、持久化和失败回滚。 */
 export function useAudioSpectrumSetting() {
+  const { t } = useI18n({ useScope: 'global' })
   const selectedSettings = shallowRef<TaskbarAudioSpectrumSettings>({
     ...DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS,
   })
@@ -63,7 +64,7 @@ export function useAudioSpectrumSetting() {
       committedSettings.value = { ...next }
     } catch (error) {
       selectedSettings.value = { ...committedSettings.value }
-      notifySettingSaveFailed('频谱设置', error)
+      notifySettingSaveFailed(t('settings.taskbar.spectrum.title'), error)
     } finally {
       settingsSaving.value = false
     }

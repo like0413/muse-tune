@@ -4,8 +4,10 @@ import { moveArrayElement, useSortable } from '@vueuse/integrations/useSortable'
 import type { SortableEvent } from 'sortablejs'
 import { nextTick, shallowRef, useTemplateRef, watch } from 'vue'
 
-import { getMediaPlayerPresentation } from '@/features/media/players'
+import { getMediaPlayerLabel } from '@/features/media/players'
 import type { MediaPlayer } from '@/features/media/types'
+
+const { t } = useI18n({ useScope: 'global' })
 
 const props = defineProps<{
   players: readonly MediaPlayer[]
@@ -54,11 +56,7 @@ function handlePriorityUpdate(event: SortableEvent) {
 </script>
 
 <template>
-  <div
-    ref="priorityContainer"
-    class="bg-muted/50 grid w-56 gap-2 rounded-lg p-2"
-    aria-label="播放器优先级"
-  >
+  <div ref="priorityContainer" class="bg-muted/50 grid w-56 gap-2 rounded-lg p-2">
     <div
       v-for="(player, index) in editablePlayers"
       :key="player"
@@ -67,14 +65,14 @@ function handlePriorityUpdate(event: SortableEvent) {
       <span class="text-muted-foreground w-4 text-center text-xs">{{ index + 1 }}</span>
       <Music2 class="size-4" aria-hidden="true" />
       <span class="text-sm font-medium">
-        {{ getMediaPlayerPresentation(player).label }}
+        {{ getMediaPlayerLabel(player) }}
       </span>
       <button
         class="text-muted-foreground hover:text-foreground focus-visible:ring-ring ml-auto grid cursor-grab place-items-center rounded-sm outline-none focus-visible:ring-2 active:cursor-grabbing"
         type="button"
         data-drag-handle
         :disabled="disabled"
-        :aria-label="`拖动${getMediaPlayerPresentation(player).label}`"
+        :aria-label="t('common.dragItem', { item: getMediaPlayerLabel(player) })"
       >
         <GripVertical class="size-4" aria-hidden="true" />
       </button>

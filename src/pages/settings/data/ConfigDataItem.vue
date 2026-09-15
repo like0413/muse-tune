@@ -25,6 +25,8 @@ import {
 import { formatBytes } from '@/features/data-management/format'
 import type { ConfigOverview } from '@/features/data-management/types'
 
+const { t } = useI18n({ useScope: 'global' })
+
 defineProps<{
   overview: ConfigOverview
   opening: boolean
@@ -42,9 +44,9 @@ const emit = defineEmits<{
     <ItemContent>
       <ItemTitle>
         <FileCog class="size-4 text-amber-500" />
-        应用配置
+        {{ t('settings.data.config.title') }}
       </ItemTitle>
-      <ItemDescription>应用设置和用户偏好</ItemDescription>
+      <ItemDescription>{{ t('settings.data.config.description') }}</ItemDescription>
     </ItemContent>
     <ItemActions>
       <AlertDialog>
@@ -52,23 +54,23 @@ const emit = defineEmits<{
           <Button variant="outline" size="sm" :disabled="resetting">
             <LoaderCircle v-if="resetting" data-icon="inline-start" class="animate-spin" />
             <RotateCcw v-else data-icon="inline-start" />
-            重置配置
+            {{ t('settings.data.config.reset') }}
           </Button>
         </AlertDialogTrigger>
         <AlertDialogContent class="w-100">
           <AlertDialogHeader>
-            <AlertDialogTitle>重置全部配置？</AlertDialogTitle>
+            <AlertDialogTitle>{{ t('settings.data.config.resetConfirmTitle') }}</AlertDialogTitle>
             <AlertDialogDescription>
-              所有设置将恢复默认值，Muse Tune 随后会自动重启。此操作无法撤销。
+              {{ t('settings.data.config.resetConfirmDescription') }}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{{ t('common.cancel') }}</AlertDialogCancel>
             <AlertDialogAction
               class="bg-destructive hover:bg-destructive/90 text-white"
               @click="emit('reset')"
             >
-              重置并重启
+              {{ t('settings.data.config.resetAndRestart') }}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -76,19 +78,21 @@ const emit = defineEmits<{
       <Button variant="outline" size="sm" :disabled="opening" @click="emit('open')">
         <LoaderCircle v-if="opening" data-icon="inline-start" class="animate-spin" />
         <FolderOpen v-else data-icon="inline-start" />
-        打开目录
+        {{ t('common.openDirectory') }}
       </Button>
     </ItemActions>
     <ItemFooter>
       <div class="flex w-full items-center justify-between gap-4">
         <Badge variant="secondary">
-          {{ overview.settingsFileExists ? '1 个文件' : '尚未创建文件' }}
+          {{ overview.settingsFileExists ? t('settings.data.oneFile') : t('settings.data.noFile') }}
         </Badge>
         <div class="flex items-baseline gap-2 tabular-nums">
           <span class="text-sm font-semibold">
             {{ overview.settingsFileExists ? formatBytes(overview.settingsFileBytes) : '—' }}
           </span>
-          <span class="text-muted-foreground text-xs">配置文件大小</span>
+          <span class="text-muted-foreground text-xs">{{
+            t('settings.data.config.fileSize')
+          }}</span>
         </div>
       </div>
     </ItemFooter>

@@ -28,18 +28,33 @@ const props = defineProps<{
 const emit = defineEmits<{
   updateSettings: [patch: Partial<TaskbarLyricsSettings>]
 }>()
+const { t } = useI18n({ useScope: 'global' })
 
 type EditableColor = 'playedColor' | 'unplayedColor'
 
-const colorSchemeOptions = [
-  { value: 'theme', label: '跟随主题' },
-  { value: 'custom', label: '自定义' },
-] as const satisfies ReadonlyArray<{ value: TaskbarLyricsColorScheme; label: string }>
+const colorSchemeOptions = computed(
+  () =>
+    [
+      { value: 'theme', label: t('settings.taskbar.lyrics.followTheme') },
+      { value: 'custom', label: t('common.custom') },
+    ] as const satisfies ReadonlyArray<{ value: TaskbarLyricsColorScheme; label: string }>,
+)
 
-const colorFields = [
-  { key: 'playedColor', title: '已播放颜色', description: '逐字歌词已经播放的部分' },
-  { key: 'unplayedColor', title: '未播放颜色', description: '未播放文字和第二行共用此颜色' },
-] as const
+const colorFields = computed(
+  () =>
+    [
+      {
+        key: 'playedColor',
+        title: t('settings.taskbar.lyrics.playedColor'),
+        description: t('settings.taskbar.lyrics.playedColorDescription'),
+      },
+      {
+        key: 'unplayedColor',
+        title: t('settings.taskbar.lyrics.unplayedColor'),
+        description: t('settings.taskbar.lyrics.unplayedColorDescription'),
+      },
+    ] as const,
+)
 
 const colorDrafts = reactive<Record<EditableColor, string>>({
   playedColor: props.settings.playedColor,
@@ -76,7 +91,7 @@ function updateColorDraft(key: EditableColor, value: string | number) {
 function commitColor(key: EditableColor) {
   const color = normalizeHexColor(colorDrafts[key])
   if (!color) {
-    colorErrors[key] = '请输入 #RRGGBB 格式的颜色'
+    colorErrors[key] = String(t('settings.taskbar.lyrics.invalidColor'))
     return
   }
   colorDrafts[key] = color
@@ -94,11 +109,11 @@ function selectNativeColor(key: EditableColor, event: Event) {
 <template>
   <Field orientation="horizontal" :data-disabled="disabled">
     <FieldContent>
-      <FieldTitle>歌词颜色</FieldTitle>
-      <FieldDescription>自定义模式可分别设置已播放和未播放歌词颜色</FieldDescription>
+      <FieldTitle>{{ t('settings.taskbar.lyrics.colors') }}</FieldTitle>
+      <FieldDescription>{{ t('settings.taskbar.lyrics.colorsDescription') }}</FieldDescription>
     </FieldContent>
     <Tabs :model-value="settings.colorScheme" @update:model-value="selectColorScheme">
-      <TabsList aria-label="歌词颜色模式">
+      <TabsList>
         <TabsTrigger
           v-for="option in colorSchemeOptions"
           :key="option.value"
@@ -138,7 +153,7 @@ function selectNativeColor(key: EditableColor, event: Event) {
           :model-value="colorDrafts[field.key]"
           :disabled="disabled"
           :aria-invalid="!!colorErrors[field.key]"
-          :aria-label="`${field.title}十六进制值`"
+          :aria-label="t('common.hexValue', { item: field.title })"
           @update:model-value="updateColorDraft(field.key, $event)"
           @blur="commitColor(field.key)"
           @keydown.enter="commitColor(field.key)"
@@ -149,8 +164,8 @@ function selectNativeColor(key: EditableColor, event: Event) {
 
   <Field orientation="horizontal" :data-disabled="disabled">
     <FieldContent>
-      <FieldTitle>歌词字体</FieldTitle>
-      <FieldDescription>搜索 Windows 字体；每次展开都会发现新安装字体</FieldDescription>
+      <FieldTitle>{{ t('settings.taskbar.lyrics.font') }}</FieldTitle>
+      <FieldDescription>{{ t('settings.taskbar.lyrics.fontDescription') }}</FieldDescription>
     </FieldContent>
     <LyricsFontPicker
       :model-value="settings.fontFamily"

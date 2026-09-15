@@ -4,6 +4,8 @@ import { useApplicationVolume } from '@/features/media/useApplicationVolume'
 import { useVolumePopupLifecycle } from '@/features/media/useVolumePopupLifecycle'
 import { VOLUME_POPUP_TRANSITION_MS } from '@/features/media/volume-popup'
 
+const { t } = useI18n({ useScope: 'global' })
+
 const { volume, setLevel, adjustLevel } = useApplicationVolume()
 const { themeColor, entered, publishHover } = useVolumePopupLifecycle()
 
@@ -28,7 +30,6 @@ function handleWheel(event: WheelEvent) {
   <main
     class="flex size-full items-end justify-center overflow-hidden select-none"
     :style="popupStyle"
-    aria-label="播放器音量"
     @pointerenter="publishHover(true)"
     @pointerleave="publishHover(false)"
     @wheel.prevent="handleWheel"
@@ -44,7 +45,7 @@ function handleWheel(event: WheelEvent) {
         :max="100"
         :step="1"
         :disabled="!volume"
-        aria-label="播放器音量"
+        :aria-label="t('media.playerVolume')"
         class="volume-slider min-h-0! flex-1"
       />
       <output class="mt-2 text-xs leading-none font-medium tabular-nums">{{ percentage }}</output>

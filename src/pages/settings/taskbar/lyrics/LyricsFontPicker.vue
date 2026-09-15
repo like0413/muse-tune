@@ -23,7 +23,6 @@ interface FontOption {
 }
 
 const SYSTEM_DEFAULT_KEY = '__muse_tune_system_default__'
-const SYSTEM_DEFAULT_LABEL = '系统默认'
 
 const props = defineProps<{
   modelValue: string
@@ -33,12 +32,15 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [fontFamily: string]
 }>()
+const { t } = useI18n({ useScope: 'global' })
 
 const systemFonts = shallowRef(getCachedSystemFonts())
 const loadFailed = shallowRef(false)
 
 const fontOptions = computed<FontOption[]>(() => {
-  const options: FontOption[] = [{ value: SYSTEM_DEFAULT_KEY, label: SYSTEM_DEFAULT_LABEL }]
+  const options: FontOption[] = [
+    { value: SYSTEM_DEFAULT_KEY, label: t('settings.taskbar.lyrics.systemFont') },
+  ]
   if (props.modelValue && !systemFonts.value.includes(props.modelValue)) {
     options.push({ value: props.modelValue, label: props.modelValue })
   }
@@ -59,7 +61,7 @@ function selectFont(value: unknown) {
 
 /** 避免内部占位键出现在可编辑搜索框中。 */
 function displayFontValue(value: unknown): string {
-  if (value === SYSTEM_DEFAULT_KEY) return SYSTEM_DEFAULT_LABEL
+  if (value === SYSTEM_DEFAULT_KEY) return t('settings.taskbar.lyrics.systemFont')
   return typeof value === 'string' ? value : ''
 }
 
@@ -95,7 +97,7 @@ onMounted(refreshFonts)
           class="w-56 justify-between font-normal"
           :disabled="disabled"
           role="combobox"
-          aria-label="歌词字体"
+          :aria-label="t('settings.taskbar.lyrics.font')"
         >
           <span class="truncate">{{ selectedFont.label }}</span>
           <ChevronsUpDownIcon data-icon="inline-end" class="opacity-50" />
@@ -104,9 +106,18 @@ onMounted(refreshFonts)
     </ComboboxAnchor>
 
     <ComboboxList class="w-72" align="end">
-      <ComboboxInput :display-value="displayFontValue" placeholder="搜索系统字体…" />
+      <ComboboxInput
+        :display-value="displayFontValue"
+        :placeholder="t('settings.taskbar.lyrics.searchFonts')"
+      />
       <ComboboxViewport class="max-h-72">
-        <ComboboxEmpty>{{ loadFailed ? '系统字体读取失败' : '未找到字体' }}</ComboboxEmpty>
+        <ComboboxEmpty>
+          {{
+            loadFailed
+              ? t('settings.taskbar.lyrics.fontLoadFailed')
+              : t('settings.taskbar.lyrics.noFonts')
+          }}
+        </ComboboxEmpty>
         <ComboboxGroup>
           <ComboboxItem
             v-for="font in fontOptions"

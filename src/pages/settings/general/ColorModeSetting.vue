@@ -12,6 +12,8 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { colorMode } from '@/lib/color-mode'
 
+const { t } = useI18n({ useScope: 'global' })
+
 const selectedColorMode = colorMode.store
 </script>
 
@@ -21,15 +23,15 @@ const selectedColorMode = colorMode.store
       <MoonStar />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>颜色模式</ItemTitle>
-      <ItemDescription>切换颜色模式后会立即生效</ItemDescription>
+      <ItemTitle>{{ t('settings.general.colorMode.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.general.colorMode.description') }}</ItemDescription>
     </ItemContent>
     <ItemActions>
       <Tabs v-model="selectedColorMode">
         <TabsList>
-          <TabsTrigger value="auto">跟随系统</TabsTrigger>
-          <TabsTrigger value="dark">深色</TabsTrigger>
-          <TabsTrigger value="light">浅色</TabsTrigger>
+          <TabsTrigger value="auto">{{ t('settings.general.colorMode.auto') }}</TabsTrigger>
+          <TabsTrigger value="dark">{{ t('settings.general.colorMode.dark') }}</TabsTrigger>
+          <TabsTrigger value="light">{{ t('settings.general.colorMode.light') }}</TabsTrigger>
         </TabsList>
       </Tabs>
     </ItemActions>

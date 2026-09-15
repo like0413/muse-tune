@@ -16,6 +16,8 @@ import {
 } from '@/components/ui/item'
 import { getErrorMessage } from '@/features/feedback/errors'
 
+const { t } = useI18n({ useScope: 'global' })
+
 const PROJECT_URL = 'https://github.com/like0413/muse-tune'
 const ISSUES_URL = `${PROJECT_URL}/issues`
 
@@ -27,7 +29,7 @@ async function openProjectUrl(url: string) {
     await openUrl(url)
     errorMessage.value = null
   } catch (error) {
-    errorMessage.value = getErrorMessage(error, '无法使用系统浏览器打开链接')
+    errorMessage.value = getErrorMessage(error, t('settings.about.project.openFailed'))
   }
 }
 </script>
@@ -38,24 +40,24 @@ async function openProjectUrl(url: string) {
       <ItemContent>
         <ItemTitle>
           <Globe2 class="size-4 text-violet-500" />
-          项目与许可
+          {{ t('settings.about.project.title') }}
         </ItemTitle>
-        <ItemDescription>开源项目 · MIT License</ItemDescription>
+        <ItemDescription>{{ t('settings.about.project.description') }}</ItemDescription>
       </ItemContent>
       <ItemActions>
         <Button variant="outline" size="sm">
           <Globe2 data-icon="inline-start" />
-          官网
+          {{ t('settings.about.project.website') }}
         </Button>
         <Button variant="outline" size="sm" @click="openProjectUrl(PROJECT_URL)">
           <svg data-icon="inline-start" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path :d="siGithub.path" />
           </svg>
-          项目主页
+          {{ t('settings.about.project.repository') }}
         </Button>
         <Button variant="outline" size="sm" @click="openProjectUrl(ISSUES_URL)">
           <ExternalLink data-icon="inline-start" />
-          问题反馈
+          {{ t('settings.about.project.issues') }}
         </Button>
       </ItemActions>
     </ItemHeader>

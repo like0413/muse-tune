@@ -26,12 +26,14 @@ import {
   type TaskbarControlsVisibility,
 } from '@/features/settings/controls'
 
-const buttonOptions: Record<TaskbarControlButton, { label: string }> = {
-  previous: { label: '上一曲' },
-  playPause: { label: '播放 / 暂停' },
-  next: { label: '下一曲' },
-  volume: { label: '音量' },
-}
+const { t } = useI18n({ useScope: 'global' })
+
+const buttonOptions = computed<Record<TaskbarControlButton, { label: string }>>(() => ({
+  previous: { label: t('media.previous') },
+  playPause: { label: t('media.playPause') },
+  next: { label: t('media.next') },
+  volume: { label: t('media.volume') },
+}))
 
 const selectedVisibility = shallowRef<TaskbarControlsVisibility>({
   ...DEFAULT_TASKBAR_CONTROLS_VISIBILITY,
@@ -80,7 +82,7 @@ async function updateVisibility(patch: Partial<TaskbarControlsVisibility>) {
     committedVisibility.value = { ...nextVisibility }
   } catch (error) {
     selectedVisibility.value = { ...committedVisibility.value }
-    notifySettingSaveFailed('控制按钮显隐', error)
+    notifySettingSaveFailed(t('settings.taskbar.controls.title'), error)
   } finally {
     visibilitySaving.value = false
   }
@@ -112,7 +114,7 @@ async function saveOrder(order: TaskbarControlButton[]) {
     const restoredOrder = [...committedVisibility.value.order]
     selectedOrder.value = restoredOrder
     selectedVisibility.value = { ...committedVisibility.value, order: restoredOrder }
-    notifySettingSaveFailed('控制按钮顺序', error)
+    notifySettingSaveFailed(t('settings.taskbar.controls.order'), error)
   } finally {
     visibilitySaving.value = false
     await nextTick()
@@ -129,16 +131,20 @@ onMounted(loadVisibility)
       <Gamepad2 />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>控制按钮</ItemTitle>
-      <ItemDescription>控制按钮组整体及各按钮的显示状态</ItemDescription>
+      <ItemTitle>{{ t('settings.taskbar.controls.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.taskbar.controls.description') }}</ItemDescription>
     </ItemContent>
 
     <template #content>
       <FieldGroup>
         <Field orientation="horizontal">
           <FieldContent>
-            <FieldLabel for="taskbar-controls-visible">显示按钮组</FieldLabel>
-            <FieldDescription>是否显示按钮组</FieldDescription>
+            <FieldLabel for="taskbar-controls-visible">{{
+              t('settings.taskbar.controls.visible')
+            }}</FieldLabel>
+            <FieldDescription>{{
+              t('settings.taskbar.controls.visibleDescription')
+            }}</FieldDescription>
           </FieldContent>
           <Switch
             id="taskbar-controls-visible"
@@ -150,7 +156,7 @@ onMounted(loadVisibility)
 
         <Field :data-disabled="!selectedVisibility.visible">
           <FieldContent>
-            <FieldTitle>显示的按钮</FieldTitle>
+            <FieldTitle>{{ t('settings.taskbar.controls.buttons') }}</FieldTitle>
           </FieldContent>
           <div ref="orderContainer" class="grid grid-cols-4 gap-2">
             <div
@@ -172,7 +178,7 @@ onMounted(loadVisibility)
                 type="button"
                 data-drag-handle
                 :disabled="visibilitySaving || !selectedVisibility.visible"
-                :aria-label="`拖动${buttonOptions[button].label}`"
+                :aria-label="t('common.dragItem', { item: buttonOptions[button].label })"
               >
                 <GripVertical class="size-4" aria-hidden="true" />
               </button>

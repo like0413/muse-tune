@@ -26,17 +26,22 @@ import {
   type TaskbarWidthPreset,
 } from '@/features/settings/bar-width'
 
+const { t } = useI18n({ useScope: 'global' })
+
 const WIDTH_PREVIEW_INTERVAL_MS = 50
 const selectedWidth = shallowRef(TASKBAR_WIDTH_MAX)
 const committedWidth = shallowRef(TASKBAR_WIDTH_MAX)
 const widthSaving = shallowRef(false)
 const selectedPreset = shallowRef<TaskbarWidthPreset>('wide')
-const widthPresetOptions = [
-  { value: 'compact', label: '紧凑' },
-  { value: 'standard', label: '标准' },
-  { value: 'wide', label: '宽' },
-  { value: 'custom', label: '自由调整' },
-] as const
+const widthPresetOptions = computed(
+  () =>
+    [
+      { value: 'compact', label: t('settings.taskbar.width.compact') },
+      { value: 'standard', label: t('settings.taskbar.width.standard') },
+      { value: 'wide', label: t('settings.taskbar.width.wide') },
+      { value: 'custom', label: t('settings.taskbar.width.custom') },
+    ] as const,
+)
 
 /** 恢复已保存的 bar 基准宽度。 */
 async function loadWidth() {
@@ -52,7 +57,7 @@ async function loadWidth() {
 
 /** 切换宽度预设；自由调整只展开滑块，不主动改变当前宽度。 */
 async function selectPreset(value: string | number) {
-  if (!(typeof value === 'string' && widthPresetOptions.some((item) => item.value === value)))
+  if (!(typeof value === 'string' && widthPresetOptions.value.some((item) => item.value === value)))
     return
   const preset = value as TaskbarWidthPreset
   selectedPreset.value = preset
@@ -103,7 +108,7 @@ async function commitWidth(values: number[]) {
     await setTaskbarWidth(width)
     committedWidth.value = width
   } catch (error) {
-    notifySettingSaveFailed('组件宽度', error)
+    notifySettingSaveFailed(t('settings.taskbar.width.title'), error)
     const previousWidth = committedWidth.value
     selectedWidth.value = previousWidth
     selectedPreset.value = getTaskbarWidthPreset(previousWidth)
@@ -126,12 +131,12 @@ onMounted(loadWidth)
       <Ruler />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>组件宽度</ItemTitle>
-      <ItemDescription>设置未被任务栏元素裁剪时的完整宽度</ItemDescription>
+      <ItemTitle>{{ t('settings.taskbar.width.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.taskbar.width.description') }}</ItemDescription>
     </ItemContent>
     <ItemActions class="flex-col items-end gap-2">
       <Tabs :model-value="selectedPreset" @update:model-value="selectPreset">
-        <TabsList aria-label="组件宽度预设">
+        <TabsList>
           <TabsTrigger
             v-for="option in widthPresetOptions"
             :key="option.value"
@@ -149,7 +154,7 @@ onMounted(loadWidth)
           :max="TASKBAR_WIDTH_MAX"
           :step="1"
           :disabled="widthSaving"
-          aria-label="Bar 自由宽度"
+          :aria-label="t('settings.taskbar.width.custom')"
           @update:model-value="updateWidth"
           @value-commit="commitWidth"
         />

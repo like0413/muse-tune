@@ -9,6 +9,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { onUnmounted } from 'vue'
 
 import { openSettingsWindow } from '@/features/application/client'
+import { i18n } from '@/features/i18n'
 import {
   getTaskbarAudioSpectrumSettings,
   setTaskbarAudioSpectrumSettings,
@@ -37,10 +38,12 @@ interface NativeMenuResources {
 
 /** 管理任务栏原生右键菜单，并直接复用现有设置读写与广播能力。 */
 export function useTaskbarNativeMenu() {
+  const { t } = useI18n({ useScope: 'global' })
   let resources: NativeMenuResources | undefined
   let resourcesPromise: Promise<NativeMenuResources> | undefined
   let showing = false
   let disposed = false
+  let renderedLocale: string | undefined
 
   /** 执行菜单操作并集中记录失败，避免原生菜单回调产生未处理的 Promise。 */
   function runAction(action: () => Promise<void>, failureMessage: string) {
@@ -87,28 +90,28 @@ export function useTaskbarNativeMenu() {
       const normalCover = await retain(
         createCheckItem({
           id: 'taskbar-toggle-normal-cover',
-          text: '普通模式封面',
+          text: t('taskbar.menu.normalCover'),
           action: () => runAction(() => toggleCover('normal'), '切换普通模式封面失败'),
         }),
       )
       const lyricsCover = await retain(
         createCheckItem({
           id: 'taskbar-toggle-lyrics-cover',
-          text: '歌词模式封面',
+          text: t('taskbar.menu.lyricsCover'),
           action: () => runAction(() => toggleCover('lyrics'), '切换歌词模式封面失败'),
         }),
       )
       const lyrics = await retain(
         createCheckItem({
           id: 'taskbar-toggle-lyrics',
-          text: '开启歌词',
+          text: t('taskbar.menu.lyrics'),
           action: () => runAction(toggleLyrics, '切换歌词失败'),
         }),
       )
       const spectrum = await retain(
         createCheckItem({
           id: 'taskbar-toggle-spectrum',
-          text: '显示频谱',
+          text: t('taskbar.menu.spectrum'),
           action: () => runAction(toggleSpectrum, '切换频谱显示失败'),
         }),
       )
@@ -116,24 +119,29 @@ export function useTaskbarNativeMenu() {
       const settings = await retain(
         MenuItem.new({
           id: 'taskbar-open-settings',
-          text: '打开设置',
+          text: t('taskbar.menu.settings'),
           action: () => runAction(openSettingsWindow, '从任务栏菜单打开设置失败'),
         }),
       )
       const restart = await retain(
         MenuItem.new({
           id: 'taskbar-restart-application',
-          text: import.meta.env.PROD ? '重启应用' : '重启应用（正式版可用）',
+          text: import.meta.env.PROD
+            ? t('taskbar.menu.restart')
+            : t('taskbar.menu.restartProductionOnly'),
           enabled: import.meta.env.PROD,
           action: () => runAction(restartApplication, '从任务栏菜单重启应用失败'),
         }),
       )
-      const quit = await retain(PredefinedMenuItem.new({ item: 'Quit', text: '退出应用' }))
+      const quit = await retain(
+        PredefinedMenuItem.new({ item: 'Quit', text: t('taskbar.menu.quit') }),
+      )
       const menu = await retain(
         Menu.new({
           items: [normalCover, lyricsCover, lyrics, spectrum, separator, settings, restart, quit],
         }),
       )
+      renderedLocale = i18n.global.locale.value
       return {
         menu,
         normalCover,
@@ -186,13 +194,31 @@ export function useTaskbarNativeMenu() {
     ])
   }
 
+  /** 每次弹出前刷新菜单文本，使运行期间切换语言无需重建原生资源。 */
+  async function refreshText(current: NativeMenuResources) {
+    const locale = i18n.global.locale.value
+    if (locale === renderedLocale) return
+    await Promise.all([
+      current.normalCover.setText(t('taskbar.menu.normalCover')),
+      current.lyricsCover.setText(t('taskbar.menu.lyricsCover')),
+      current.lyrics.setText(t('taskbar.menu.lyrics')),
+      current.spectrum.setText(t('taskbar.menu.spectrum')),
+      current.settings.setText(t('taskbar.menu.settings')),
+      current.restart.setText(
+        import.meta.env.PROD ? t('taskbar.menu.restart') : t('taskbar.menu.restartProductionOnly'),
+      ),
+      current.quit.setText(t('taskbar.menu.quit')),
+    ])
+    renderedLocale = locale
+  }
+
   /** 在鼠标当前位置显示 Windows 原生菜单；重复右键不会并行打开多个菜单。 */
   async function show() {
     if (showing || disposed) return
     showing = true
     try {
       const current = await getResources()
-      await refreshCheckedState(current)
+      await Promise.all([refreshCheckedState(current), refreshText(current)])
       await current.menu.popup(undefined, getCurrentWindow())
     } catch (error) {
       console.error('显示任务栏原生菜单失败', error)

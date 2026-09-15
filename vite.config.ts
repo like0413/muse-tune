@@ -105,7 +105,13 @@ export default defineConfig({
     tailwindcss(),
     AutoImport({
       dts: true,
-      imports: ['vue', 'vue-router'],
+      imports: [
+        'vue',
+        'vue-router',
+        {
+          'vue-i18n': ['useI18n'],
+        },
+      ],
     }),
     Components({
       dts: true,

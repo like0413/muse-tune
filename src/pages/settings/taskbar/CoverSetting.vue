@@ -24,18 +24,26 @@ import {
   type TaskbarCoverAppearance,
 } from '@/features/settings/cover'
 
-const shapeOptions = [
-  { value: 'square', label: '方形' },
-  { value: 'rounded', label: '圆角' },
-  { value: 'circle', label: '圆形' },
-] as const
+const { t } = useI18n({ useScope: 'global' })
 
-const visibilityOptions = [
-  { value: 'always', label: '始终显示' },
-  { value: 'normal', label: '仅普通' },
-  { value: 'lyrics', label: '仅歌词' },
-  { value: 'hidden', label: '始终隐藏' },
-] as const
+const shapeOptions = computed(
+  () =>
+    [
+      { value: 'square', label: t('settings.taskbar.cover.square') },
+      { value: 'rounded', label: t('settings.taskbar.cover.rounded') },
+      { value: 'circle', label: t('settings.taskbar.cover.circle') },
+    ] as const,
+)
+
+const visibilityOptions = computed(
+  () =>
+    [
+      { value: 'always', label: t('settings.taskbar.cover.always') },
+      { value: 'normal', label: t('settings.taskbar.cover.normalOnly') },
+      { value: 'lyrics', label: t('settings.taskbar.cover.lyricsOnly') },
+      { value: 'hidden', label: t('settings.taskbar.cover.hidden') },
+    ] as const,
+)
 
 const selectedAppearance = shallowRef<TaskbarCoverAppearance>({
   ...DEFAULT_TASKBAR_COVER_APPEARANCE,
@@ -69,7 +77,7 @@ async function updateAppearance(patch: Partial<TaskbarCoverAppearance>) {
     committedAppearance.value = { ...nextAppearance }
   } catch (error) {
     selectedAppearance.value = { ...committedAppearance.value }
-    notifySettingSaveFailed('封面设置', error)
+    notifySettingSaveFailed(t('settings.taskbar.cover.title'), error)
   } finally {
     appearanceSaving.value = false
   }
@@ -94,19 +102,21 @@ onMounted(loadAppearance)
       <Image />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>封面</ItemTitle>
-      <ItemDescription>分别控制普通与歌词模式的封面显示</ItemDescription>
+      <ItemTitle>{{ t('settings.taskbar.cover.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.taskbar.cover.description') }}</ItemDescription>
     </ItemContent>
 
     <template #content>
       <FieldGroup>
         <Field orientation="horizontal">
           <FieldContent>
-            <FieldTitle id="taskbar-cover-visibility-label">显示封面</FieldTitle>
-            <FieldDescription>选择封面在哪些界面模式中显示</FieldDescription>
+            <FieldTitle>{{ t('settings.taskbar.cover.visible') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.cover.visibleDescription')
+            }}</FieldDescription>
           </FieldContent>
           <Tabs :model-value="selectedAppearance.visibility" @update:model-value="selectVisibility">
-            <TabsList aria-labelledby="taskbar-cover-visibility-label">
+            <TabsList>
               <TabsTrigger
                 v-for="option in visibilityOptions"
                 :key="option.value"
@@ -121,11 +131,11 @@ onMounted(loadAppearance)
 
         <Field orientation="horizontal" :data-disabled="coverAlwaysHidden">
           <FieldContent>
-            <FieldTitle>封面形状</FieldTitle>
-            <FieldDescription>选择方形、圆角或圆形封面</FieldDescription>
+            <FieldTitle>{{ t('settings.taskbar.cover.shape') }}</FieldTitle>
+            <FieldDescription>{{ t('settings.taskbar.cover.shapeDescription') }}</FieldDescription>
           </FieldContent>
           <Tabs :model-value="selectedAppearance.shape" @update:model-value="selectShape">
-            <TabsList aria-label="封面形状">
+            <TabsList>
               <TabsTrigger
                 v-for="option in shapeOptions"
                 :key="option.value"
@@ -144,8 +154,10 @@ onMounted(loadAppearance)
           :data-disabled="coverAlwaysHidden"
         >
           <FieldContent>
-            <FieldLabel for="taskbar-cover-rotate">播放时旋转</FieldLabel>
-            <FieldDescription>播放时持续旋转，暂停后停在当前位置</FieldDescription>
+            <FieldLabel for="taskbar-cover-rotate">{{
+              t('settings.taskbar.cover.rotate')
+            }}</FieldLabel>
+            <FieldDescription>{{ t('settings.taskbar.cover.rotateDescription') }}</FieldDescription>
           </FieldContent>
           <Switch
             id="taskbar-cover-rotate"
@@ -157,8 +169,10 @@ onMounted(loadAppearance)
 
         <Field orientation="horizontal" :data-disabled="coverAlwaysHidden">
           <FieldContent>
-            <FieldLabel for="taskbar-cover-player-source">显示播放器来源</FieldLabel>
-            <FieldDescription>在封面右下角显示当前播放器的小图标</FieldDescription>
+            <FieldLabel for="taskbar-cover-player-source">{{
+              t('settings.taskbar.cover.source')
+            }}</FieldLabel>
+            <FieldDescription>{{ t('settings.taskbar.cover.sourceDescription') }}</FieldDescription>
           </FieldContent>
           <Switch
             id="taskbar-cover-player-source"

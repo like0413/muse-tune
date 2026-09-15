@@ -28,6 +28,8 @@ import {
   type TaskbarDisplay,
 } from '@/features/settings/display'
 
+const { t } = useI18n({ useScope: 'global' })
+
 const taskbarDisplays = shallowRef<TaskbarDisplay[]>([])
 const selectedDisplayTarget = shallowRef(ALL_TASKBAR_DISPLAYS)
 const displayTargetSaving = shallowRef(false)
@@ -83,7 +85,7 @@ async function selectDisplayTarget(value: unknown) {
     await setTaskbarDisplayTarget(value)
   } catch (error) {
     selectedDisplayTarget.value = previousTarget
-    notifySettingSaveFailed('目标显示器', error)
+    notifySettingSaveFailed(t('settings.taskbar.display.title'), error)
     try {
       await applyTaskbarDisplayTarget(previousTarget)
     } catch (rollbackError) {
@@ -103,8 +105,8 @@ onMounted(loadDisplayTarget)
       <Monitor />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>目标显示器</ItemTitle>
-      <ItemDescription>选择组件出现在哪些显示器的任务栏</ItemDescription>
+      <ItemTitle>{{ t('settings.taskbar.display.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.taskbar.display.description') }}</ItemDescription>
     </ItemContent>
     <ItemActions>
       <Select
@@ -113,17 +115,20 @@ onMounted(loadDisplayTarget)
         @update:model-value="selectDisplayTarget"
         @update:open="refreshTaskbarDisplays"
       >
-        <SelectTrigger class="w-64" aria-label="目标显示器">
-          <SelectValue placeholder="选择显示器" />
+        <SelectTrigger class="w-64" :aria-label="t('settings.taskbar.display.title')">
+          <SelectValue :placeholder="t('settings.taskbar.display.placeholder')" />
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
-            <SelectItem :value="ALL_TASKBAR_DISPLAYS">全部显示器</SelectItem>
+            <SelectItem :value="ALL_TASKBAR_DISPLAYS">{{
+              t('settings.taskbar.display.all')
+            }}</SelectItem>
             <SelectItem v-if="selectedDisplayUnavailable" :value="selectedDisplayTarget" disabled>
-              之前选择的显示器（当前不可用）
+              {{ t('settings.taskbar.display.unavailable') }}
             </SelectItem>
             <SelectItem v-for="display in taskbarDisplays" :key="display.id" :value="display.id">
-              {{ display.label }}{{ display.isPrimary ? '（主显示器）' : '' }} ·
+              {{ display.label
+              }}{{ display.isPrimary ? `（${t('settings.taskbar.display.primary')}）` : '' }} ·
               {{ display.width }}×{{ display.height }}
             </SelectItem>
           </SelectGroup>

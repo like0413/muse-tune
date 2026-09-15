@@ -24,6 +24,7 @@ const SCROLL_PREVIEW_INTERVAL_MS = 50
 
 /** 管理歌曲信息设置的读取、提交、预览与失败回滚。 */
 export function useTrackInfoSetting() {
+  const { t } = useI18n({ useScope: 'global' })
   const selectedAlignment = shallowRef<TaskbarTrackInfoAlignment>(
     DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT,
   )
@@ -71,7 +72,7 @@ export function useTrackInfoSetting() {
       committedVisible.value = visible
     } catch (error) {
       selectedVisible.value = committedVisible.value
-      notifySettingSaveFailed('歌曲信息显隐', error)
+      notifySettingSaveFailed(t('settings.taskbar.trackInfo.visible'), error)
     } finally {
       visibilitySaving.value = false
     }
@@ -93,7 +94,7 @@ export function useTrackInfoSetting() {
       committedAlignment.value = value
     } catch (error) {
       selectedAlignment.value = committedAlignment.value
-      notifySettingSaveFailed('歌曲信息对齐方式', error)
+      notifySettingSaveFailed(t('common.alignment'), error)
     } finally {
       alignmentSaving.value = false
     }
@@ -113,7 +114,7 @@ export function useTrackInfoSetting() {
       committedScrolling.value = { ...nextScrolling }
     } catch (error) {
       selectedScrolling.value = { ...committedScrolling.value }
-      notifySettingSaveFailed('歌名滚动配置', error)
+      notifySettingSaveFailed(t('settings.taskbar.trackInfo.scroll'), error)
       if (restorePreview) {
         try {
           await applyTaskbarTrackInfoScrolling(committedScrolling.value)

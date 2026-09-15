@@ -20,16 +20,24 @@ import {
   TASKBAR_TRACK_INFO_SCROLL_SPEED_MIN,
 } from '@/features/settings/track-info'
 
-const alignmentOptions = [
-  { value: 'left', label: '左对齐' },
-  { value: 'right', label: '右对齐' },
-] as const
+const { t } = useI18n({ useScope: 'global' })
 
-const scrollModeOptions = [
-  { value: 'loop', label: '循环' },
-  { value: 'restart', label: '每次从头' },
-  { value: 'alternate', label: '来回滚动' },
-] as const
+const alignmentOptions = computed(
+  () =>
+    [
+      { value: 'left', label: t('common.leftAligned') },
+      { value: 'right', label: t('common.rightAligned') },
+    ] as const,
+)
+
+const scrollModeOptions = computed(
+  () =>
+    [
+      { value: 'loop', label: t('settings.taskbar.trackInfo.loop') },
+      { value: 'restart', label: t('settings.taskbar.trackInfo.restart') },
+      { value: 'alternate', label: t('settings.taskbar.trackInfo.alternate') },
+    ] as const,
+)
 
 const {
   selectedAlignment,
@@ -53,16 +61,20 @@ const {
       <ListMusic />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>歌曲信息</ItemTitle>
-      <ItemDescription>设置歌名对齐及溢出后的滚动表现</ItemDescription>
+      <ItemTitle>{{ t('settings.taskbar.trackInfo.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.taskbar.trackInfo.description') }}</ItemDescription>
     </ItemContent>
 
     <template #content>
       <FieldGroup>
         <Field orientation="horizontal">
           <FieldContent>
-            <FieldLabel for="taskbar-track-info-visible">显示歌曲信息</FieldLabel>
-            <FieldDescription>整体隐藏歌名与歌手，并把空间留给其他组件</FieldDescription>
+            <FieldLabel for="taskbar-track-info-visible">{{
+              t('settings.taskbar.trackInfo.visible')
+            }}</FieldLabel>
+            <FieldDescription>{{
+              t('settings.taskbar.trackInfo.visibleDescription')
+            }}</FieldDescription>
           </FieldContent>
           <Switch
             id="taskbar-track-info-visible"
@@ -74,11 +86,13 @@ const {
 
         <Field orientation="horizontal" :data-disabled="!selectedVisible">
           <FieldContent>
-            <FieldTitle>对齐方式</FieldTitle>
-            <FieldDescription>调整歌名和歌手在可用区域内的对齐方向</FieldDescription>
+            <FieldTitle>{{ t('common.alignment') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.trackInfo.alignmentDescription')
+            }}</FieldDescription>
           </FieldContent>
           <Tabs :model-value="selectedAlignment" @update:model-value="selectAlignment">
-            <TabsList aria-label="歌曲信息对齐方式">
+            <TabsList>
               <TabsTrigger
                 v-for="option in alignmentOptions"
                 :key="option.value"
@@ -93,8 +107,12 @@ const {
 
         <Field orientation="horizontal" :data-disabled="!selectedVisible">
           <FieldContent>
-            <FieldLabel for="taskbar-track-title-scroll">歌名超出时滚动</FieldLabel>
-            <FieldDescription>关闭后超出部分显示为省略号</FieldDescription>
+            <FieldLabel for="taskbar-track-title-scroll">{{
+              t('settings.taskbar.trackInfo.scroll')
+            }}</FieldLabel>
+            <FieldDescription>{{
+              t('settings.taskbar.trackInfo.scrollDescription')
+            }}</FieldDescription>
           </FieldContent>
           <Switch
             id="taskbar-track-title-scroll"
@@ -109,8 +127,10 @@ const {
           :data-disabled="!selectedVisible || !selectedScrolling.enabled || scrollingSaving"
         >
           <FieldContent>
-            <FieldTitle>滚动速度</FieldTitle>
-            <FieldDescription>按每秒移动的像素数控制滚动快慢</FieldDescription>
+            <FieldTitle>{{ t('settings.taskbar.trackInfo.speed') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.trackInfo.speedDescription')
+            }}</FieldDescription>
           </FieldContent>
           <div class="flex w-56 items-center gap-3">
             <Slider
@@ -119,7 +139,7 @@ const {
               :max="TASKBAR_TRACK_INFO_SCROLL_SPEED_MAX"
               :step="1"
               :disabled="!selectedVisible || !selectedScrolling.enabled || scrollingSaving"
-              aria-label="歌名滚动速度"
+              :aria-label="t('settings.taskbar.trackInfo.speed')"
               @update:model-value="updateScrollSpeed"
               @value-commit="commitScrollSpeed"
             />
@@ -134,11 +154,13 @@ const {
           :data-disabled="!selectedVisible || !selectedScrolling.enabled || scrollingSaving"
         >
           <FieldContent>
-            <FieldTitle>滚动方式</FieldTitle>
-            <FieldDescription>设置歌名到达滚动边界后的行为</FieldDescription>
+            <FieldTitle>{{ t('settings.taskbar.trackInfo.mode') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.trackInfo.modeDescription')
+            }}</FieldDescription>
           </FieldContent>
           <Tabs :model-value="selectedScrolling.mode" @update:model-value="selectScrollMode">
-            <TabsList aria-label="歌名滚动方式">
+            <TabsList>
               <TabsTrigger
                 v-for="option in scrollModeOptions"
                 :key="option.value"

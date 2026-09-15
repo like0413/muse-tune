@@ -17,6 +17,7 @@ const DIAGNOSTICS_REFRESH_EVENTS = [
 
 /** 使用现有业务事件刷新应用诊断，不引入定时轮询。 */
 export function useDiagnostics() {
+  const { t } = useI18n({ useScope: 'global' })
   const diagnostics = shallowRef<DiagnosticsSnapshot | null>(null)
   const refreshing = shallowRef(false)
   const errorMessage = shallowRef<string | null>(null)
@@ -62,7 +63,7 @@ export function useDiagnostics() {
           }
         } catch (error) {
           if (!disposed && currentLifecycle === lifecycleId) {
-            errorMessage.value = getErrorMessage(error, '读取诊断信息失败')
+            errorMessage.value = getErrorMessage(error, t('diagnostics.readFailed'))
           }
         }
       }
@@ -92,7 +93,7 @@ export function useDiagnostics() {
       await refresh(true)
     } catch (error) {
       if (!disposed && currentLifecycle === lifecycleId) {
-        errorMessage.value = getErrorMessage(error, '初始化诊断监听失败')
+        errorMessage.value = getErrorMessage(error, t('diagnostics.initializeFailed'))
       }
     }
   }
@@ -119,7 +120,7 @@ export function useDiagnostics() {
       window.clearTimeout(reportCopiedTimer)
       reportCopiedTimer = window.setTimeout(() => (reportCopied.value = false), 2_000)
     } catch (error) {
-      errorMessage.value = getErrorMessage(error, '复制诊断报告失败')
+      errorMessage.value = getErrorMessage(error, t('diagnostics.copyFailed'))
     }
   }
 

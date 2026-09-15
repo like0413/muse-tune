@@ -25,6 +25,7 @@ export const UPDATE_RELEASES_URL = 'https://github.com/like0413/muse-tune/releas
 
 /** 管理关于页的版本读取、更新检查和安装生命周期。 */
 export function useApplicationUpdater() {
+  const { t } = useI18n({ useScope: 'global' })
   const status = shallowRef<UpdateStatus>('idle')
   const isChecking = shallowRef(false)
   const isDownloading = shallowRef(false)
@@ -48,12 +49,12 @@ export function useApplicationUpdater() {
   const statusLabel = computed(() => {
     switch (status.value) {
       case 'latest':
-        return '已是最新版'
+        return t('settings.about.update.latest')
       case 'detected':
       case 'available':
-        return '发现新版本'
+        return t('settings.about.update.available')
       case 'error':
-        return '检查失败'
+        return t('settings.about.update.checkFailed')
       default:
         return null
     }
@@ -122,7 +123,7 @@ export function useApplicationUpdater() {
         return
       }
       status.value = 'error'
-      errorMessage.value = getErrorMessage(error, '检查更新失败')
+      errorMessage.value = getErrorMessage(error, t('settings.about.update.checkFailed'))
     } finally {
       if (!silent) isChecking.value = false
     }
@@ -133,7 +134,7 @@ export function useApplicationUpdater() {
     try {
       await openUrl(UPDATE_RELEASES_URL)
     } catch (error) {
-      errorMessage.value = getErrorMessage(error, '打开更新日志失败')
+      errorMessage.value = getErrorMessage(error, t('settings.about.update.openReleaseNotesFailed'))
     }
   }
 
@@ -161,15 +162,12 @@ export function useApplicationUpdater() {
     if (!update || installRequestActive || isDownloading.value) return
     installRequestActive = true
     try {
-      const shouldInstall = await confirm(
-        '更新下载完成后，Muse Tune 将自动退出并安装新版本。是否继续？',
-        {
-          title: '安装更新',
-          kind: 'warning',
-          okLabel: '继续',
-          cancelLabel: '取消',
-        },
-      )
+      const shouldInstall = await confirm(t('settings.about.update.installConfirmDescription'), {
+        title: t('settings.about.update.installConfirmTitle'),
+        kind: 'warning',
+        okLabel: t('common.continue'),
+        cancelLabel: t('common.cancel'),
+      })
       if (!shouldInstall) return
       status.value = 'available'
       isDownloading.value = true
@@ -178,8 +176,8 @@ export function useApplicationUpdater() {
       await update.downloadAndInstall(handleDownloadEvent, { restartAfterInstall: true })
     } catch (error) {
       status.value = 'available'
-      const reason = getErrorMessage(error, '安装程序未能启动')
-      errorMessage.value = `更新安装失败：${reason}`
+      const reason = getErrorMessage(error, t('settings.about.update.installerFailed'))
+      errorMessage.value = t('settings.about.update.installFailed', { reason })
     } finally {
       isDownloading.value = false
       installRequestActive = false
@@ -196,7 +194,7 @@ export function useApplicationUpdater() {
       automaticCheck.value = await setAutomaticUpdateCheck(enabled)
     } catch (error) {
       automaticCheck.value = previous
-      errorMessage.value = getErrorMessage(error, '保存自动检测设置失败')
+      errorMessage.value = getErrorMessage(error, t('settings.about.update.saveAutomaticFailed'))
     } finally {
       automaticCheckSaving.value = false
     }
@@ -212,7 +210,7 @@ export function useApplicationUpdater() {
       updateCheckFrequency.value = await setUpdateCheckFrequency(frequency)
     } catch (error) {
       updateCheckFrequency.value = previous
-      errorMessage.value = getErrorMessage(error, '保存检测周期失败')
+      errorMessage.value = getErrorMessage(error, t('settings.about.update.saveFrequencyFailed'))
     } finally {
       updateCheckFrequencySaving.value = false
     }
@@ -244,7 +242,7 @@ export function useApplicationUpdater() {
       if (resultRevision === revisionBeforeRead) applyAutomaticResult(result)
     } catch (error) {
       status.value = 'error'
-      errorMessage.value = getErrorMessage(error, '初始化更新设置失败')
+      errorMessage.value = getErrorMessage(error, t('settings.about.update.initializeFailed'))
     }
   }
 

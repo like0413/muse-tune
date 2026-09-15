@@ -26,14 +26,22 @@ import {
   type TaskbarProgressStyle,
 } from '@/features/settings/progress-style'
 
-const progressStyleOptions = [
-  { value: 'bottom', label: '条形进度' },
-  { value: 'vertical-gradient', label: '竖线渐变' },
-] as const satisfies ReadonlyArray<{ value: TaskbarProgressStyle; label: string }>
-const progressPositionOptions = [
-  { value: 'top', label: '顶部' },
-  { value: 'bottom', label: '底部' },
-] as const satisfies ReadonlyArray<{ value: TaskbarProgressPosition; label: string }>
+const { t } = useI18n({ useScope: 'global' })
+
+const progressStyleOptions = computed(
+  () =>
+    [
+      { value: 'bottom', label: t('settings.taskbar.progress.bar') },
+      { value: 'vertical-gradient', label: t('settings.taskbar.progress.gradient') },
+    ] as const satisfies ReadonlyArray<{ value: TaskbarProgressStyle; label: string }>,
+)
+const progressPositionOptions = computed(
+  () =>
+    [
+      { value: 'top', label: t('settings.taskbar.progress.top') },
+      { value: 'bottom', label: t('settings.taskbar.progress.bottom') },
+    ] as const satisfies ReadonlyArray<{ value: TaskbarProgressPosition; label: string }>,
+)
 
 const selectedProgressStyle = shallowRef<TaskbarProgressStyle>(DEFAULT_TASKBAR_PROGRESS_STYLE)
 const selectedProgressPosition = shallowRef<TaskbarProgressPosition>(
@@ -71,7 +79,7 @@ async function selectProgressPosition(value: unknown) {
     await setTaskbarProgressPosition(value)
   } catch (error) {
     selectedProgressPosition.value = previousPosition
-    notifySettingSaveFailed('横条进度位置', error)
+    notifySettingSaveFailed(t('settings.taskbar.progress.position'), error)
   } finally {
     progressPositionSaving.value = false
   }
@@ -95,7 +103,7 @@ async function selectProgressStyle(value: unknown) {
     await setTaskbarProgressStyle(value)
   } catch (error) {
     selectedProgressStyle.value = previousStyle
-    notifySettingSaveFailed('播放进度样式', error)
+    notifySettingSaveFailed(t('settings.taskbar.progress.title'), error)
     try {
       await setTaskbarProgressStyle(previousStyle)
     } catch (rollbackError) {
@@ -115,18 +123,20 @@ onMounted(loadProgressStyle)
       <Activity />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>进度条</ItemTitle>
-      <ItemDescription>进度条在任务栏组件中的呈现方式</ItemDescription>
+      <ItemTitle>{{ t('settings.taskbar.progress.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.taskbar.progress.description') }}</ItemDescription>
     </ItemContent>
     <template #content>
       <FieldGroup>
         <Field orientation="horizontal">
           <FieldContent>
-            <FieldTitle>进度样式</FieldTitle>
-            <FieldDescription>选择横条或竖向渐变效果</FieldDescription>
+            <FieldTitle>{{ t('settings.taskbar.progress.style') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.progress.styleDescription')
+            }}</FieldDescription>
           </FieldContent>
           <Tabs :model-value="selectedProgressStyle" @update:model-value="selectProgressStyle">
-            <TabsList aria-label="播放进度样式">
+            <TabsList>
               <TabsTrigger
                 v-for="option in progressStyleOptions"
                 :key="option.value"
@@ -141,14 +151,16 @@ onMounted(loadProgressStyle)
 
         <Field orientation="horizontal" :data-disabled="selectedProgressStyle !== 'bottom'">
           <FieldContent>
-            <FieldTitle>横条位置</FieldTitle>
-            <FieldDescription>将条形进度放在组件的顶部或底部</FieldDescription>
+            <FieldTitle>{{ t('settings.taskbar.progress.position') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.progress.positionDescription')
+            }}</FieldDescription>
           </FieldContent>
           <Tabs
             :model-value="selectedProgressPosition"
             @update:model-value="selectProgressPosition"
           >
-            <TabsList aria-label="横条进度位置">
+            <TabsList>
               <TabsTrigger
                 v-for="option in progressPositionOptions"
                 :key="option.value"

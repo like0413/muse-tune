@@ -10,6 +10,8 @@ import {
   type TaskbarLyricsSettings,
 } from '@/features/settings/lyrics'
 
+const { t } = useI18n({ useScope: 'global' })
+
 defineProps<{
   settings: DeepReadonly<TaskbarLyricsSettings>
   saving: boolean
@@ -19,14 +21,20 @@ const emit = defineEmits<{
   updateSettings: [patch: Partial<TaskbarLyricsSettings>]
 }>()
 
-const networkPolicyOptions = [
-  { value: 'auto', label: '自动' },
-  { value: 'local_only', label: '仅本地与缓存' },
-] as const
-const onlineStrategyOptions = [
-  { value: 'parallel', label: '并行查询' },
-  { value: 'current_player_first', label: '当前平台优先' },
-] as const
+const networkPolicyOptions = computed(
+  () =>
+    [
+      { value: 'auto', label: t('common.auto') },
+      { value: 'local_only', label: t('settings.taskbar.lyrics.localOnly') },
+    ] as const,
+)
+const onlineStrategyOptions = computed(
+  () =>
+    [
+      { value: 'parallel', label: t('settings.taskbar.lyrics.parallel') },
+      { value: 'current_player_first', label: t('settings.taskbar.lyrics.currentFirst') },
+    ] as const,
+)
 
 /** 接收联网策略选项。 */
 function selectNetworkPolicy(value: unknown) {
@@ -42,11 +50,11 @@ function selectOnlineStrategy(value: unknown) {
 <template>
   <Field orientation="horizontal" :data-disabled="!settings.enabled">
     <FieldContent>
-      <FieldTitle>联网策略</FieldTitle>
-      <FieldDescription>仅本地与缓存不会发起新的歌词网络请求</FieldDescription>
+      <FieldTitle>{{ t('settings.taskbar.lyrics.network') }}</FieldTitle>
+      <FieldDescription>{{ t('settings.taskbar.lyrics.networkDescription') }}</FieldDescription>
     </FieldContent>
     <Tabs :model-value="settings.networkPolicy" @update:model-value="selectNetworkPolicy">
-      <TabsList aria-label="歌词联网策略">
+      <TabsList>
         <TabsTrigger
           v-for="option in networkPolicyOptions"
           :key="option.value"
@@ -64,10 +72,10 @@ function selectOnlineStrategy(value: unknown) {
     :data-disabled="!settings.enabled || settings.networkPolicy === 'local_only'"
   >
     <FieldContent>
-      <FieldTitle>在线解析策略</FieldTitle>
+      <FieldTitle>{{ t('settings.taskbar.lyrics.onlineStrategy') }}</FieldTitle>
       <FieldDescription>
-        <div>并行查询：等待更短，但会同时请求多个来源</div>
-        <div>当前平台优先：命中可靠逐字后停止；未命中时兜底会更慢</div>
+        <div>{{ t('settings.taskbar.lyrics.parallelDescription') }}</div>
+        <div>{{ t('settings.taskbar.lyrics.currentFirstDescription') }}</div>
       </FieldDescription>
     </FieldContent>
     <ToggleGroup
@@ -75,7 +83,6 @@ function selectOnlineStrategy(value: unknown) {
       variant="outline"
       :model-value="settings.onlineStrategy"
       :disabled="saving || !settings.enabled || settings.networkPolicy === 'local_only'"
-      aria-label="在线歌词解析策略"
       @update:model-value="selectOnlineStrategy"
     >
       <ToggleGroupItem

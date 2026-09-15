@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { CircleCheck, TriangleAlert } from '@lucide/vue'
+import type { DeepReadonly } from 'vue'
 
 import type { DiagnosticIssue } from '@/features/diagnostics/types'
 
-defineProps<{ issues: DiagnosticIssue[] }>()
+const { t } = useI18n({ useScope: 'global' })
+
+defineProps<{ issues: DeepReadonly<DiagnosticIssue[]> }>()
 </script>
 
 <template>
@@ -11,9 +14,13 @@ defineProps<{ issues: DiagnosticIssue[] }>()
     <div class="flex items-center gap-2">
       <TriangleAlert v-if="issues.length > 0" class="size-4 shrink-0 text-orange-500" />
       <CircleCheck v-else class="size-4 shrink-0 text-emerald-500" />
-      <h3 id="diagnostic-issues-title" class="font-medium">当前问题</h3>
+      <h3 id="diagnostic-issues-title" class="font-medium">{{ t('diagnostics.issues.title') }}</h3>
       <span class="text-muted-foreground">
-        {{ issues.length > 0 ? `${issues.length} 项` : '未发现异常' }}
+        {{
+          issues.length > 0
+            ? t('diagnostics.issues.count', { count: issues.length })
+            : t('diagnostics.issues.none')
+        }}
       </span>
     </div>
 

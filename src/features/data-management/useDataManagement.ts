@@ -16,6 +16,7 @@ import type { DataDirectoryKind, DataOverview } from './types'
 
 /** 管理数据页的读取和用户操作状态。 */
 export function useDataManagement() {
+  const { t } = useI18n({ useScope: 'global' })
   const overview = shallowRef<DataOverview | null>(null)
   const loading = shallowRef(false)
   const clearing = shallowRef(false)
@@ -86,8 +87,8 @@ export function useDataManagement() {
     try {
       overview.value = await clearCurrentLyricsCache()
       error.value = null
-      toast.success('当前歌曲缓存已清理', {
-        description: '该条目已从 Muse Tune 缓存中移除',
+      toast.success(t('settings.data.cache.currentCleared'), {
+        description: t('settings.data.cache.currentClearedDescription'),
       })
     } catch (error) {
       setError(error)
@@ -102,8 +103,8 @@ export function useDataManagement() {
     try {
       overview.value = await refreshCurrentLyrics()
       error.value = null
-      toast.success('已开始重新获取当前歌词', {
-        description: '将按当前联网策略重新执行完整获取链路',
+      toast.success(t('settings.data.cache.refreshStarted'), {
+        description: t('settings.data.cache.refreshStartedDescription'),
       })
     } catch (error) {
       setError(error)

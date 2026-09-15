@@ -28,10 +28,15 @@ import {
 } from '@/features/settings/audio-spectrum'
 import { useAudioSpectrumSetting } from '@/features/settings/controllers/useAudioSpectrumSetting'
 
-const alignmentOptions = [
-  { value: 'center', label: '居中' },
-  { value: 'bottom', label: '底部对齐' },
-] as const
+const { t } = useI18n({ useScope: 'global' })
+
+const alignmentOptions = computed(
+  () =>
+    [
+      { value: 'center', label: t('common.center') },
+      { value: 'bottom', label: t('common.bottomAligned') },
+    ] as const,
+)
 
 const {
   selectedSettings,
@@ -53,16 +58,20 @@ const {
       <AudioLines />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>频谱</ItemTitle>
-      <ItemDescription>显示当前播放器的实时频谱</ItemDescription>
+      <ItemTitle>{{ t('settings.taskbar.spectrum.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.taskbar.spectrum.description') }}</ItemDescription>
     </ItemContent>
 
     <template #content>
       <FieldGroup>
         <Field orientation="horizontal">
           <FieldContent>
-            <FieldLabel for="taskbar-spectrum-visible">显示频谱</FieldLabel>
-            <FieldDescription>关闭后会停止音频采集与频谱计算</FieldDescription>
+            <FieldLabel for="taskbar-spectrum-visible">{{
+              t('settings.taskbar.spectrum.visible')
+            }}</FieldLabel>
+            <FieldDescription>{{
+              t('settings.taskbar.spectrum.visibleDescription')
+            }}</FieldDescription>
           </FieldContent>
           <Switch
             id="taskbar-spectrum-visible"
@@ -74,8 +83,10 @@ const {
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
           <FieldContent>
-            <FieldTitle>频谱条数量</FieldTitle>
-            <FieldDescription>较少更简洁，较多能呈现更细的频率变化</FieldDescription>
+            <FieldTitle>{{ t('settings.taskbar.spectrum.barCount') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.spectrum.barCountDescription')
+            }}</FieldDescription>
           </FieldContent>
           <div class="flex w-56 items-center gap-3">
             <Slider
@@ -84,7 +95,7 @@ const {
               :max="TASKBAR_SPECTRUM_BAR_COUNT_MAX"
               :step="1"
               :disabled="settingsSaving || !selectedSettings.visible"
-              aria-label="频谱条数量"
+              :aria-label="t('settings.taskbar.spectrum.barCount')"
               @update:model-value="updateBarCount"
               @value-commit="commitSlider"
             />
@@ -96,8 +107,10 @@ const {
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
           <FieldContent>
-            <FieldTitle>频谱宽度</FieldTitle>
-            <FieldDescription>频谱占组件总宽度的比例</FieldDescription>
+            <FieldTitle>{{ t('settings.taskbar.spectrum.width') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.spectrum.widthDescription')
+            }}</FieldDescription>
           </FieldContent>
           <div class="flex w-56 items-center gap-3">
             <Slider
@@ -106,7 +119,7 @@ const {
               :max="TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MAX"
               :step="1"
               :disabled="settingsSaving || !selectedSettings.visible"
-              aria-label="频谱宽度百分比"
+              :aria-label="t('settings.taskbar.spectrum.width')"
               @update:model-value="updateWidthPercentage"
               @value-commit="commitSlider"
             />
@@ -118,8 +131,10 @@ const {
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
           <FieldContent>
-            <FieldTitle>水平位置</FieldTitle>
-            <FieldDescription>从组件左侧到右侧连续调整频谱位置</FieldDescription>
+            <FieldTitle>{{ t('settings.taskbar.spectrum.horizontal') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.spectrum.horizontalDescription')
+            }}</FieldDescription>
           </FieldContent>
           <div class="flex w-56 items-center gap-3">
             <Slider
@@ -128,7 +143,7 @@ const {
               :max="TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MAX"
               :step="1"
               :disabled="settingsSaving || !selectedSettings.visible"
-              aria-label="频谱水平位置"
+              :aria-label="t('settings.taskbar.spectrum.horizontal')"
               @update:model-value="updateHorizontalPosition"
               @value-commit="commitSlider"
             />
@@ -140,11 +155,13 @@ const {
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
           <FieldContent>
-            <FieldTitle>垂直位置</FieldTitle>
-            <FieldDescription>居中时向上下扩张，底部对齐时向上生长</FieldDescription>
+            <FieldTitle>{{ t('settings.taskbar.spectrum.vertical') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.spectrum.verticalDescription')
+            }}</FieldDescription>
           </FieldContent>
           <Tabs :model-value="selectedSettings.alignment" @update:model-value="selectAlignment">
-            <TabsList aria-label="频谱垂直位置">
+            <TabsList>
               <TabsTrigger
                 v-for="option in alignmentOptions"
                 :key="option.value"
@@ -159,8 +176,10 @@ const {
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
           <FieldContent>
-            <FieldTitle>灵敏度</FieldTitle>
-            <FieldDescription>放大或压低频谱对输入音量的响应</FieldDescription>
+            <FieldTitle>{{ t('settings.taskbar.spectrum.sensitivity') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.spectrum.sensitivityDescription')
+            }}</FieldDescription>
           </FieldContent>
           <div class="flex w-56 items-center gap-3">
             <Slider
@@ -169,7 +188,7 @@ const {
               :max="TASKBAR_SPECTRUM_SENSITIVITY_MAX"
               :step="5"
               :disabled="settingsSaving || !selectedSettings.visible"
-              aria-label="频谱灵敏度"
+              :aria-label="t('settings.taskbar.spectrum.sensitivity')"
               @update:model-value="updateSensitivity"
               @value-commit="commitSlider"
             />
@@ -181,8 +200,10 @@ const {
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
           <FieldContent>
-            <FieldTitle>动态平滑</FieldTitle>
-            <FieldDescription>数值越高越稳定，但快速变化的响应会更慢</FieldDescription>
+            <FieldTitle>{{ t('settings.taskbar.spectrum.smoothing') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.spectrum.smoothingDescription')
+            }}</FieldDescription>
           </FieldContent>
           <div class="flex w-56 items-center gap-3">
             <Slider
@@ -191,7 +212,7 @@ const {
               :max="TASKBAR_SPECTRUM_SMOOTHING_MAX"
               :step="5"
               :disabled="settingsSaving || !selectedSettings.visible"
-              aria-label="频谱动态平滑"
+              :aria-label="t('settings.taskbar.spectrum.smoothing')"
               @update:model-value="updateSmoothing"
               @value-commit="commitSlider"
             />

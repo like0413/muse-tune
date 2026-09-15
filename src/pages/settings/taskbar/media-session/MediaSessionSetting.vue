@@ -35,12 +35,17 @@ import {
 
 import PlayerPriorityEditor from './PlayerPriorityEditor.vue'
 
-const strategyOptions = [
-  { value: 'recent_playback', label: '最近开始播放优先' },
-  { value: 'sticky_current', label: '当前播放器优先' },
-  { value: 'follow_windows', label: '跟随 Windows' },
-  { value: 'fixed_priority', label: '固定播放器优先级' },
-] as const satisfies readonly { value: MediaSessionSelectionStrategy; label: string }[]
+const { t } = useI18n({ useScope: 'global' })
+
+const strategyOptions = computed(
+  () =>
+    [
+      { value: 'recent_playback', label: t('settings.taskbar.mediaSession.recent') },
+      { value: 'sticky_current', label: t('settings.taskbar.mediaSession.sticky') },
+      { value: 'follow_windows', label: t('settings.taskbar.mediaSession.windows') },
+      { value: 'fixed_priority', label: t('settings.taskbar.mediaSession.fixed') },
+    ] as const satisfies readonly { value: MediaSessionSelectionStrategy; label: string }[],
+)
 
 const selectedStrategy = shallowRef(DEFAULT_MEDIA_SESSION_SELECTION_POLICY.strategy)
 const selectedPriority = shallowRef<MediaPlayer[]>([
@@ -99,7 +104,7 @@ async function savePolicy(policy: MediaSessionSelectionPolicy) {
     }
   } catch (error) {
     applyPolicy(committedPolicy.value)
-    notifySettingSaveFailed('播放器抢占策略', error)
+    notifySettingSaveFailed(t('settings.taskbar.mediaSession.title'), error)
   } finally {
     policySaving.value = false
   }
@@ -135,26 +140,26 @@ onMounted(loadPolicy)
       <AudioLines />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>播放器抢占策略</ItemTitle>
-      <ItemDescription>决定多个播放器同时存在时，任务栏显示哪一个</ItemDescription>
+      <ItemTitle>{{ t('settings.taskbar.mediaSession.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.taskbar.mediaSession.description') }}</ItemDescription>
     </ItemContent>
 
     <template #content>
       <FieldGroup>
         <Field orientation="horizontal">
           <FieldContent>
-            <FieldTitle>抢占策略</FieldTitle>
-            <FieldDescription>
-              最近开始播放优先只在播放器真正播放时切换，打开客户端不会抢占
-            </FieldDescription>
+            <FieldTitle>{{ t('settings.taskbar.mediaSession.strategy') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.mediaSession.strategyDescription')
+            }}</FieldDescription>
           </FieldContent>
           <Select
             :model-value="selectedStrategy"
             :disabled="policySaving"
             @update:model-value="selectStrategy"
           >
-            <SelectTrigger class="w-56" aria-label="播放器抢占策略">
-              <SelectValue placeholder="选择抢占策略" />
+            <SelectTrigger class="w-56" :aria-label="t('settings.taskbar.mediaSession.strategy')">
+              <SelectValue :placeholder="t('settings.taskbar.mediaSession.placeholder')" />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
@@ -172,23 +177,25 @@ onMounted(loadPolicy)
 
         <Field orientation="horizontal">
           <FieldContent>
-            <FieldTitle>禁止采集其他媒体</FieldTitle>
-            <FieldDescription>
-              开启后忽略 QQ 音乐、网易云音乐、汽水音乐和酷狗音乐以外的媒体会话
-            </FieldDescription>
+            <FieldTitle>{{ t('settings.taskbar.mediaSession.supportedOnly') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.mediaSession.supportedOnlyDescription')
+            }}</FieldDescription>
           </FieldContent>
           <Switch
             :model-value="onlySupportedPlayers"
             :disabled="policySaving"
-            aria-label="禁止采集其他播放器"
+            :aria-label="t('settings.taskbar.mediaSession.supportedOnly')"
             @update:model-value="updateOnlySupportedPlayers"
           />
         </Field>
 
         <Field v-if="selectedStrategy === 'fixed_priority'" orientation="horizontal">
           <FieldContent>
-            <FieldTitle>播放器优先级</FieldTitle>
-            <FieldDescription>多个播放器同时播放时，优先显示排序靠前的播放器</FieldDescription>
+            <FieldTitle>{{ t('settings.taskbar.mediaSession.priority') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.mediaSession.priorityDescription')
+            }}</FieldDescription>
           </FieldContent>
           <PlayerPriorityEditor
             :players="selectedPriority"

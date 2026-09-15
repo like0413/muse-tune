@@ -16,6 +16,8 @@ import {
 } from '@/features/media/volume-popup'
 import { showVolumePopup } from '@/features/taskbar/client'
 
+const { t } = useI18n({ useScope: 'global' })
+
 const props = defineProps<{
   themeColor: string
   compact: boolean
@@ -121,7 +123,7 @@ onUnmounted(() => {
       :size="controlSize"
       class="taskbar-volume-control"
       type="button"
-      aria-label="调节播放器音量"
+      :aria-label="t('media.adjustVolume')"
       :disabled="!volume"
       @click="toggleMuted"
     >

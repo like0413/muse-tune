@@ -15,6 +15,8 @@ import {
 
 import VolumeControlElement from './VolumeControlElement.vue'
 
+const { t } = useI18n({ useScope: 'global' })
+
 const props = defineProps<{
   session: MediaSessionSnapshot | null
   pending: boolean
@@ -55,48 +57,48 @@ interface VolumeControlItem {
 type ControlItem = StandardControlItem | VolumeControlItem
 
 /** 按已保存顺序生成当前可见按钮，并集中派生禁用状态与图标。 */
-const controlItems = computed<ControlItem[]>(() =>
-  visibility.value.order.flatMap((button) => {
-    if (!visibility.value[button]) return []
+const controlItems = computed<ControlItem[]>(() => {
+  const items: ControlItem[] = []
+  for (const button of visibility.value.order) {
+    if (!visibility.value[button]) continue
     switch (button) {
       case 'previous':
-        return [
-          {
-            key: button,
-            kind: 'button',
-            label: '上一曲',
-            icon: SkipBack,
-            action: 'skip_previous',
-            disabled: props.pending || !props.session?.playback.controls.canSkipPrevious,
-          },
-        ]
+        items.push({
+          key: button,
+          kind: 'button',
+          label: t('media.previous'),
+          icon: SkipBack,
+          action: 'skip_previous',
+          disabled: props.pending || !props.session?.playback.controls.canSkipPrevious,
+        })
+        break
       case 'playPause':
-        return [
-          {
-            key: button,
-            kind: 'button',
-            label: '播放或暂停',
-            icon: isPlaying.value ? Pause : Play,
-            action: 'toggle_play_pause',
-            disabled: props.pending || !canTogglePlayback.value,
-          },
-        ]
+        items.push({
+          key: button,
+          kind: 'button',
+          label: t('media.playPause'),
+          icon: isPlaying.value ? Pause : Play,
+          action: 'toggle_play_pause',
+          disabled: props.pending || !canTogglePlayback.value,
+        })
+        break
       case 'next':
-        return [
-          {
-            key: button,
-            kind: 'button',
-            label: '下一曲',
-            icon: SkipForward,
-            action: 'skip_next',
-            disabled: props.pending || !props.session?.playback.controls.canSkipNext,
-          },
-        ]
+        items.push({
+          key: button,
+          kind: 'button',
+          label: t('media.next'),
+          icon: SkipForward,
+          action: 'skip_next',
+          disabled: props.pending || !props.session?.playback.controls.canSkipNext,
+        })
+        break
       case 'volume':
-        return [{ key: button, kind: 'volume' }]
+        items.push({ key: button, kind: 'volume' })
+        break
     }
-  }),
-)
+  }
+  return items
+})
 
 /** 恢复按钮显示配置，并接收设置窗口的实时更新。 */
 async function initializeVisibility() {
@@ -115,7 +117,7 @@ onUnmounted(() => unlistenVisibilityChange?.())
 </script>
 
 <template>
-  <div v-if="visibility.visible" class="flex shrink-0" aria-label="播放控制">
+  <div v-if="visibility.visible" class="flex shrink-0">
     <template v-for="item in controlItems" :key="item.key">
       <VolumeControlElement
         v-if="item.kind === 'volume'"

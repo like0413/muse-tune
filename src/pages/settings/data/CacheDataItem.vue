@@ -27,6 +27,8 @@ import { Progress } from '@/components/ui/progress'
 import { formatBytes } from '@/features/data-management/format'
 import type { CacheOverview } from '@/features/data-management/types'
 
+const { t } = useI18n({ useScope: 'global' })
+
 const props = defineProps<{
   overview: CacheOverview
   clearing: boolean
@@ -54,9 +56,9 @@ const usagePercentage = computed(() => {
     <ItemContent>
       <ItemTitle>
         <Database class="size-4 text-indigo-500" />
-        歌词缓存
+        {{ t('settings.data.cache.title') }}
       </ItemTitle>
-      <ItemDescription>MuseTune 维护的歌词缓存数据</ItemDescription>
+      <ItemDescription>{{ t('settings.data.cache.description') }}</ItemDescription>
     </ItemContent>
     <ItemActions>
       <Button
@@ -67,7 +69,7 @@ const usagePercentage = computed(() => {
       >
         <LoaderCircle v-if="clearingCurrent" data-icon="inline-start" class="animate-spin" />
         <Trash2 v-else data-icon="inline-start" />
-        清理当前
+        {{ t('settings.data.cache.clearCurrent') }}
       </Button>
       <Button
         variant="outline"
@@ -77,7 +79,7 @@ const usagePercentage = computed(() => {
       >
         <LoaderCircle v-if="refreshingCurrent" data-icon="inline-start" class="animate-spin" />
         <RefreshCw v-else data-icon="inline-start" />
-        重新获取
+        {{ t('settings.data.cache.refreshCurrent') }}
       </Button>
       <AlertDialog>
         <AlertDialogTrigger as-child>
@@ -89,23 +91,23 @@ const usagePercentage = computed(() => {
             <LoaderCircle v-if="clearing" data-icon="inline-start" class="animate-spin" />
             <Check v-else-if="cleared" data-icon="inline-start" />
             <Trash2 v-else data-icon="inline-start" />
-            {{ cleared ? '已清理' : '清理全部' }}
+            {{ cleared ? t('common.cleared') : t('settings.data.cache.clearAll') }}
           </Button>
         </AlertDialogTrigger>
         <AlertDialogContent class="w-100">
           <AlertDialogHeader>
-            <AlertDialogTitle>清理全部歌词缓存？</AlertDialogTitle>
+            <AlertDialogTitle>{{ t('settings.data.cache.clearConfirmTitle') }}</AlertDialogTitle>
             <AlertDialogDescription>
-              已缓存的歌词将被删除，之后播放歌曲时会按需重新获取。
+              {{ t('settings.data.cache.clearConfirmDescription') }}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{{ t('common.cancel') }}</AlertDialogCancel>
             <AlertDialogAction
               class="bg-destructive hover:bg-destructive/90 text-white"
               @click="emit('clear')"
             >
-              清理
+              {{ t('common.clear') }}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -113,24 +115,30 @@ const usagePercentage = computed(() => {
       <Button variant="outline" size="sm" :disabled="opening" @click="emit('open')">
         <LoaderCircle v-if="opening" data-icon="inline-start" class="animate-spin" />
         <FolderOpen v-else data-icon="inline-start" />
-        打开目录
+        {{ t('common.openDirectory') }}
       </Button>
     </ItemActions>
     <ItemFooter>
       <div class="flex w-full flex-col gap-2">
         <div class="flex items-center justify-between gap-4">
           <div class="flex items-center gap-2">
-            <Badge variant="secondary">{{ overview.entryCount }} 个条目</Badge>
-            <span class="text-muted-foreground text-xs">缓存文件数量</span>
+            <Badge variant="secondary">{{
+              t('settings.data.cache.entries', { count: overview.entryCount })
+            }}</Badge>
+            <span class="text-muted-foreground text-xs">{{
+              t('settings.data.cache.fileCount')
+            }}</span>
           </div>
           <div class="flex items-baseline gap-2 tabular-nums">
             <span class="text-sm font-semibold">{{ formatBytes(overview.usedBytes) }}</span>
             <span class="text-muted-foreground text-xs">
-              已用 / {{ formatBytes(overview.capacityBytes) }} 上限
+              {{
+                t('settings.data.usedCapacity', { capacity: formatBytes(overview.capacityBytes) })
+              }}
             </span>
           </div>
         </div>
-        <Progress :model-value="usagePercentage" aria-label="歌词缓存容量" />
+        <Progress :model-value="usagePercentage" :aria-label="t('settings.data.cache.capacity')" />
       </div>
     </ItemFooter>
   </Item>

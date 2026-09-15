@@ -10,6 +10,8 @@ import LyricsLayoutSettings from './LyricsLayoutSettings.vue'
 import LyricsSourceSettings from './LyricsSourceSettings.vue'
 import LyricsTimingSettings from './LyricsTimingSettings.vue'
 
+const { t } = useI18n({ useScope: 'global' })
+
 const {
   selectedSettings,
   settingsSaving,
@@ -27,8 +29,8 @@ const {
       <Captions />
     </ItemMedia>
     <ItemContent>
-      <ItemTitle>歌词</ItemTitle>
-      <ItemDescription>设置任务栏歌词的布局和显示</ItemDescription>
+      <ItemTitle>{{ t('settings.taskbar.lyrics.title') }}</ItemTitle>
+      <ItemDescription>{{ t('settings.taskbar.lyrics.description') }}</ItemDescription>
     </ItemContent>
 
     <template #content>

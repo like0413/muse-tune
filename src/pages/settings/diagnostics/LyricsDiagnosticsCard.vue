@@ -1,52 +1,61 @@
 <script setup lang="ts">
 import { Languages } from '@lucide/vue'
+import type { DeepReadonly } from 'vue'
 
 import { Badge } from '@/components/ui/badge'
 import {
   formatAgeSeconds,
   formatBytes,
-  lyricsStatusLabels,
-  playerLabels,
-  precisionLabels,
-  resolutionMethodLabels,
+  getLyricsStatusLabel,
+  getPlayerLabel,
+  getPrecisionLabel,
+  getResolutionMethodLabel,
 } from '@/features/diagnostics/labels'
-import type { LyricsDiagnostics } from '@/features/lyrics/types'
+import type { LyricsDiagnostics, LyricsResolutionStep } from '@/features/lyrics/types'
 
 import DiagnosticRow from './DiagnosticRow.vue'
 import DiagnosticsCard from './DiagnosticsCard.vue'
 
-const props = defineProps<{ diagnostics: LyricsDiagnostics }>()
+const props = defineProps<{ diagnostics: DeepReadonly<LyricsDiagnostics> }>()
+const { t } = useI18n({ useScope: 'global' })
 
 const originalSource = computed(() => {
   const source = props.diagnostics.snapshot.source
-  if (!source) return '暂无'
-  return `${playerLabels[source.player]} · ${source.kind === 'local' ? '播放器本地' : '在线接口'}`
+  if (!source) return t('common.unavailable')
+  return t('diagnostics.lyrics.sourceValue', {
+    player: getPlayerLabel(source.player),
+    kind: t(source.kind === 'local' ? 'diagnostics.lyrics.local' : 'diagnostics.lyrics.online'),
+  })
 })
 
 const resolverStatus = computed(() => {
-  if (props.diagnostics.pendingResolution) return '已有更新等待处理'
-  if (props.diagnostics.resolverRunning) return '正在解析'
-  return '空闲'
+  if (props.diagnostics.pendingResolution) return t('diagnostics.lyrics.pendingUpdate')
+  if (props.diagnostics.resolverRunning) return t('diagnostics.values.resolving')
+  return t('diagnostics.values.idle')
 })
 
 const currentCacheStatus = computed(() => {
   const cache = props.diagnostics.cache
-  if (!cache.currentEntryExists) return '当前歌曲无缓存'
-  if (cache.currentEntryFresh === false) return '已到刷新时间'
-  if (cache.currentEntryFresh === null) return '状态未知'
+  if (!cache.currentEntryExists) return t('diagnostics.lyrics.noCurrentCache')
+  if (cache.currentEntryFresh === false) return t('diagnostics.lyrics.refreshDue')
+  if (cache.currentEntryFresh === null) return t('diagnostics.lyrics.unknownState')
   const freshness =
     cache.currentRefreshRemainingSeconds === null
-      ? '有效'
-      : `${formatAgeSeconds(cache.currentRefreshRemainingSeconds)}后刷新`
+      ? t('diagnostics.values.valid')
+      : t('diagnostics.lyrics.refreshAfter', {
+          duration: formatAgeSeconds(cache.currentRefreshRemainingSeconds),
+        })
   const applicationCacheMissed = props.diagnostics.resolutionSteps.some(
     (step) => step.label === 'Muse Tune 缓存' && step.outcome === 'miss',
   )
 
-  return applicationCacheMissed ? `本次解析后已写入 · ${freshness}` : freshness
+  return applicationCacheMissed ? t('diagnostics.lyrics.writtenThisTime', { freshness }) : freshness
 })
 
 const onlineStrategyLabel = computed(() =>
-  props.diagnostics.onlineStrategy === 'current_player_first' ? '当前平台优先' : '并行查询',
+  props.diagnostics.onlineStrategy === 'current_player_first'
+    ? t('settings.taskbar.lyrics.currentFirst')
+    : t('settings.taskbar.lyrics.parallel'),
 )
 
 /** 把连续的并发步骤折叠成一个阶段，避免将同时执行的请求显示成先后顺序。 */
@@ -54,7 +63,7 @@ const resolutionStages = computed(() => {
   const stages: Array<{
     key: string
     parallelGroup: string | null
-    steps: LyricsDiagnostics['resolutionSteps']
+    steps: DeepReadonly<LyricsResolutionStep>[]
   }> = []
   props.diagnostics.resolutionSteps.forEach((step, index) => {
     const previous = stages.at(-1)
@@ -73,83 +82,146 @@ const resolutionStages = computed(() => {
 </script>
 
 <template>
-  <DiagnosticsCard title="歌词" description="区分歌词原始来源与本次播放的实际获取方式">
+  <DiagnosticsCard
+    :title="t('diagnostics.lyrics.title')"
+    :description="t('diagnostics.lyrics.description')"
+  >
     <template #icon><Languages class="size-4 text-amber-500" /></template>
     <template #badge>
       <Badge variant="outline">
-        {{ lyricsStatusLabels[diagnostics.snapshot.status] }}
+        {{ getLyricsStatusLabel(diagnostics.snapshot.status) }}
       </Badge>
     </template>
-    <DiagnosticRow label="歌词开关" :value="diagnostics.enabled ? '已开启' : '已关闭'" />
-    <DiagnosticRow label="在线解析策略" :value="onlineStrategyLabel" />
-    <DiagnosticRow label="原始来源" :value="originalSource" />
-    <DiagnosticRow label="来源歌曲 ID" :value="diagnostics.snapshot.source?.songId ?? '未提供'" />
-    <DiagnosticRow label="本次获取" :value="resolutionMethodLabels[diagnostics.resolutionMethod]" />
     <DiagnosticRow
-      label="时间精度"
+      :label="t('diagnostics.lyrics.enabled')"
       :value="
-        diagnostics.snapshot.precision ? precisionLabels[diagnostics.snapshot.precision] : '暂无'
+        diagnostics.enabled ? t('diagnostics.values.enabled') : t('diagnostics.values.disabled')
       "
     />
-    <DiagnosticRow label="有效行数" :value="diagnostics.snapshot.lineCount" />
+    <DiagnosticRow :label="t('diagnostics.lyrics.strategy')" :value="onlineStrategyLabel" />
+    <DiagnosticRow :label="t('diagnostics.lyrics.originalSource')" :value="originalSource" />
     <DiagnosticRow
-      label="解析耗时"
+      :label="t('diagnostics.lyrics.songId')"
+      :value="diagnostics.snapshot.source?.songId ?? t('diagnostics.values.notProvided')"
+    />
+    <DiagnosticRow
+      :label="t('diagnostics.lyrics.method')"
+      :value="getResolutionMethodLabel(diagnostics.resolutionMethod)"
+    />
+    <DiagnosticRow
+      :label="t('diagnostics.lyrics.precision')"
+      :value="
+        diagnostics.snapshot.precision
+          ? getPrecisionLabel(diagnostics.snapshot.precision)
+          : t('common.unavailable')
+      "
+    />
+    <DiagnosticRow
+      :label="t('diagnostics.lyrics.lineCount')"
+      :value="diagnostics.snapshot.lineCount"
+    />
+    <DiagnosticRow
+      :label="t('diagnostics.lyrics.duration')"
       :value="
         diagnostics.resolutionDurationMs === null
           ? diagnostics.resolverRunning
-            ? '处理中'
-            : '暂无'
+            ? t('diagnostics.values.processing')
+            : t('common.unavailable')
           : `${diagnostics.resolutionDurationMs} ms`
       "
     />
-    <DiagnosticRow label="缓存版本" :value="diagnostics.cache.schemaVersion" />
-    <DiagnosticRow label="当前缓存" :value="currentCacheStatus" />
+    <DiagnosticRow
+      :label="t('diagnostics.lyrics.cacheVersion')"
+      :value="diagnostics.cache.schemaVersion"
+    />
+    <DiagnosticRow :label="t('diagnostics.lyrics.currentCache')" :value="currentCacheStatus" />
     <DiagnosticRow
       v-if="diagnostics.cache.currentEntryExists"
-      label="缓存年龄"
+      :label="t('diagnostics.lyrics.cacheAge')"
       :value="formatAgeSeconds(diagnostics.cache.currentEntryAgeSeconds)"
     />
     <DiagnosticRow
       v-if="diagnostics.cache.currentEntryExists"
-      label="条目大小"
+      :label="t('diagnostics.lyrics.entrySize')"
       :value="formatBytes(diagnostics.cache.currentEntryBytes)"
     />
     <DiagnosticRow
-      label="当前播放器"
-      :value="diagnostics.currentPlayer ? playerLabels[diagnostics.currentPlayer] : '暂无'"
+      :label="t('diagnostics.lyrics.currentPlayer')"
+      :value="
+        diagnostics.currentPlayer
+          ? getPlayerLabel(diagnostics.currentPlayer)
+          : t('common.unavailable')
+      "
     />
-    <DiagnosticRow label="自动目录" :value="diagnostics.localCachePath ?? '未发现'" break-all>
-      {{ diagnostics.localCachePath ?? '未发现' }}
+    <DiagnosticRow
+      :label="t('diagnostics.lyrics.autoDirectory')"
+      :value="diagnostics.localCachePath ?? t('diagnostics.values.notFound')"
+      break-all
+    >
+      {{ diagnostics.localCachePath ?? t('diagnostics.values.notFound') }}
       <span v-if="diagnostics.localCachePath" class="text-muted-foreground">
-        （{{ diagnostics.localCacheAvailable ? '可用' : '尚未创建' }}）
+        {{
+          t('diagnostics.parenthesized', {
+            value: diagnostics.localCacheAvailable
+              ? t('diagnostics.values.available')
+              : t('diagnostics.values.notCreated'),
+          })
+        }}
       </span>
     </DiagnosticRow>
-    <DiagnosticRow label="解析队列" :value="resolverStatus" />
+    <DiagnosticRow :label="t('diagnostics.lyrics.resolverQueue')" :value="resolverStatus" />
     <DiagnosticRow
-      label="文件事件批次"
-      :value="`入队 ${diagnostics.watcher.enqueuedBatches} · 已处理 ${diagnostics.watcher.processedBatches}`"
+      :label="t('diagnostics.lyrics.fileBatches')"
+      :value="
+        t('diagnostics.queueSummary', {
+          sent: diagnostics.watcher.enqueuedBatches,
+          processed: diagnostics.watcher.processedBatches,
+        })
+      "
     />
     <DiagnosticRow
-      label="文件事件待处理"
-      :value="`当前 ${diagnostics.watcher.pendingBatches} · 峰值 ${diagnostics.watcher.pendingBatchesPeak}`"
+      :label="t('diagnostics.lyrics.pendingFileEvents')"
+      :value="
+        t('diagnostics.currentPeak', {
+          current: diagnostics.watcher.pendingBatches,
+          peak: diagnostics.watcher.pendingBatchesPeak,
+        })
+      "
     />
     <DiagnosticRow
-      label="文件事件合并"
-      :value="`${diagnostics.watcher.coalescedBatches} 批 · ${diagnostics.watcher.callbackCount} 次回调`"
+      :label="t('diagnostics.lyrics.coalescedFileEvents')"
+      :value="
+        t('diagnostics.lyrics.coalescedValue', {
+          batches: diagnostics.watcher.coalescedBatches,
+          callbacks: diagnostics.watcher.callbackCount,
+        })
+      "
     />
-    <DiagnosticRow label="解析链路">
+    <DiagnosticRow :label="t('diagnostics.lyrics.resolutionChain')">
       <ol v-if="resolutionStages.length > 0" class="grid gap-1.5">
         <li v-for="(stage, index) in resolutionStages" :key="stage.key">
           <template v-if="stage.parallelGroup">
             <div>
               {{ index + 1 }}. {{ stage.parallelGroup }}
-              <span class="text-muted-foreground">（{{ stage.steps.length }} 项并发）</span>
+              <span class="text-muted-foreground">{{
+                t('diagnostics.parenthesized', {
+                  value: t('diagnostics.lyrics.parallelCount', { count: stage.steps.length }),
+                })
+              }}</span>
             </div>
             <ul class="border-border ml-3 grid gap-1 border-l pl-3">
               <li v-for="step in stage.steps" :key="step.label">
                 {{ step.label }} ·
-                {{ step.outcome === 'hit' ? '命中' : step.outcome === 'miss' ? '未命中' : '失败' }}
-                <span v-if="step.detail" class="text-muted-foreground">（{{ step.detail }}）</span>
+                {{
+                  step.outcome === 'hit'
+                    ? t('diagnostics.values.hit')
+                    : step.outcome === 'miss'
+                      ? t('diagnostics.values.miss')
+                      : t('diagnostics.values.failed')
+                }}
+                <span v-if="step.detail" class="text-muted-foreground">{{
+                  t('diagnostics.parenthesized', { value: step.detail })
+                }}</span>
               </li>
             </ul>
           </template>
@@ -157,19 +229,22 @@ const resolutionStages = computed(() => {
             {{ index + 1 }}. {{ stage.steps[0]?.label }} ·
             {{
               stage.steps[0]?.outcome === 'hit'
-                ? '命中'
+                ? t('diagnostics.values.hit')
                 : stage.steps[0]?.outcome === 'miss'
-                  ? '未命中'
-                  : '失败'
+                  ? t('diagnostics.values.miss')
+                  : t('diagnostics.values.failed')
             }}
-            <span v-if="stage.steps[0]?.detail" class="text-muted-foreground"
-              >（{{ stage.steps[0]?.detail }}）</span
-            >
+            <span v-if="stage.steps[0]?.detail" class="text-muted-foreground">{{
+              t('diagnostics.parenthesized', { value: stage.steps[0]?.detail })
+            }}</span>
           </template>
         </li>
       </ol>
-      <span v-else>暂无</span>
+      <span v-else>{{ t('common.unavailable') }}</span>
     </DiagnosticRow>
-    <DiagnosticRow label="最近说明" :value="diagnostics.snapshot.errorReason ?? '无'" />
+    <DiagnosticRow
+      :label="t('diagnostics.lyrics.latestNote')"
+      :value="diagnostics.snapshot.errorReason ?? t('common.none')"
+    />
   </DiagnosticsCard>
 </template>

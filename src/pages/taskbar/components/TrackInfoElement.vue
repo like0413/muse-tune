@@ -49,7 +49,8 @@ const artist = computed(
     '—',
 )
 
-const title = computed(() => props.session?.metadata.title || '暂无播放')
+const { t } = useI18n({ useScope: 'global' })
+const title = computed(() => props.session?.metadata.title || t('media.nothingPlaying'))
 
 /** 恢复歌曲信息对齐方式，并接收设置窗口的实时更新。 */
 async function initializeAlignment() {

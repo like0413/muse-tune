@@ -11,6 +11,7 @@ import {
 
 /** 管理歌词显示设置的草稿、持久化和失败回滚。 */
 export function useLyricsDisplaySetting() {
+  const { t } = useI18n({ useScope: 'global' })
   const selectedSettings = shallowRef<TaskbarLyricsSettings>({
     ...DEFAULT_TASKBAR_LYRICS_SETTINGS,
   })
@@ -41,7 +42,7 @@ export function useLyricsDisplaySetting() {
       committedSettings.value = { ...next }
     } catch (error) {
       selectedSettings.value = { ...committedSettings.value }
-      notifySettingSaveFailed('歌词设置', error)
+      notifySettingSaveFailed(t('settings.taskbar.lyrics.title'), error)
     } finally {
       settingsSaving.value = false
     }
