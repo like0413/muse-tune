@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import { AudioLines, GripVertical, Music2 } from '@lucide/vue'
-import { moveArrayElement, useSortable } from '@vueuse/integrations/useSortable'
-import type { SortableEvent } from 'sortablejs'
-import { nextTick, onMounted, shallowRef, useTemplateRef } from 'vue'
+import { AudioLines } from '@lucide/vue'
+import { onMounted, shallowRef } from 'vue'
 
 import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import {
@@ -23,7 +21,6 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { notifySettingSaveFailed } from '@/features/feedback/errors'
-import { getMediaPlayerPresentation } from '@/features/media/players'
 import type {
   MediaPlayer,
   MediaSessionSelectionPolicy,
@@ -35,6 +32,8 @@ import {
   isMediaSessionSelectionStrategy,
   setMediaSessionSelectionPolicy,
 } from '@/features/settings/media-session'
+
+import PlayerPriorityEditor from './PlayerPriorityEditor.vue'
 
 const strategyOptions = [
   { value: 'recent_playback', label: '最近开始播放优先' },
@@ -54,18 +53,6 @@ const committedPolicy = shallowRef<MediaSessionSelectionPolicy>({
   onlySupportedPlayers: DEFAULT_MEDIA_SESSION_SELECTION_POLICY.onlySupportedPlayers,
 })
 const policySaving = shallowRef(false)
-const priorityContainer = useTemplateRef<HTMLElement>('priorityContainer')
-
-const { option } = useSortable(priorityContainer, selectedPriority, {
-  animation: 160,
-  direction: 'vertical',
-  forceFallback: true,
-  fallbackTolerance: 3,
-  handle: '[data-drag-handle]',
-  ghostClass: 'opacity-40',
-  onUpdate: handlePriorityUpdate,
-  watchElement: true,
-})
 
 /** 从独立响应式字段生成一次不可变的完整策略快照。 */
 function createPolicy(): MediaSessionSelectionPolicy {
@@ -115,8 +102,6 @@ async function savePolicy(policy: MediaSessionSelectionPolicy) {
     notifySettingSaveFailed('播放器抢占策略', error)
   } finally {
     policySaving.value = false
-    await nextTick()
-    option('disabled', false)
   }
 }
 
@@ -134,17 +119,11 @@ function updateOnlySupportedPlayers(value: boolean) {
   void savePolicy(createPolicy())
 }
 
-/** 在拖动结束后一次性保存播放器优先级。 */
-function handlePriorityUpdate(event: SortableEvent) {
-  if (event.oldIndex === undefined || event.newIndex === undefined || policySaving.value) return
-
-  policySaving.value = true
-  option('disabled', true)
-  moveArrayElement(selectedPriority, event.oldIndex, event.newIndex, event)
-  void nextTick(() => {
-    policySaving.value = false
-    void savePolicy(createPolicy())
-  })
+/** 接收编辑器产生的新顺序并一次性保存完整策略。 */
+function updatePriority(players: MediaPlayer[]) {
+  if (policySaving.value) return
+  selectedPriority.value = [...players]
+  void savePolicy(createPolicy())
 }
 
 onMounted(loadPolicy)
@@ -211,32 +190,11 @@ onMounted(loadPolicy)
             <FieldTitle>播放器优先级</FieldTitle>
             <FieldDescription>多个播放器同时播放时，优先显示排序靠前的播放器</FieldDescription>
           </FieldContent>
-          <div
-            ref="priorityContainer"
-            class="bg-muted/50 grid w-56 gap-2 rounded-lg p-2"
-            aria-label="播放器优先级"
-          >
-            <div
-              v-for="(player, index) in selectedPriority"
-              :key="player"
-              class="bg-background flex items-center gap-3 rounded-md border px-3 py-2 shadow-xs"
-            >
-              <span class="text-muted-foreground w-4 text-center text-xs">{{ index + 1 }}</span>
-              <Music2 class="size-4" aria-hidden="true" />
-              <span class="text-sm font-medium">
-                {{ getMediaPlayerPresentation(player).label }}
-              </span>
-              <button
-                class="text-muted-foreground hover:text-foreground focus-visible:ring-ring ml-auto grid cursor-grab place-items-center rounded-sm outline-none focus-visible:ring-2 active:cursor-grabbing"
-                type="button"
-                data-drag-handle
-                :disabled="policySaving"
-                :aria-label="`拖动${getMediaPlayerPresentation(player).label}`"
-              >
-                <GripVertical class="size-4" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
+          <PlayerPriorityEditor
+            :players="selectedPriority"
+            :disabled="policySaving"
+            @reorder="updatePriority"
+          />
         </Field>
       </FieldGroup>
     </template>

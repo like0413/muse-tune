@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Download, LoaderCircle, RefreshCw } from '@lucide/vue'
-import type { Update } from '@tauri-apps/plugin-updater'
 import { computed } from 'vue'
 
 import { Badge, type BadgeVariants } from '@/components/ui/badge'
@@ -26,14 +25,15 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { isUpdateCheckFrequency, type UpdateCheckFrequency } from '@/features/updater/settings'
-import { UPDATE_RELEASES_URL, type UpdateStatus } from '@/features/updater/useApplicationUpdater'
+import type { AvailableUpdateView, UpdateStatus } from '@/features/updater/types'
+import { UPDATE_RELEASES_URL } from '@/features/updater/useApplicationUpdater'
 
 const props = defineProps<{
   status: UpdateStatus
   statusLabel: string | null
   isChecking: boolean
   isDownloading: boolean
-  update: Update | null
+  update: AvailableUpdateView | null
   detectedVersion: string | null
   automaticCheck: boolean
   automaticCheckSaving: boolean

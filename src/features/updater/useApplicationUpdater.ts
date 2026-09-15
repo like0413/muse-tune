@@ -19,8 +19,7 @@ import {
   type UpdateCheckFrequency,
   type UpdateCheckResult,
 } from './settings'
-
-export type UpdateStatus = 'idle' | 'latest' | 'detected' | 'available' | 'error'
+import type { AvailableUpdateView, UpdateStatus } from './types'
 
 export const UPDATE_RELEASES_URL = 'https://github.com/like0413/muse-tune/releases'
 
@@ -57,6 +56,15 @@ export function useApplicationUpdater() {
         return '检查失败'
       default:
         return null
+    }
+  })
+  const availableUpdateView = computed<AvailableUpdateView | null>(() => {
+    const update = availableUpdate.value
+    if (!update) return null
+    return {
+      currentVersion: update.currentVersion,
+      version: update.version,
+      date: update.date ?? null,
     }
   })
 
@@ -258,7 +266,7 @@ export function useApplicationUpdater() {
     statusLabel,
     isChecking: readonly(isChecking),
     isDownloading: readonly(isDownloading),
-    availableUpdate: readonly(availableUpdate),
+    availableUpdate: availableUpdateView,
     detectedVersion: readonly(detectedVersion),
     automaticCheck: readonly(automaticCheck),
     automaticCheckSaving: readonly(automaticCheckSaving),
