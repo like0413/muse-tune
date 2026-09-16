@@ -1,6 +1,5 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { useMediaQuery } from '@vueuse/core'
-import { computed, onMounted, onUnmounted, readonly, shallowRef, watch } from 'vue'
 
 import {
   getReducedMotionOverride,

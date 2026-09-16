@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Download, LoaderCircle, RefreshCw } from '@lucide/vue'
-import { computed } from 'vue'
 
 import { Badge, type BadgeVariants } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

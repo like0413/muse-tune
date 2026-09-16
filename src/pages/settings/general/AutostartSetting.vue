@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Rocket } from '@lucide/vue'
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
-import { onActivated, shallowRef } from 'vue'
 
 import {
   Item,

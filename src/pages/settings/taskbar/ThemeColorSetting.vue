@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Palette } from '@lucide/vue'
-import { onMounted, shallowRef } from 'vue'
 
 import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import {

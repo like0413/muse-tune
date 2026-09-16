@@ -2,7 +2,6 @@
 import { Gamepad2, GripVertical } from '@lucide/vue'
 import { moveArrayElement, useSortable } from '@vueuse/integrations/useSortable'
 import type { SortableEvent } from 'sortablejs'
-import { nextTick, onMounted, shallowRef, useTemplateRef } from 'vue'
 
 import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import { Checkbox } from '@/components/ui/checkbox'

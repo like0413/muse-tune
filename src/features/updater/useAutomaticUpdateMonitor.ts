@@ -1,7 +1,6 @@
 import { getVersion } from '@tauri-apps/api/app'
 import { check } from '@tauri-apps/plugin-updater'
 import { useIntervalFn } from '@vueuse/core'
-import { onMounted, onUnmounted } from 'vue'
 
 import { notifyUpdateAvailable } from './notifications'
 import {

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Layers2 } from '@lucide/vue'
-import { onMounted, shallowRef } from 'vue'
 
 import {
   Item,

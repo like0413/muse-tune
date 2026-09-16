@@ -1,5 +1,4 @@
 import { useThrottleFn } from '@vueuse/core'
-import { onMounted, readonly, shallowRef } from 'vue'
 
 import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import {

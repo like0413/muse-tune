@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Languages } from '@lucide/vue'
-import { shallowRef } from 'vue'
 
 import {
   Item,

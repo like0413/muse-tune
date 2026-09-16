@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useElementBounding, useElementHover, useMutationObserver } from '@vueuse/core'
 import type { CSSProperties } from 'vue'
-import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
 
 import { useLyrics } from '@/features/lyrics/useLyrics'
 import { useTaskbarLyricsSettings } from '@/features/lyrics/useTaskbarLyricsSettings'
@@ -270,13 +269,5 @@ onMounted(refreshCoverAnchors)
   transition:
     transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 120ms ease;
-  will-change: transform;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .taskbar-mode-layer,
-  .taskbar-cover-motion {
-    transition-duration: 0s;
-  }
 }
 </style>

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Blend } from '@lucide/vue'
 import { useThrottleFn } from '@vueuse/core'
-import { onMounted, shallowRef } from 'vue'
 
 import {
   Item,

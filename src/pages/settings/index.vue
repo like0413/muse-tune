@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { Activity, Database, Info, PanelLeft, Settings2 } from '@lucide/vue'
 import { getVersion } from '@tauri-apps/api/app'
-import type { Component } from 'vue'
-import { computed, onMounted, shallowRef } from 'vue'
 
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'

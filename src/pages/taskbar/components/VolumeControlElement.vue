@@ -3,7 +3,6 @@ import { Volume1, Volume2, VolumeX } from '@lucide/vue'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emitTo, listen } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { onUnmounted, shallowRef, useTemplateRef } from 'vue'
 
 import { Button } from '@/components/ui/button'
 import { useApplicationVolume } from '@/features/media/useApplicationVolume'

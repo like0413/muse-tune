@@ -140,7 +140,7 @@ function wordStateClass(index: number) {
 
 <template>
   <div
-    class="lyric-row w-full min-w-0 overflow-hidden font-medium"
+    class="flex w-full min-w-0 items-center overflow-hidden font-medium"
     :style="rowStyle"
     aria-hidden="true"
   >
@@ -170,16 +170,12 @@ function wordStateClass(index: number) {
 </template>
 
 <style scoped>
-.lyric-row {
-  display: flex;
-  align-items: center;
-}
-
+/* 动画时长由 LyricsElement 统一下发，保证行换位与字号变化同步。 */
 .lyric-content-animated {
   transition:
-    height 350ms ease-out,
-    line-height 350ms ease-out,
-    font-size 350ms ease-out;
+    height var(--lyric-duration-ms) ease-out,
+    line-height var(--lyric-duration-ms) ease-out,
+    font-size var(--lyric-duration-ms) ease-out;
 }
 
 .lyric-word {
@@ -206,11 +202,5 @@ function wordStateClass(index: number) {
     var(--lyric-word-gradient-end-color) var(--lyric-word-gradient-end),
     var(--lyric-word-gradient-end-color) 100%
   );
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .lyric-content-animated {
-    transition-duration: 0s;
-  }
 }
 </style>

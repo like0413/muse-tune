@@ -6,7 +6,6 @@ import {
   type CheckMenuItemOptions,
 } from '@tauri-apps/api/menu'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { onUnmounted } from 'vue'
 
 import { openSettingsWindow } from '@/features/application/client'
 import { i18n } from '@/features/i18n'

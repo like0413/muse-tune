@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useTimeoutFn } from '@vueuse/core'
 import type { DeepReadonly } from 'vue'
-import { computed, onUnmounted, shallowRef, watch } from 'vue'
 
 import { getThumbnailUpdateDebounceMs } from '@/features/media/players'
 import type { MediaSessionSnapshot } from '@/features/media/types'
@@ -129,12 +128,6 @@ onUnmounted(() => {
 @keyframes cover-rotation {
   to {
     transform: rotate(1turn);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .cover-rotating {
-    animation: none;
   }
 }
 </style>

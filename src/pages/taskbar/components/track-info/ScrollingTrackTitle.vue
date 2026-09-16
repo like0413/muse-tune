@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useElementSize } from '@vueuse/core'
 import { motion } from 'motion-v'
-import { computed, useTemplateRef } from 'vue'
 
 import { useReducedMotionPreference } from '@/features/motion/useReducedMotionPreference'
 import type { TaskbarTrackInfoScrolling } from '@/features/settings/track-info'

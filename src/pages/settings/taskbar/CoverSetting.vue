@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Image } from '@lucide/vue'
-import { computed, onMounted, shallowRef } from 'vue'
 
 import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import {

@@ -2,7 +2,6 @@
 import { Disc3, GripVertical, LayoutPanelLeft, ListMusic, Radio } from '@lucide/vue'
 import { moveArrayElement, useSortable } from '@vueuse/integrations/useSortable'
 import type { SortableEvent } from 'sortablejs'
-import { nextTick, onMounted, shallowRef, useTemplateRef } from 'vue'
 
 import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'

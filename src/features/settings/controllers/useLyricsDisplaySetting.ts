@@ -1,5 +1,3 @@
-import { onMounted, readonly, shallowRef } from 'vue'
-
 import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_LYRICS_SETTINGS,

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Accessibility } from '@lucide/vue'
-import { onMounted, shallowRef } from 'vue'
 
 import {
   Item,

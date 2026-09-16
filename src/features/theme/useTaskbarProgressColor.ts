@@ -1,6 +1,4 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import type { ComputedRef } from 'vue'
-import { computed, onMounted, onUnmounted, shallowRef, watch } from 'vue'
 
 import {
   DEFAULT_TASKBAR_THEME_COLOR,

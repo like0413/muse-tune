@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { CSSProperties, DeepReadonly } from 'vue'
-import { computed } from 'vue'
 
 import { resolveTaskbarLyricsAppearance } from '@/features/lyrics/appearance'
 import type { TaskbarLyricsAlignment, TaskbarLyricsSettings } from '@/features/settings/lyrics'

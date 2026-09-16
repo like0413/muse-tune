@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { onMounted, onUnmounted, shallowRef } from 'vue'
 
 import type { MediaSessionSnapshot } from '@/features/media/types'
 import {

@@ -2,7 +2,6 @@
 import { ExternalLink, Globe2 } from '@lucide/vue'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { siGithub } from 'simple-icons'
-import { shallowRef } from 'vue'
 
 import { Button } from '@/components/ui/button'
 import {

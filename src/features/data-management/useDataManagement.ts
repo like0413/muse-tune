@@ -1,4 +1,3 @@
-import { computed, onActivated, onUnmounted, readonly, shallowRef } from 'vue'
 import { toast } from 'vue-sonner'
 
 import { normalizeIpcError, type IpcError } from '@/features/ipc/errors'

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Pause, Play, SkipBack, SkipForward } from '@lucide/vue'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { onMounted, onUnmounted, shallowRef } from 'vue'
 
 import { Button } from '@/components/ui/button'
 import type { MediaControlAction, MediaSessionSnapshot } from '@/features/media/types'

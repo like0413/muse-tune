@@ -1,5 +1,4 @@
 import { createPinia } from 'pinia'
-import { createApp } from 'vue'
 
 import App from './App.vue'
 import { i18n, initializeApplicationLocale } from './features/i18n'

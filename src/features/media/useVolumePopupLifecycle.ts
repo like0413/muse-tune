@@ -1,6 +1,5 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
-import { onMounted, onUnmounted, readonly, shallowRef } from 'vue'
 
 import { reportBackgroundFailure } from '@/features/feedback/errors'
 import { hideVolumePopup } from '@/features/taskbar/client'

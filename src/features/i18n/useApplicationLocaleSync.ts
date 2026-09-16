@@ -1,5 +1,4 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { onMounted, onUnmounted } from 'vue'
 
 import { reportBackgroundFailure } from '@/features/feedback/errors'
 import { applyApplicationLocale } from '@/features/i18n'

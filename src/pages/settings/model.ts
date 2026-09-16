@@ -1,5 +1,3 @@
-import type { Component } from 'vue'
-
 export type SettingsSection = 'general' | 'taskbar' | 'data' | 'diagnostics' | 'about'
 
 export type NavigationItem = {

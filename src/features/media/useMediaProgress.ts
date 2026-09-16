@@ -1,5 +1,5 @@
 import { useRafFn } from '@vueuse/core'
-import type { DeepReadonly, Ref } from 'vue'
+import type { DeepReadonly } from 'vue'
 
 import type { MediaPlaybackStatus, MediaTimeline } from './types'
 

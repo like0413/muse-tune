@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Check, Database, FolderOpen, LoaderCircle, RefreshCw, Trash2 } from '@lucide/vue'
-import { computed } from 'vue'
 
 import {
   AlertDialog,

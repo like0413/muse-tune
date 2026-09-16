@@ -2,7 +2,6 @@
 import { GripVertical, Music2 } from '@lucide/vue'
 import { moveArrayElement, useSortable } from '@vueuse/integrations/useSortable'
 import type { SortableEvent } from 'sortablejs'
-import { nextTick, shallowRef, useTemplateRef, watch } from 'vue'
 
 import { getMediaPlayerLabel } from '@/features/media/players'
 import type { MediaPlayer } from '@/features/media/types'

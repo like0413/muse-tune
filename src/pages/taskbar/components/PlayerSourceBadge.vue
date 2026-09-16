@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-
 import { getMediaPlayerLabel, getMediaPlayerPresentation } from '@/features/media/players'
 import type { MediaPlayer } from '@/features/media/types'
 

@@ -3,7 +3,6 @@ import { confirm } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { check } from '@tauri-apps/plugin-updater'
 import type { DownloadEvent, Update } from '@tauri-apps/plugin-updater'
-import { computed, onActivated, onUnmounted, readonly, shallowRef } from 'vue'
 
 import { getErrorMessage } from '@/features/feedback/errors'
 

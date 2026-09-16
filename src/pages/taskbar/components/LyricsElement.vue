@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { CSSProperties, DeepReadonly } from 'vue'
-import { computed, TransitionGroup } from 'vue'
 
 import { resolveTaskbarLyricsAppearance } from '@/features/lyrics/appearance'
 import type { LyricLine, LyricsSnapshot } from '@/features/lyrics/types'
+import { useReducedMotionPreference } from '@/features/motion/useReducedMotionPreference'
 import type { TaskbarLyricsSettings } from '@/features/settings/lyrics'
 
 import LyricLineElement from './lyrics/LyricLineElement.vue'
@@ -22,6 +22,12 @@ const props = defineProps<{
   themeColor: string
 }>()
 
+const reducedMotion = useReducedMotionPreference()
+/** 减少动态效果时彻底跳过 Vue 过渡，避免零时长透明度状态产生闪烁。 */
+const lyricsAnimationEnabled = computed(
+  () => props.settings.animation !== 'none' && !reducedMotion.value,
+)
+
 interface DisplayLine {
   key: string
   line: DeepReadonly<LyricLine>
@@ -37,9 +43,7 @@ const currentLineIndex = computed(() => {
   const lines = props.lyrics.lines
   if (lines.length === 0) return -1
   const transitionLeadMs =
-    props.settings.animation !== 'none' && props.settings.animationPreRoll
-      ? LINE_TRANSITION_LEAD_MS
-      : 0
+    lyricsAnimationEnabled.value && props.settings.animationPreRoll ? LINE_TRANSITION_LEAD_MS : 0
   let left = 0
   let right = lines.length - 1
   let matched = -1
@@ -163,7 +167,7 @@ const displayStyle = computed<CSSProperties>(() => {
     tag="div"
     class="lyric-display relative flex h-full min-w-0 flex-1 flex-col justify-start overflow-hidden"
     :name="transitionName"
-    :css="settings.animation !== 'none'"
+    :css="lyricsAnimationEnabled"
     :style="displayStyle"
   >
     <LyricLineElement
@@ -174,7 +178,7 @@ const displayStyle = computed<CSSProperties>(() => {
       :position-ms="positionMs"
       :primary="line.primary"
       :word-highlight="settings.wordHighlight"
-      :animated="settings.animation !== 'none'"
+      :animated="lyricsAnimationEnabled"
       :alignment="settings.alignment"
       :font-size="line.fontSize"
       :line-height="line.lineHeight"
@@ -214,13 +218,5 @@ const displayStyle = computed<CSSProperties>(() => {
 .lyrics-up-leave-to {
   opacity: 0;
   transform: translateY(calc(-1 * var(--lyric-line-step)));
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .lyrics-up-move,
-  .lyrics-up-enter-active,
-  .lyrics-up-leave-active {
-    transition-duration: 0s;
-  }
 }
 </style>

@@ -151,7 +151,7 @@
   }
 }
 
-/* 应用级覆盖比单个组件优先，且不改变系统自身的辅助功能偏好。 */
+/* 应用设置统一关闭动态效果，避免各组件重复维护降级样式。 */
 html[data-reduce-motion] *,
 html[data-reduce-motion] *::before,
 html[data-reduce-motion] *::after {
@@ -159,6 +159,18 @@ html[data-reduce-motion] *::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
+}
+
+/* JavaScript 尚未初始化时也立即遵循系统的减少动态效果偏好。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* 为设置页预留稳定滚动槽位，并用主题变量统一亮色、暗色滚动条。 */

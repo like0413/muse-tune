@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { CheckIcon, ChevronsUpDownIcon } from '@lucide/vue'
-import { computed, onMounted, shallowRef } from 'vue'
 
 import { Button } from '@/components/ui/button'
 import {
