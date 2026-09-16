@@ -2,7 +2,7 @@
 import { useElementSize } from '@vueuse/core'
 import type { CSSProperties, DeepReadonly } from 'vue'
 
-import type { LyricLine, LyricWord } from '@/features/lyrics/types'
+import type { LyricLine } from '@/features/lyrics/types'
 import type { TaskbarLyricsAlignment } from '@/features/settings/lyrics'
 
 const SCROLL_START_PROGRESS = 0.28
@@ -28,11 +28,6 @@ const props = defineProps<{
   lineHeight: number
   rowTop: number
 }>()
-
-interface DisplayWord extends LyricWord {
-  state: 'pending' | 'active' | 'completed'
-  style?: CSSProperties
-}
 
 const viewport = useTemplateRef<HTMLElement>('viewport')
 const textMeasure = useTemplateRef<HTMLElement>('textMeasure')
@@ -79,47 +74,68 @@ const trackClass = computed(() => [
   overflowDistance.value > 0 ? 'w-max will-change-transform' : 'w-full',
 ])
 
-/** 生成仅在未播放色和已播放色之间变化的逐字渐变。 */
-const displayWords = computed<DisplayWord[]>(() => {
-  if (!props.wordHighlight || props.text !== props.line.text) return []
-  return props.line.words.map((word) => {
-    if (!props.primary) return { ...word, state: 'pending' }
-    if (props.positionMs >= word.endMs) return { ...word, state: 'completed' }
-    if (props.positionMs <= word.startMs) return { ...word, state: 'pending' }
+/** 只有原文主行参与逐字高亮，翻译和下一句保持纯文本展示。 */
+const renderWords = computed(() =>
+  props.wordHighlight && props.text === props.line.text ? props.line.words : [],
+)
 
-    const duration = Math.max(1, word.endMs - word.startMs)
-    const progress = Math.min(
-      100,
-      Math.max(0, ((props.positionMs - word.startMs) / duration) * 100),
-    )
-    const start = Math.max(0, progress - WORD_GRADIENT_HALF_WIDTH)
-    const end = Math.min(100, progress + WORD_GRADIENT_HALF_WIDTH)
-    const enteringRatio = Math.min(1, progress / WORD_GRADIENT_HALF_WIDTH)
-    const leavingRatio = Math.max(
-      0,
-      (progress - (100 - WORD_GRADIENT_HALF_WIDTH)) / WORD_GRADIENT_HALF_WIDTH,
-    )
-    const startStrength = 100 * enteringRatio
-    const centerStrength =
-      progress < WORD_GRADIENT_HALF_WIDTH
-        ? CENTER_COLOR_STRENGTH * enteringRatio
-        : CENTER_COLOR_STRENGTH + (100 - CENTER_COLOR_STRENGTH) * leavingRatio
-    const endStrength = 100 * leavingRatio
-
-    return {
-      ...word,
-      state: 'active',
-      style: {
-        '--lyric-word-gradient-start': `${start}%`,
-        '--lyric-word-gradient-center': `${progress}%`,
-        '--lyric-word-gradient-end': `${end}%`,
-        '--lyric-word-gradient-start-color': `color-mix(in srgb, var(--lyric-played-color) ${startStrength}%, var(--lyric-unplayed-color))`,
-        '--lyric-word-gradient-center-color': `color-mix(in srgb, var(--lyric-played-color) ${centerStrength}%, var(--lyric-unplayed-color))`,
-        '--lyric-word-gradient-end-color': `color-mix(in srgb, var(--lyric-played-color) ${endStrength}%, var(--lyric-unplayed-color))`,
-      } as CSSProperties,
-    }
-  })
+/** 二分定位已播放词边界，避免每次进度刷新都复制整行逐字数组。 */
+const completedWordCount = computed(() => {
+  if (!props.primary) return 0
+  const words = renderWords.value
+  let left = 0
+  let right = words.length
+  while (left < right) {
+    const middle = Math.floor((left + right) / 2)
+    if (words[middle]!.endMs <= props.positionMs) left = middle + 1
+    else right = middle
+  }
+  return left
 })
+
+/** 当前播放词；词间空隙不错误地延续上一词渐变。 */
+const activeWordIndex = computed(() => {
+  if (!props.primary) return -1
+  const index = completedWordCount.value
+  const word = renderWords.value[index]
+  return word && props.positionMs > word.startMs && props.positionMs < word.endMs ? index : -1
+})
+
+/** 只为当前播放词生成动态渐变变量，其余词复用静态 CSS。 */
+const activeWordStyle = computed<CSSProperties | undefined>(() => {
+  const word = renderWords.value[activeWordIndex.value]
+  if (!word) return undefined
+  const duration = Math.max(1, word.endMs - word.startMs)
+  const progress = Math.min(100, Math.max(0, ((props.positionMs - word.startMs) / duration) * 100))
+  const start = Math.max(0, progress - WORD_GRADIENT_HALF_WIDTH)
+  const end = Math.min(100, progress + WORD_GRADIENT_HALF_WIDTH)
+  const enteringRatio = Math.min(1, progress / WORD_GRADIENT_HALF_WIDTH)
+  const leavingRatio = Math.max(
+    0,
+    (progress - (100 - WORD_GRADIENT_HALF_WIDTH)) / WORD_GRADIENT_HALF_WIDTH,
+  )
+  const startStrength = 100 * enteringRatio
+  const centerStrength =
+    progress < WORD_GRADIENT_HALF_WIDTH
+      ? CENTER_COLOR_STRENGTH * enteringRatio
+      : CENTER_COLOR_STRENGTH + (100 - CENTER_COLOR_STRENGTH) * leavingRatio
+  const endStrength = 100 * leavingRatio
+  return {
+    '--lyric-word-gradient-start': `${start}%`,
+    '--lyric-word-gradient-center': `${progress}%`,
+    '--lyric-word-gradient-end': `${end}%`,
+    '--lyric-word-gradient-start-color': `color-mix(in srgb, var(--lyric-played-color) ${startStrength}%, var(--lyric-unplayed-color))`,
+    '--lyric-word-gradient-center-color': `color-mix(in srgb, var(--lyric-played-color) ${centerStrength}%, var(--lyric-unplayed-color))`,
+    '--lyric-word-gradient-end-color': `color-mix(in srgb, var(--lyric-played-color) ${endStrength}%, var(--lyric-unplayed-color))`,
+  } as CSSProperties
+})
+
+/** 返回稳定类名，避免为非活动词创建样式对象。 */
+function wordStateClass(index: number) {
+  if (index < completedWordCount.value) return 'lyric-word-completed'
+  if (index === activeWordIndex.value) return 'lyric-word-active'
+  return 'lyric-word-pending'
+}
 </script>
 
 <template>
@@ -136,13 +152,13 @@ const displayWords = computed<DisplayWord[]>(() => {
     >
       <div class="lyric-line-track whitespace-pre" :class="trackClass" :style="trackStyle">
         <span ref="textMeasure" class="inline-block w-max align-top">
-          <template v-if="displayWords.length > 0">
+          <template v-if="renderWords.length > 0">
             <span
-              v-for="(word, index) in displayWords"
+              v-for="(word, index) in renderWords"
               :key="`${word.startMs}-${index}`"
               class="lyric-word"
-              :class="`lyric-word-${word.state}`"
-              :style="word.style"
+              :class="wordStateClass(index)"
+              :style="index === activeWordIndex ? activeWordStyle : undefined"
               >{{ word.text }}</span
             >
           </template>

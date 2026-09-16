@@ -11,8 +11,9 @@ import LyricLineElement from './lyrics/LyricLineElement.vue'
 const AVAILABLE_HEIGHT_PX = 40
 const TRACK_INFO_TITLE_LINE_HEIGHT_PX = 17.5
 const TRACK_INFO_ARTIST_LINE_HEIGHT_PX = 15
-// 400ms 动画加 40ms 刷新余量，使切换在人声时间戳前完成。
-const LINE_TRANSITION_LEAD_MS = 440
+const LINE_TRANSITION_DURATION_MS = 300
+// 300ms 动画加 30ms 刷新余量，使切换在人声时间戳前完成。
+const LINE_TRANSITION_LEAD_MS = LINE_TRANSITION_DURATION_MS + 30
 
 const props = defineProps<{
   lyrics: DeepReadonly<LyricsSnapshot>
@@ -148,6 +149,7 @@ const displayStyle = computed<CSSProperties>(() => {
   const { transitionStep, blockTop } = layoutMetrics.value
   return {
     '--lyric-line-step': `${transitionStep}px`,
+    '--lyric-duration-ms': `${LINE_TRANSITION_DURATION_MS}ms`,
     '--lyric-played-color': appearance.value.playedColor,
     '--lyric-unplayed-color': appearance.value.unplayedColor,
     fontFamily: appearance.value.fontFamily,
@@ -188,8 +190,8 @@ const displayStyle = computed<CSSProperties>(() => {
 .lyrics-up-enter-active,
 .lyrics-up-leave-active {
   transition:
-    transform 350ms ease-out,
-    opacity 300ms ease;
+    transform var(--lyric-duration-ms) ease-out,
+    opacity var(--lyric-duration-ms) ease;
 }
 
 /* 离开行固定在原槽位，不参与重排，因此不会在动画末尾额外上移。 */

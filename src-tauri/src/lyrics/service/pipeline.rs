@@ -1,7 +1,4 @@
-use super::{
-    LabeledLyricsResolutionResult, LyricsError, LyricsResolutionResult, LyricsService, MediaPlayer,
-    ResolvedLyrics, TrackDescriptor,
-};
+use super::{LyricsResolutionResult, LyricsService, MediaPlayer, ResolvedLyrics, TrackDescriptor};
 use crate::lyrics::model::{
     LyricLine, LyricsLookupMiss, LyricsLookupOutcome, LyricsResolutionMethod,
     LyricsResolutionOutcome, LyricsSnapshot, LyricsSourceKind, LyricsStatus, has_word_timing,
@@ -47,40 +44,16 @@ impl LyricsService {
         let snapshot = LyricsSnapshot::from_resolved(track.key.clone(), candidate.resolved);
         self.store_and_publish_if_current(snapshot, generation, candidate.resolution_method);
     }
-
-    /// 汇总同一在线阶段的结果，统一写入诊断链路与候选集合。
-    pub(super) fn collect_online_results<const N: usize>(
-        &self,
-        generation: u64,
-        parallel_group: Option<&str>,
-        results: [LabeledLyricsResolutionResult<'_>; N],
-        candidates: &mut Vec<LyricsCandidate>,
-    ) {
-        for (label, result) in results {
-            let Some(result) = result else {
-                continue;
-            };
-            let (outcome, detail) = summarize_resolution_result(&result);
-            self.record_resolution_step_in_group(
-                generation,
-                parallel_group,
-                label,
-                outcome,
-                detail,
-            );
-            match result {
-                Ok(LyricsLookupOutcome::Hit(resolved)) => {
-                    candidates.push(candidate_from_source(resolved));
-                }
-                Ok(LyricsLookupOutcome::Unsupported | LyricsLookupOutcome::Miss(_))
-                | Err(LyricsError::Cancelled) => {}
-                Err(error) => log::warn!("跨平台歌词适配器失败: {error}"),
-            }
-        }
-    }
 }
 
-/// 跨平台候选先比较时间精度，再保持当前平台和本地来源优先。
+/// 辅助内容覆盖质量；方案 A 仅在精度、当前平台和来源类型相同时参与排序。
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+pub(super) struct AuxiliaryContentQuality {
+    translation_coverage: u8,
+    romanization_coverage: u8,
+}
+
+/// 跨平台候选依次比较时间精度、当前平台、本地来源和辅助内容。
 pub(super) fn select_best_candidate(
     track: &TrackDescriptor,
     candidates: Vec<LyricsCandidate>,
@@ -93,19 +66,52 @@ pub(super) fn select_best_candidate(
                 u8::from(has_word_timing(&candidate.resolved.lines)),
                 u8::from(candidate.resolved.source.player == track.player),
                 u8::from(candidate.resolved.source.kind == LyricsSourceKind::Local),
+                auxiliary_content_quality(&candidate.resolved.lines),
                 source_priority(candidate.resolved.source.player),
             )
         })
 }
 
-/// 统计翻译和音译覆盖量，用于识别同精度歌词中的内容增强结果。
-pub(super) fn auxiliary_content_count(lines: &[LyricLine]) -> usize {
-    lines
-        .iter()
-        .map(|line| {
-            usize::from(line.translation.is_some()) + usize::from(line.romanization.is_some())
-        })
-        .sum()
+/// 计算有效正文中的翻译与音译覆盖率，避免行数更多的候选天然占优。
+pub(super) fn auxiliary_content_quality(lines: &[LyricLine]) -> AuxiliaryContentQuality {
+    let mut eligible_count = 0usize;
+    let mut translation_count = 0usize;
+    let mut romanization_count = 0usize;
+    for line in lines {
+        let original = crate::lyrics::track::normalize_text(&line.text);
+        if original.is_empty() {
+            continue;
+        }
+        eligible_count += 1;
+        translation_count += usize::from(auxiliary_text_is_meaningful(
+            line.translation.as_deref(),
+            &original,
+        ));
+        romanization_count += usize::from(auxiliary_text_is_meaningful(
+            line.romanization.as_deref(),
+            &original,
+        ));
+    }
+    if eligible_count == 0 {
+        return AuxiliaryContentQuality::default();
+    }
+    AuxiliaryContentQuality {
+        translation_coverage: coverage_percent(translation_count, eligible_count),
+        romanization_coverage: coverage_percent(romanization_count, eligible_count),
+    }
+}
+
+/// 空辅助文本或与原文等价的占位文本不计入覆盖率。
+fn auxiliary_text_is_meaningful(content: Option<&str>, original: &str) -> bool {
+    content.is_some_and(|content| {
+        let normalized = crate::lyrics::track::normalize_text(content);
+        !normalized.is_empty() && normalized != original
+    })
+}
+
+/// 将覆盖行数转换为稳定的整数百分比。
+fn coverage_percent(populated: usize, eligible: usize) -> u8 {
+    u8::try_from(populated.saturating_mul(100) / eligible).unwrap_or(100)
 }
 
 pub(super) fn candidate_from_source(resolved: ResolvedLyrics) -> LyricsCandidate {
@@ -269,11 +275,17 @@ fn source_priority(player: MediaPlayer) -> u8 {
 #[cfg(test)]
 mod tests {
     use crate::{
-        lyrics::model::{LyricLine, LyricWord},
+        lyrics::model::{
+            LyricLine, LyricWord, LyricsResolutionMethod, LyricsSource, LyricsSourceKind,
+            ResolvedLyrics,
+        },
         media::MediaPlayer,
     };
 
-    use super::{TimelineValidation, TrackDescriptor, is_plausible_timeline, validate_timeline};
+    use super::{
+        LyricsCandidate, TimelineValidation, TrackDescriptor, auxiliary_content_quality,
+        is_plausible_timeline, select_best_candidate, validate_timeline,
+    };
 
     /// 构造具有稳定时长的测试歌曲。
     fn track() -> TrackDescriptor {
@@ -299,6 +311,33 @@ mod tests {
                 end_ms: start_ms + 500,
                 text: "歌词".to_owned(),
             }],
+        }
+    }
+
+    /// 构造可参与方案 A 排序的候选。
+    fn candidate(
+        player: MediaPlayer,
+        kind: LyricsSourceKind,
+        word_timing: bool,
+        translation: Option<&str>,
+        romanization: Option<&str>,
+    ) -> LyricsCandidate {
+        let mut line = line(10_000);
+        if !word_timing {
+            line.words.clear();
+        }
+        line.translation = translation.map(str::to_owned);
+        line.romanization = romanization.map(str::to_owned);
+        LyricsCandidate {
+            resolved: ResolvedLyrics {
+                source: LyricsSource {
+                    player,
+                    kind,
+                    song_id: None,
+                },
+                lines: vec![line],
+            },
+            resolution_method: LyricsResolutionMethod::Online,
         }
     }
 
@@ -333,5 +372,85 @@ mod tests {
             &track(),
             &[line(10_000), line(20_000)]
         ));
+    }
+
+    #[test]
+    fn quality_prefers_word_timing_before_all_other_factors() {
+        let best = select_best_candidate(
+            &track(),
+            vec![
+                candidate(
+                    MediaPlayer::QqMusic,
+                    LyricsSourceKind::Online,
+                    false,
+                    Some("翻译"),
+                    Some("yin yi"),
+                ),
+                candidate(
+                    MediaPlayer::NeteaseCloudMusic,
+                    LyricsSourceKind::Online,
+                    true,
+                    None,
+                    None,
+                ),
+            ],
+        )
+        .expect("应选出候选");
+        assert_eq!(best.resolved.source.player, MediaPlayer::NeteaseCloudMusic);
+    }
+
+    #[test]
+    fn quality_prefers_current_player_then_local_source() {
+        let best = select_best_candidate(
+            &track(),
+            vec![
+                candidate(
+                    MediaPlayer::NeteaseCloudMusic,
+                    LyricsSourceKind::Local,
+                    true,
+                    Some("翻译"),
+                    None,
+                ),
+                candidate(
+                    MediaPlayer::QqMusic,
+                    LyricsSourceKind::Online,
+                    true,
+                    None,
+                    None,
+                ),
+                candidate(
+                    MediaPlayer::QqMusic,
+                    LyricsSourceKind::Local,
+                    true,
+                    None,
+                    None,
+                ),
+            ],
+        )
+        .expect("应选出候选");
+        assert_eq!(best.resolved.source.player, MediaPlayer::QqMusic);
+        assert_eq!(best.resolved.source.kind, LyricsSourceKind::Local);
+    }
+
+    #[test]
+    fn auxiliary_quality_compares_translation_before_romanization() {
+        let translated = candidate(
+            MediaPlayer::QqMusic,
+            LyricsSourceKind::Online,
+            true,
+            Some("翻译"),
+            None,
+        );
+        let romanized = candidate(
+            MediaPlayer::QqMusic,
+            LyricsSourceKind::Online,
+            true,
+            None,
+            Some("yin yi"),
+        );
+        assert!(
+            auxiliary_content_quality(&translated.resolved.lines)
+                > auxiliary_content_quality(&romanized.resolved.lines)
+        );
     }
 }

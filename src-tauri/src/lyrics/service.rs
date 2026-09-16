@@ -33,16 +33,20 @@ use super::{
 };
 use players::RegistryWatchHandle;
 
+mod cache_policy;
+mod executor;
 mod pipeline;
+mod plan;
 mod trace;
 mod watch_coordinator;
 
+use executor::RecordedAttempt;
 use pipeline::{
-    LyricsCandidate, TimelineValidation, auxiliary_content_count, candidate_from_source,
-    format_milliseconds, is_cached_snapshot_displayable, is_plausible_timeline, lookup_hit,
-    lookup_miss_detail, select_best_candidate, source_summary, summarize_resolution_result,
-    validate_timeline,
+    LyricsCandidate, TimelineValidation, candidate_from_source, format_milliseconds,
+    is_cached_snapshot_displayable, is_plausible_timeline, lookup_hit, lookup_miss_detail,
+    select_best_candidate, summarize_resolution_result, validate_timeline,
 };
+use plan::ResolutionPlan;
 use trace::duration_millis;
 
 const LYRICS_CHANGED_EVENT: &str = "lyrics://changed";
@@ -58,7 +62,6 @@ const ALLOWED_HTTPS_HOSTS: [&str; 4] = [
 type SnapshotPublisher = dyn Fn(&LyricsSnapshot) + Send + Sync;
 type DiagnosticsNotifier = dyn Fn() + Send + Sync;
 type LyricsResolutionResult = Result<LyricsLookupOutcome, LyricsError>;
-type LabeledLyricsResolutionResult<'a> = (&'a str, Option<LyricsResolutionResult>);
 
 /// 可被 Tauri command 和媒体监控线程安全共享的歌词服务。
 #[derive(Clone)]
@@ -688,6 +691,8 @@ impl LyricsService {
         cached: Option<CacheLookup>,
     ) {
         let deadline = ResolutionDeadline::new(cancellation);
+        let preferences = self.preferences();
+        let plan = ResolutionPlan::new(track.player, preferences.online_strategy);
         let mut candidates = Vec::new();
         let cache_timeline_validation = cached.as_ref().and_then(|cached| {
             (cached.snapshot.status == LyricsStatus::Ready)
@@ -737,7 +742,7 @@ impl LyricsService {
         if let Some(cached) = cached {
             if cached_snapshot_displayable && cached.is_fresh {
                 let should_check_local = cached.snapshot.status == LyricsStatus::Ready
-                    && cached.snapshot.precision != Some(super::model::LyricsPrecision::Word);
+                    && cache_policy::should_check_local_upgrade(&cached.snapshot);
                 self.publish_if_current_with_method(
                     cached.snapshot.clone(),
                     generation,
@@ -752,9 +757,7 @@ impl LyricsService {
                 match players::resolve_current_local(&track, self.cache_path(track.player)) {
                     Ok(LyricsLookupOutcome::Hit(local))
                         if is_plausible_timeline(&track, &local.lines)
-                            && (has_word_timing(&local.lines)
-                                || auxiliary_content_count(&local.lines)
-                                    > auxiliary_content_count(&cached.snapshot.lines)) =>
+                            && cache_policy::local_result_is_upgrade(&cached.snapshot, &local) =>
                     {
                         self.record_resolution_step(
                             generation,
@@ -838,108 +841,25 @@ impl LyricsService {
             }
         }
 
-        let path = self.cache_path(track.player);
-        let current_local_result = players::resolve_current_local(&track, path.clone());
-        match current_local_result {
-            Ok(LyricsLookupOutcome::Hit(resolved))
-                if is_plausible_timeline(&track, &resolved.lines) =>
-            {
-                self.record_resolution_step(
-                    generation,
-                    "当前播放器本地",
-                    LyricsResolutionOutcome::Hit,
-                    Some(source_summary(&resolved)),
-                );
-                if has_word_timing(&resolved.lines) {
-                    self.publish_resolution(&track, resolved, generation);
+        for attempt in &plan.local_attempts {
+            let execution = self.execute_attempt(*attempt, &track, &deadline);
+            match self.record_attempt(execution, &track, generation, None) {
+                RecordedAttempt::Candidate(candidate)
+                    if candidate.resolved.source.player == track.player
+                        && has_word_timing(&candidate.resolved.lines) =>
+                {
+                    self.publish_candidate(&track, candidate, generation);
                     return;
                 }
-                candidates.push(candidate_from_source(resolved));
+                RecordedAttempt::Candidate(candidate) => candidates.push(candidate),
+                RecordedAttempt::Continue => {}
+                RecordedAttempt::Cancelled => return,
             }
-            Ok(LyricsLookupOutcome::Hit(_)) => {
-                self.record_resolution_step(
-                    generation,
-                    "当前播放器本地",
-                    LyricsResolutionOutcome::Error,
-                    Some("歌词时间轴超出歌曲有效范围".to_owned()),
-                );
-                log::warn!("当前播放器本地歌词时间轴超出歌曲有效范围");
+            if !self.is_current_generation(generation) {
+                return;
             }
-            Ok(LyricsLookupOutcome::Miss(reason)) => self.record_resolution_step(
-                generation,
-                "当前播放器本地",
-                LyricsResolutionOutcome::Miss,
-                Some(lookup_miss_detail(reason).to_owned()),
-            ),
-            Ok(LyricsLookupOutcome::Unsupported) => self.record_resolution_step(
-                generation,
-                "当前播放器本地",
-                LyricsResolutionOutcome::Miss,
-                Some("当前播放器不支持本地歌词".to_owned()),
-            ),
-            Err(LyricsError::Cancelled) => return,
-            Err(error) => {
-                self.record_resolution_step(
-                    generation,
-                    "当前播放器本地",
-                    LyricsResolutionOutcome::Error,
-                    Some(error.to_string()),
-                );
-                log::warn!("当前播放器本地歌词适配器失败: {error}");
-            }
-        }
-        if !self.is_current_generation(generation) {
-            return;
         }
 
-        let qq_cache_path = self.cache_path(MediaPlayer::QqMusic);
-        if track.player != MediaPlayer::QqMusic {
-            match players::resolve_local_for(MediaPlayer::QqMusic, &track, qq_cache_path) {
-                Ok(LyricsLookupOutcome::Hit(resolved))
-                    if is_plausible_timeline(&track, &resolved.lines) =>
-                {
-                    self.record_resolution_step(
-                        generation,
-                        "QQ 本地兜底",
-                        LyricsResolutionOutcome::Hit,
-                        Some(source_summary(&resolved)),
-                    );
-                    if has_word_timing(&resolved.lines) {
-                        self.publish_resolution(&track, resolved, generation);
-                        return;
-                    }
-                    candidates.push(candidate_from_source(resolved));
-                }
-                Ok(LyricsLookupOutcome::Hit(_)) => self.record_resolution_step(
-                    generation,
-                    "QQ 本地兜底",
-                    LyricsResolutionOutcome::Error,
-                    Some("歌词时间轴超出歌曲有效范围".to_owned()),
-                ),
-                Ok(LyricsLookupOutcome::Miss(reason)) => self.record_resolution_step(
-                    generation,
-                    "QQ 本地兜底",
-                    LyricsResolutionOutcome::Miss,
-                    Some(lookup_miss_detail(reason).to_owned()),
-                ),
-                Ok(LyricsLookupOutcome::Unsupported) => {}
-                Err(LyricsError::Cancelled) => return,
-                Err(error) => {
-                    self.record_resolution_step(
-                        generation,
-                        "QQ 本地兜底",
-                        LyricsResolutionOutcome::Error,
-                        Some(error.to_string()),
-                    );
-                    log::warn!("QQ 本地歌词兜底失败: {error}");
-                }
-            }
-        }
-        if !self.is_current_generation(generation) {
-            return;
-        }
-
-        let preferences = self.preferences();
         if !preferences.allow_online {
             if let Some(candidate) = select_best_candidate(&track, candidates) {
                 self.publish_candidate(&track, candidate, generation);
@@ -956,129 +876,49 @@ impl LyricsService {
             return;
         }
 
-        match preferences.online_strategy {
-            LyricsOnlineStrategy::Parallel => {
-                let (current_online_result, qq_online_result, netease_result) =
-                    thread::scope(|scope| {
-                        let current_online = scope.spawn(|| {
-                            players::resolve_current_online(
-                                &track,
-                                path,
-                                &self.inner.client,
-                                &deadline,
-                            )
-                        });
-                        let qq_online = (track.player != MediaPlayer::QqMusic).then(|| {
-                            scope.spawn(|| {
-                                players::resolve_online_for(
-                                    MediaPlayer::QqMusic,
-                                    &track,
-                                    None,
-                                    &self.inner.client,
-                                    &deadline,
-                                )
-                            })
-                        });
-                        let netease = (track.player != MediaPlayer::NeteaseCloudMusic).then(|| {
-                            scope.spawn(|| {
-                                players::resolve_online_for(
-                                    MediaPlayer::NeteaseCloudMusic,
-                                    &track,
-                                    None,
-                                    &self.inner.client,
-                                    &deadline,
-                                )
-                            })
-                        });
-                        (
-                            current_online.join().ok(),
-                            qq_online.and_then(|handle| handle.join().ok()),
-                            netease.and_then(|handle| handle.join().ok()),
-                        )
-                    });
-                let online_results = [
-                    ("当前播放器在线", current_online_result),
-                    ("QQ 在线兜底", qq_online_result),
-                    ("网易云在线兜底", netease_result),
-                ];
-                let parallel_group = (online_results
-                    .iter()
-                    .filter(|(_, result)| result.is_some())
-                    .count()
-                    > 1)
-                .then_some("并行在线查询");
-                self.collect_online_results(
-                    generation,
-                    parallel_group,
-                    online_results,
-                    &mut candidates,
-                );
+        for (stage_index, stage) in plan.online_stages.iter().enumerate() {
+            if stage.attempts.is_empty() {
+                continue;
             }
-            LyricsOnlineStrategy::CurrentPlayerFirst => {
-                let current_result =
-                    players::resolve_current_online(&track, path, &self.inner.client, &deadline);
-                let (outcome, detail) = summarize_resolution_result(&current_result);
-                self.record_resolution_step(generation, "当前播放器在线优先", outcome, detail);
-                match current_result {
-                    Ok(LyricsLookupOutcome::Hit(resolved))
-                        if is_plausible_timeline(&track, &resolved.lines)
-                            && has_word_timing(&resolved.lines) =>
+            let executions = if stage.attempts.len() == 1 {
+                vec![self.execute_attempt(stage.attempts[0], &track, &deadline)]
+            } else {
+                thread::scope(|scope| {
+                    let service = self;
+                    let track = &track;
+                    let deadline = &deadline;
+                    let handles = stage
+                        .attempts
+                        .iter()
+                        .copied()
+                        .map(|attempt| {
+                            scope.spawn(move || service.execute_attempt(attempt, track, deadline))
+                        })
+                        .collect::<Vec<_>>();
+                    handles
+                        .into_iter()
+                        .filter_map(|handle| handle.join().ok())
+                        .collect::<Vec<_>>()
+                })
+            };
+            for execution in executions {
+                match self.record_attempt(execution, &track, generation, stage.parallel_group) {
+                    RecordedAttempt::Candidate(candidate)
+                        if preferences.online_strategy
+                            == LyricsOnlineStrategy::CurrentPlayerFirst
+                            && stage_index == 0
+                            && has_word_timing(&candidate.resolved.lines) =>
                     {
-                        self.publish_resolution(&track, resolved, generation);
+                        self.publish_candidate(&track, candidate, generation);
                         return;
                     }
-                    Ok(LyricsLookupOutcome::Hit(resolved)) => {
-                        candidates.push(candidate_from_source(resolved));
-                    }
-                    Ok(LyricsLookupOutcome::Unsupported | LyricsLookupOutcome::Miss(_)) => {}
-                    Err(LyricsError::Cancelled) => return,
-                    Err(error) => log::warn!("当前播放器在线歌词适配器失败: {error}"),
+                    RecordedAttempt::Candidate(candidate) => candidates.push(candidate),
+                    RecordedAttempt::Continue => {}
+                    RecordedAttempt::Cancelled => return,
                 }
-
-                let (qq_online_result, netease_result) = thread::scope(|scope| {
-                    let qq_online = (track.player != MediaPlayer::QqMusic).then(|| {
-                        scope.spawn(|| {
-                            players::resolve_online_for(
-                                MediaPlayer::QqMusic,
-                                &track,
-                                None,
-                                &self.inner.client,
-                                &deadline,
-                            )
-                        })
-                    });
-                    let netease = (track.player != MediaPlayer::NeteaseCloudMusic).then(|| {
-                        scope.spawn(|| {
-                            players::resolve_online_for(
-                                MediaPlayer::NeteaseCloudMusic,
-                                &track,
-                                None,
-                                &self.inner.client,
-                                &deadline,
-                            )
-                        })
-                    });
-                    (
-                        qq_online.and_then(|handle| handle.join().ok()),
-                        netease.and_then(|handle| handle.join().ok()),
-                    )
-                });
-                let fallback_results = [
-                    ("QQ 在线兜底", qq_online_result),
-                    ("网易云在线兜底", netease_result),
-                ];
-                let parallel_group = (fallback_results
-                    .iter()
-                    .filter(|(_, result)| result.is_some())
-                    .count()
-                    > 1)
-                .then_some("并行在线兜底");
-                self.collect_online_results(
-                    generation,
-                    parallel_group,
-                    fallback_results,
-                    &mut candidates,
-                );
+            }
+            if !self.is_current_generation(generation) {
+                return;
             }
         }
         if let Some(candidate) = select_best_candidate(&track, candidates) {

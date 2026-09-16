@@ -31,16 +31,6 @@ pub fn supported_players() -> impl Iterator<Item = MediaPlayer> {
     ADAPTERS.iter().map(|adapter| adapter.player)
 }
 
-/// 运行当前播放器的在线能力。
-pub fn resolve_current_online(
-    track: &TrackDescriptor,
-    cache_path: Option<PathBuf>,
-    client: &Client,
-    deadline: &ResolutionDeadline,
-) -> Result<LyricsLookupOutcome, LyricsError> {
-    resolve_online_for(track.player, track, cache_path, client, deadline)
-}
-
 /// 运行指定平台的在线能力，供 pipeline 组合跨平台兜底。
 pub fn resolve_online_for(
     player: MediaPlayer,
