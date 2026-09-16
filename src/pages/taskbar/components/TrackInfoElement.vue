@@ -92,7 +92,7 @@ onUnmounted(() => {
     :class="alignment === 'right' ? 'items-end text-right' : 'items-start text-left'"
   >
     <ScrollingTrackTitle
-      class="text-sm font-medium text-white"
+      class="text-taskbar-foreground text-sm font-medium"
       :text="title"
       :scrolling="scrolling"
     />

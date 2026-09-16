@@ -56,7 +56,7 @@ function handleWheel(event: WheelEvent) {
 <style scoped>
 .volume-card {
   position: relative;
-  background: color-mix(in srgb, var(--taskbar-background) 96%, transparent);
+  background: var(--taskbar-background);
   color: var(--taskbar-foreground);
   transition:
     opacity var(--volume-transition-duration) ease,
