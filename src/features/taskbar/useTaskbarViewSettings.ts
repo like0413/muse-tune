@@ -2,6 +2,12 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 
 import { reportBackgroundFailure } from '@/features/feedback/errors'
 import {
+  DEFAULT_TASKBAR_BACKGROUND_STYLE,
+  getTaskbarBackgroundStyle,
+  listenTaskbarBackgroundStyleChange,
+  type TaskbarBackgroundStyle,
+} from '@/features/settings/background-style'
+import {
   getTaskbarBackgroundTransparency,
   listenTaskbarBackgroundTransparencyChange,
 } from '@/features/settings/background-transparency'
@@ -19,10 +25,13 @@ import {
 import {
   DEFAULT_TASKBAR_PROGRESS_POSITION,
   DEFAULT_TASKBAR_PROGRESS_STYLE,
+  DEFAULT_TASKBAR_PROGRESS_VISIBLE,
   getTaskbarProgressPosition,
   getTaskbarProgressStyle,
+  getTaskbarProgressVisible,
   listenTaskbarProgressPositionChange,
   listenTaskbarProgressStyleChange,
+  listenTaskbarProgressVisibleChange,
   type TaskbarProgressPosition,
   type TaskbarProgressStyle,
 } from '@/features/settings/progress-style'
@@ -37,7 +46,9 @@ interface SettingBinding<T> {
 /** 同步任务栏窗口使用的设置，并统一处理异步监听注册与卸载竞态。 */
 export function useTaskbarViewSettings() {
   const backgroundTransparency = shallowRef(0)
+  const backgroundStyle = shallowRef<TaskbarBackgroundStyle>(DEFAULT_TASKBAR_BACKGROUND_STYLE)
   const progressStyle = shallowRef<TaskbarProgressStyle>(DEFAULT_TASKBAR_PROGRESS_STYLE)
+  const progressVisible = shallowRef(DEFAULT_TASKBAR_PROGRESS_VISIBLE)
   const progressPosition = shallowRef<TaskbarProgressPosition>(DEFAULT_TASKBAR_PROGRESS_POSITION)
   const elementOrder = shallowRef<TaskbarElement[]>([...DEFAULT_TASKBAR_ELEMENT_ORDER])
   const taskbarWidth = shallowRef<number>(TASKBAR_WIDTH_PRESETS.wide)
@@ -72,6 +83,12 @@ export function useTaskbarViewSettings() {
   function initialize() {
     void Promise.all([
       bindSetting({
+        load: getTaskbarBackgroundStyle,
+        listen: listenTaskbarBackgroundStyleChange,
+        apply: (value) => (backgroundStyle.value = value),
+        failureMessage: '初始化任务栏背景样式失败',
+      }),
+      bindSetting({
         load: getTaskbarBackgroundTransparency,
         listen: listenTaskbarBackgroundTransparencyChange,
         apply: (value) => (backgroundTransparency.value = value),
@@ -82,6 +99,12 @@ export function useTaskbarViewSettings() {
         listen: listenTaskbarProgressStyleChange,
         apply: (value) => (progressStyle.value = value),
         failureMessage: '初始化播放进度样式失败',
+      }),
+      bindSetting({
+        load: getTaskbarProgressVisible,
+        listen: listenTaskbarProgressVisibleChange,
+        apply: (value) => (progressVisible.value = value),
+        failureMessage: '初始化进度条显隐失败',
       }),
       bindSetting({
         load: getTaskbarProgressPosition,
@@ -111,8 +134,10 @@ export function useTaskbarViewSettings() {
   })
 
   return {
+    backgroundStyle: readonly(backgroundStyle),
     backgroundTransparency: readonly(backgroundTransparency),
     progressStyle: readonly(progressStyle),
+    progressVisible: readonly(progressVisible),
     progressPosition: readonly(progressPosition),
     elementOrder: readonly(elementOrder),
     taskbarWidth: readonly(taskbarWidth),

@@ -3,7 +3,6 @@ import type { DeepReadonly } from 'vue'
 
 import { Field, FieldContent, FieldDescription, FieldTitle } from '@/components/ui/field'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   isTaskbarLyricsNetworkPolicy,
   isTaskbarLyricsOnlineStrategy,
@@ -78,20 +77,17 @@ function selectOnlineStrategy(value: unknown) {
         <div>{{ t('settings.taskbar.lyrics.currentFirstDescription') }}</div>
       </FieldDescription>
     </FieldContent>
-    <ToggleGroup
-      type="single"
-      variant="outline"
-      :model-value="settings.onlineStrategy"
-      :disabled="saving || !settings.enabled || settings.networkPolicy === 'local_only'"
-      @update:model-value="selectOnlineStrategy"
-    >
-      <ToggleGroupItem
-        v-for="option in onlineStrategyOptions"
-        :key="option.value"
-        :value="option.value"
-      >
-        {{ option.label }}
-      </ToggleGroupItem>
-    </ToggleGroup>
+    <Tabs :model-value="settings.onlineStrategy" @update:model-value="selectOnlineStrategy">
+      <TabsList>
+        <TabsTrigger
+          v-for="option in onlineStrategyOptions"
+          :key="option.value"
+          :value="option.value"
+          :disabled="saving || !settings.enabled || settings.networkPolicy === 'local_only'"
+        >
+          {{ option.label }}
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
   </Field>
 </template>

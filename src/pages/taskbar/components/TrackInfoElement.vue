@@ -92,10 +92,12 @@ onUnmounted(() => {
     :class="alignment === 'right' ? 'items-end text-right' : 'items-start text-left'"
   >
     <ScrollingTrackTitle
-      class="text-taskbar-foreground text-sm font-medium"
+      class="text-sm font-medium text-(--taskbar-active-foreground)"
       :text="title"
       :scrolling="scrolling"
     />
-    <span class="text-taskbar-secondary-foreground max-w-full truncate text-xs">{{ artist }}</span>
+    <span class="max-w-full truncate text-xs text-(--taskbar-active-secondary-foreground)">{{
+      artist
+    }}</span>
   </div>
 </template>

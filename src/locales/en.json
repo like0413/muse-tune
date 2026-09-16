@@ -73,7 +73,21 @@
       },
       "transparency": {
         "title": "Background transparency",
-        "description": "Adjust only the component background while keeping text and controls clear"
+        "description": "Adjust only the component background while keeping text and controls clear",
+        "coverDisabled": "Blurred artwork does not use background transparency; switch to the theme background to adjust this"
+      },
+      "backgroundStyle": {
+        "title": "Background style",
+        "description": "Blend the album art's colors into a soft blurred background",
+        "style": "Background effect",
+        "styleDescription": "Blurred artwork uses its own transparency, independent of the theme",
+        "theme": "Theme color",
+        "coverBlur": "Blurred album art",
+        "coverFlow": "Flowing colors",
+        "flowDescription": "Slowly move the colors of the blurred album art",
+        "compatibilityTitle": "Compatibility notice",
+        "progressFallback": "Album-art backgrounds and vertical progress cannot be used together. Turning on an album-art background switches progress to the bottom bar.",
+        "backgroundFallback": "Vertical progress and album-art backgrounds cannot be used together. Turning on vertical progress switches the background to the theme color."
       },
       "width": {
         "title": "Component width",
@@ -126,6 +140,7 @@
       "progress": {
         "title": "Progress",
         "description": "Choose how playback progress appears in the taskbar component",
+        "visible": "Show progress",
         "style": "Progress style",
         "styleDescription": "Choose a horizontal bar or vertical gradient",
         "bar": "Progress bar",

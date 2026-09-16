@@ -7,7 +7,6 @@ import {
   FieldContent,
   FieldDescription,
   FieldGroup,
-  FieldLabel,
   FieldTitle,
 } from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
@@ -61,26 +60,17 @@ const {
       <ItemTitle>{{ t('settings.taskbar.spectrum.title') }}</ItemTitle>
       <ItemDescription>{{ t('settings.taskbar.spectrum.description') }}</ItemDescription>
     </ItemContent>
+    <template #actions>
+      <Switch
+        :model-value="selectedSettings.visible"
+        :disabled="settingsSaving"
+        :aria-label="t('settings.taskbar.spectrum.visible')"
+        @update:model-value="updateSettings({ visible: $event })"
+      />
+    </template>
 
     <template #content>
       <FieldGroup>
-        <Field orientation="horizontal">
-          <FieldContent>
-            <FieldLabel for="taskbar-spectrum-visible">{{
-              t('settings.taskbar.spectrum.visible')
-            }}</FieldLabel>
-            <FieldDescription>{{
-              t('settings.taskbar.spectrum.visibleDescription')
-            }}</FieldDescription>
-          </FieldContent>
-          <Switch
-            id="taskbar-spectrum-visible"
-            :model-value="selectedSettings.visible"
-            :disabled="settingsSaving"
-            @update:model-value="updateSettings({ visible: $event })"
-          />
-        </Field>
-
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
           <FieldContent>
             <FieldTitle>{{ t('settings.taskbar.spectrum.barCount') }}</FieldTitle>

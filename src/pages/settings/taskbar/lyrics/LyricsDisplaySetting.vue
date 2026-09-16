@@ -4,6 +4,7 @@ import { Captions } from '@lucide/vue'
 import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import { FieldGroup } from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
+import { Switch } from '@/components/ui/switch'
 import { useLyricsDisplaySetting } from '@/features/settings/controllers/useLyricsDisplaySetting'
 
 import LyricsLayoutSettings from './LyricsLayoutSettings.vue'
@@ -32,6 +33,14 @@ const {
       <ItemTitle>{{ t('settings.taskbar.lyrics.title') }}</ItemTitle>
       <ItemDescription>{{ t('settings.taskbar.lyrics.description') }}</ItemDescription>
     </ItemContent>
+    <template #actions>
+      <Switch
+        :model-value="selectedSettings.enabled"
+        :disabled="settingsSaving"
+        :aria-label="t('settings.taskbar.lyrics.enabled')"
+        @update:model-value="updateSettings({ enabled: $event })"
+      />
+    </template>
 
     <template #content>
       <FieldGroup>

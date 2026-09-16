@@ -23,7 +23,7 @@ export function resolveTaskbarLyricsAppearance(
     playedColor: usesCustomColors ? settings.playedColor : themeColor,
     unplayedColor: usesCustomColors
       ? settings.unplayedColor
-      : 'var(--taskbar-secondary-foreground)',
+      : 'var(--taskbar-active-secondary-foreground)',
     fontFamily: quoteFontFamily(settings.fontFamily),
   }
 }

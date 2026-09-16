@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Activity } from '@lucide/vue'
+import type { UnlistenFn } from '@tauri-apps/api/event'
 
 import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import {
@@ -10,20 +11,27 @@ import {
   FieldTitle,
 } from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
+import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { setCompatibleTaskbarProgressStyle } from '@/features/settings/background-style'
 import {
   DEFAULT_TASKBAR_PROGRESS_POSITION,
   DEFAULT_TASKBAR_PROGRESS_STYLE,
+  DEFAULT_TASKBAR_PROGRESS_VISIBLE,
   getTaskbarProgressPosition,
   getTaskbarProgressStyle,
+  getTaskbarProgressVisible,
   isTaskbarProgressPosition,
   isTaskbarProgressStyle,
+  listenTaskbarProgressStyleChange,
   setTaskbarProgressPosition,
-  setTaskbarProgressStyle,
+  setTaskbarProgressVisible,
   type TaskbarProgressPosition,
   type TaskbarProgressStyle,
 } from '@/features/settings/progress-style'
+
+import CompatibilityNoticeDialog from './components/CompatibilityNoticeDialog.vue'
 
 const { t } = useI18n({ useScope: 'global' })
 
@@ -43,21 +51,54 @@ const progressPositionOptions = computed(
 )
 
 const selectedProgressStyle = shallowRef<TaskbarProgressStyle>(DEFAULT_TASKBAR_PROGRESS_STYLE)
+const selectedProgressVisible = shallowRef(DEFAULT_TASKBAR_PROGRESS_VISIBLE)
 const selectedProgressPosition = shallowRef<TaskbarProgressPosition>(
   DEFAULT_TASKBAR_PROGRESS_POSITION,
 )
 const progressStyleSaving = shallowRef(false)
 const progressPositionSaving = shallowRef(false)
+const progressVisibilitySaving = shallowRef(false)
+const showCompatibilityNotice = shallowRef(false)
+let unlistenStyle: UnlistenFn | undefined
+let styleRevision = 0
+let disposed = false
 
 /** 恢复已保存的播放进度样式。 */
 async function loadProgressStyle() {
   try {
-    ;[selectedProgressStyle.value, selectedProgressPosition.value] = await Promise.all([
+    const stop = await listenTaskbarProgressStyleChange((style) => {
+      styleRevision += 1
+      selectedProgressStyle.value = style
+    })
+    if (disposed) return stop()
+    unlistenStyle = stop
+    const revision = styleRevision
+    const [savedStyle, savedPosition, savedVisible] = await Promise.all([
       getTaskbarProgressStyle(),
       getTaskbarProgressPosition(),
+      getTaskbarProgressVisible(),
     ])
+    if (!disposed && revision === styleRevision) selectedProgressStyle.value = savedStyle
+    if (!disposed) selectedProgressPosition.value = savedPosition
+    if (!disposed) selectedProgressVisible.value = savedVisible
   } catch (error) {
     console.error('读取播放进度样式失败', error)
+  }
+}
+
+/** 保存进度条显隐，失败时恢复此前状态。 */
+async function selectProgressVisible(visible: boolean) {
+  if (progressVisibilitySaving.value || visible === selectedProgressVisible.value) return
+  const previous = selectedProgressVisible.value
+  selectedProgressVisible.value = visible
+  progressVisibilitySaving.value = true
+  try {
+    await setTaskbarProgressVisible(visible)
+  } catch (error) {
+    selectedProgressVisible.value = previous
+    notifySettingSaveFailed(t('settings.taskbar.progress.title'), error)
+  } finally {
+    progressVisibilitySaving.value = false
   }
 }
 
@@ -99,12 +140,13 @@ async function selectProgressStyle(value: unknown) {
   progressStyleSaving.value = true
 
   try {
-    await setTaskbarProgressStyle(value)
+    const replacedBackground = await setCompatibleTaskbarProgressStyle(value)
+    if (replacedBackground) showCompatibilityNotice.value = true
   } catch (error) {
     selectedProgressStyle.value = previousStyle
     notifySettingSaveFailed(t('settings.taskbar.progress.title'), error)
     try {
-      await setTaskbarProgressStyle(previousStyle)
+      await setCompatibleTaskbarProgressStyle(previousStyle)
     } catch (rollbackError) {
       console.error('恢复之前的播放进度样式失败', rollbackError)
     }
@@ -114,6 +156,10 @@ async function selectProgressStyle(value: unknown) {
 }
 
 onMounted(loadProgressStyle)
+onUnmounted(() => {
+  disposed = true
+  unlistenStyle?.()
+})
 </script>
 
 <template>
@@ -125,9 +171,17 @@ onMounted(loadProgressStyle)
       <ItemTitle>{{ t('settings.taskbar.progress.title') }}</ItemTitle>
       <ItemDescription>{{ t('settings.taskbar.progress.description') }}</ItemDescription>
     </ItemContent>
+    <template #actions>
+      <Switch
+        :model-value="selectedProgressVisible"
+        :disabled="progressVisibilitySaving"
+        :aria-label="t('settings.taskbar.progress.visible')"
+        @update:model-value="selectProgressVisible"
+      />
+    </template>
     <template #content>
       <FieldGroup>
-        <Field orientation="horizontal">
+        <Field orientation="horizontal" :data-disabled="!selectedProgressVisible">
           <FieldContent>
             <FieldTitle>{{ t('settings.taskbar.progress.style') }}</FieldTitle>
             <FieldDescription>{{
@@ -140,7 +194,7 @@ onMounted(loadProgressStyle)
                 v-for="option in progressStyleOptions"
                 :key="option.value"
                 :value="option.value"
-                :disabled="progressStyleSaving"
+                :disabled="progressStyleSaving || !selectedProgressVisible"
               >
                 {{ option.label }}
               </TabsTrigger>
@@ -148,7 +202,10 @@ onMounted(loadProgressStyle)
           </Tabs>
         </Field>
 
-        <Field orientation="horizontal" :data-disabled="selectedProgressStyle !== 'bottom'">
+        <Field
+          orientation="horizontal"
+          :data-disabled="!selectedProgressVisible || selectedProgressStyle !== 'bottom'"
+        >
           <FieldContent>
             <FieldTitle>{{ t('settings.taskbar.progress.position') }}</FieldTitle>
             <FieldDescription>{{
@@ -164,7 +221,11 @@ onMounted(loadProgressStyle)
                 v-for="option in progressPositionOptions"
                 :key="option.value"
                 :value="option.value"
-                :disabled="progressPositionSaving || selectedProgressStyle !== 'bottom'"
+                :disabled="
+                  progressPositionSaving ||
+                  !selectedProgressVisible ||
+                  selectedProgressStyle !== 'bottom'
+                "
               >
                 {{ option.label }}
               </TabsTrigger>
@@ -174,4 +235,8 @@ onMounted(loadProgressStyle)
       </FieldGroup>
     </template>
   </CollapsibleItem>
+  <CompatibilityNoticeDialog
+    v-model:open="showCompatibilityNotice"
+    :description="t('settings.taskbar.backgroundStyle.backgroundFallback')"
+  />
 </template>

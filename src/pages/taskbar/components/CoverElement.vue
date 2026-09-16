@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import { useTimeoutFn } from '@vueuse/core'
 import type { DeepReadonly } from 'vue'
 
-import { getThumbnailUpdateDebounceMs } from '@/features/media/players'
 import type { MediaSessionSnapshot } from '@/features/media/types'
 import type { TaskbarCoverAppearance } from '@/features/settings/cover'
 
@@ -11,25 +9,8 @@ import PlayerSourceBadge from './PlayerSourceBadge.vue'
 const props = defineProps<{
   session: MediaSessionSnapshot | null
   appearance: DeepReadonly<TaskbarCoverAppearance>
+  thumbnailDataUrl: string | null
 }>()
-const displayedThumbnail = shallowRef<string | null>(null)
-const thumbnailUpdateDelayMs = shallowRef(0)
-let thumbnailRequestId = 0
-let pendingThumbnail: string | null = null
-const { start: scheduleThumbnailClear, stop: cancelThumbnailClear } = useTimeoutFn(
-  () => {
-    displayedThumbnail.value = null
-  },
-  500,
-  { immediate: false },
-)
-const { start: scheduleThumbnailUpdate, stop: cancelThumbnailUpdate } = useTimeoutFn(
-  () => {
-    void preloadThumbnail(pendingThumbnail)
-  },
-  thumbnailUpdateDelayMs,
-  { immediate: false },
-)
 
 /** 依据保存的形状与播放状态生成封面图层类名。 */
 const shapeClass = computed(() => ({
@@ -42,55 +23,6 @@ const shapeClass = computed(() => ({
     props.appearance.rotateWhenPlaying &&
     props.session?.playback.status !== 'playing',
 }))
-
-/** 先解码新封面再替换当前图片，避免切歌期间短暂显示占位符。 */
-async function preloadThumbnail(thumbnailDataUrl: string | null) {
-  const requestId = ++thumbnailRequestId
-  if (!thumbnailDataUrl) {
-    if (props.session) scheduleThumbnailClear()
-    else displayedThumbnail.value = null
-    return
-  }
-
-  cancelThumbnailClear()
-  const image = new window.Image()
-  image.src = thumbnailDataUrl
-  try {
-    await image.decode()
-  } catch {
-    if (requestId === thumbnailRequestId) scheduleThumbnailClear()
-    return
-  }
-  if (requestId === thumbnailRequestId) displayedThumbnail.value = thumbnailDataUrl
-}
-
-/** 按播放器规则合并切歌期间连续发布的封面，只解码最后一个候选。 */
-function updateThumbnail(
-  player: MediaSessionSnapshot['player'] | null,
-  thumbnailDataUrl: string | null,
-) {
-  cancelThumbnailUpdate()
-  const delayMs = player ? getThumbnailUpdateDebounceMs(player) : 0
-  if (delayMs <= 0 || !thumbnailDataUrl) {
-    void preloadThumbnail(thumbnailDataUrl)
-    return
-  }
-  pendingThumbnail = thumbnailDataUrl
-  thumbnailUpdateDelayMs.value = delayMs
-  scheduleThumbnailUpdate()
-}
-
-watch(
-  () => [props.session?.player ?? null, props.session?.metadata.thumbnailDataUrl ?? null] as const,
-  ([player, thumbnailDataUrl]) => updateThumbnail(player, thumbnailDataUrl),
-  { immediate: true },
-)
-
-onUnmounted(() => {
-  thumbnailRequestId += 1
-  cancelThumbnailClear()
-  cancelThumbnailUpdate()
-})
 </script>
 
 <template>
@@ -99,12 +31,7 @@ onUnmounted(() => {
       class="bg-primary text-primary-foreground grid size-full place-items-center overflow-hidden text-base font-medium"
       :class="shapeClass"
     >
-      <img
-        v-if="displayedThumbnail"
-        class="size-full object-cover"
-        :src="displayedThumbnail"
-        alt=""
-      />
+      <img v-if="thumbnailDataUrl" class="size-full object-cover" :src="thumbnailDataUrl" alt="" />
       <span v-else>♪</span>
     </div>
     <PlayerSourceBadge

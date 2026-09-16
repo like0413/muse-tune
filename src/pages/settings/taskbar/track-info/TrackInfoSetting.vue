@@ -64,26 +64,17 @@ const {
       <ItemTitle>{{ t('settings.taskbar.trackInfo.title') }}</ItemTitle>
       <ItemDescription>{{ t('settings.taskbar.trackInfo.description') }}</ItemDescription>
     </ItemContent>
+    <template #actions>
+      <Switch
+        :model-value="selectedVisible"
+        :disabled="visibilitySaving"
+        :aria-label="t('settings.taskbar.trackInfo.visible')"
+        @update:model-value="updateVisible"
+      />
+    </template>
 
     <template #content>
       <FieldGroup>
-        <Field orientation="horizontal">
-          <FieldContent>
-            <FieldLabel for="taskbar-track-info-visible">{{
-              t('settings.taskbar.trackInfo.visible')
-            }}</FieldLabel>
-            <FieldDescription>{{
-              t('settings.taskbar.trackInfo.visibleDescription')
-            }}</FieldDescription>
-          </FieldContent>
-          <Switch
-            id="taskbar-track-info-visible"
-            :model-value="selectedVisible"
-            :disabled="visibilitySaving"
-            @update:model-value="updateVisible"
-          />
-        </Field>
-
         <Field orientation="horizontal" :data-disabled="!selectedVisible">
           <FieldContent>
             <FieldTitle>{{ t('common.alignment') }}</FieldTitle>

@@ -76,21 +76,6 @@ function selectSecondaryLine(value: unknown) {
 </script>
 
 <template>
-  <Field orientation="horizontal">
-    <FieldContent>
-      <FieldLabel for="taskbar-lyrics-enabled">{{
-        t('settings.taskbar.lyrics.enabled')
-      }}</FieldLabel>
-      <FieldDescription>{{ t('settings.taskbar.lyrics.enabledDescription') }}</FieldDescription>
-    </FieldContent>
-    <Switch
-      id="taskbar-lyrics-enabled"
-      :model-value="settings.enabled"
-      :disabled="saving"
-      @update:model-value="emit('updateSettings', { enabled: $event })"
-    />
-  </Field>
-
   <Field orientation="horizontal" :data-disabled="!settings.enabled">
     <FieldContent>
       <FieldTitle>{{ t('settings.taskbar.lyrics.lines') }}</FieldTitle>

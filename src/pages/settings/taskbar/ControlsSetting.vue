@@ -5,14 +5,7 @@ import type { SortableEvent } from 'sortablejs'
 
 import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-  FieldTitle,
-} from '@/components/ui/field'
+import { Field, FieldContent, FieldGroup, FieldTitle } from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -133,26 +126,17 @@ onMounted(loadVisibility)
       <ItemTitle>{{ t('settings.taskbar.controls.title') }}</ItemTitle>
       <ItemDescription>{{ t('settings.taskbar.controls.description') }}</ItemDescription>
     </ItemContent>
+    <template #actions>
+      <Switch
+        :model-value="selectedVisibility.visible"
+        :disabled="visibilitySaving"
+        :aria-label="t('settings.taskbar.controls.visible')"
+        @update:model-value="updateVisibility({ visible: $event })"
+      />
+    </template>
 
     <template #content>
       <FieldGroup>
-        <Field orientation="horizontal">
-          <FieldContent>
-            <FieldLabel for="taskbar-controls-visible">{{
-              t('settings.taskbar.controls.visible')
-            }}</FieldLabel>
-            <FieldDescription>{{
-              t('settings.taskbar.controls.visibleDescription')
-            }}</FieldDescription>
-          </FieldContent>
-          <Switch
-            id="taskbar-controls-visible"
-            :model-value="selectedVisibility.visible"
-            :disabled="visibilitySaving"
-            @update:model-value="updateVisibility({ visible: $event })"
-          />
-        </Field>
-
         <Field :data-disabled="!selectedVisibility.visible">
           <FieldContent>
             <FieldTitle>{{ t('settings.taskbar.controls.buttons') }}</FieldTitle>

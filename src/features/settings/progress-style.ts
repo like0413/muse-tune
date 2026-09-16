@@ -7,14 +7,38 @@ const TASKBAR_PROGRESS_STYLES = ['bottom', 'vertical-gradient'] as const
 const TASKBAR_PROGRESS_POSITIONS = ['top', 'bottom'] as const
 const TASKBAR_PROGRESS_STYLE_KEY = 'taskbar.progressStyle'
 const TASKBAR_PROGRESS_POSITION_KEY = 'taskbar.progressPosition'
+const TASKBAR_PROGRESS_VISIBLE_KEY = 'taskbar.progressVisible'
 const TASKBAR_PROGRESS_STYLE_CHANGED_EVENT = 'settings://taskbar-progress-style-changed'
 const TASKBAR_PROGRESS_POSITION_CHANGED_EVENT = 'settings://taskbar-progress-position-changed'
+const TASKBAR_PROGRESS_VISIBLE_CHANGED_EVENT = 'settings://taskbar-progress-visible-changed'
 
 export type TaskbarProgressStyle = (typeof TASKBAR_PROGRESS_STYLES)[number]
 export type TaskbarProgressPosition = (typeof TASKBAR_PROGRESS_POSITIONS)[number]
 
 export const DEFAULT_TASKBAR_PROGRESS_STYLE: TaskbarProgressStyle = 'bottom'
 export const DEFAULT_TASKBAR_PROGRESS_POSITION: TaskbarProgressPosition = 'bottom'
+export const DEFAULT_TASKBAR_PROGRESS_VISIBLE = true
+
+/** 读取进度条显隐，旧配置默认显示。 */
+export async function getTaskbarProgressVisible(): Promise<boolean> {
+  const visible = await settingsStore.get<unknown>(TASKBAR_PROGRESS_VISIBLE_KEY)
+  return typeof visible === 'boolean' ? visible : DEFAULT_TASKBAR_PROGRESS_VISIBLE
+}
+
+/** 保存进度条显隐并通知任务栏窗口。 */
+export async function setTaskbarProgressVisible(visible: boolean): Promise<void> {
+  await settingsStore.set(TASKBAR_PROGRESS_VISIBLE_KEY, visible)
+  await emit(TASKBAR_PROGRESS_VISIBLE_CHANGED_EVENT, visible)
+}
+
+/** 监听进度条显隐变更。 */
+export async function listenTaskbarProgressVisibleChange(
+  handler: (visible: boolean) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(TASKBAR_PROGRESS_VISIBLE_CHANGED_EVENT, ({ payload }) => {
+    if (typeof payload === 'boolean') handler(payload)
+  })
+}
 
 /** 判断外部值是否为受支持的播放进度样式。 */
 export function isTaskbarProgressStyle(value: unknown): value is TaskbarProgressStyle {

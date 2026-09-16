@@ -73,7 +73,21 @@
       },
       "transparency": {
         "title": "背景透明度",
-        "description": "只調整元件背景，文字與控制項保持清晰"
+        "description": "只調整元件背景，文字與控制項保持清晰",
+        "coverDisabled": "模糊封面背景不調整透明度；切換為主題背景後可調整"
+      },
+      "backgroundStyle": {
+        "title": "背景樣式",
+        "description": "以歌曲封面的多種色彩形成柔和的模糊背景",
+        "style": "背景效果",
+        "styleDescription": "模糊封面背景與主題透明度獨立",
+        "theme": "一般主題色",
+        "coverBlur": "模糊封面",
+        "coverFlow": "流動",
+        "flowDescription": "讓模糊封面的色塊緩慢流動",
+        "compatibilityTitle": "相容性提示",
+        "progressFallback": "封面背景與垂直漸層進度不能同時使用。開啟封面背景時，進度樣式會切換為底部橫列。",
+        "backgroundFallback": "垂直漸層進度與封面背景不能同時使用。開啟垂直漸層時，背景會切換為一般主題色。"
       },
       "width": {
         "title": "元件寬度",
@@ -126,6 +140,7 @@
       "progress": {
         "title": "進度列",
         "description": "進度列在工作列元件中的呈現方式",
+        "visible": "顯示進度列",
         "style": "進度樣式",
         "styleDescription": "選擇橫列或垂直漸層效果",
         "bar": "橫列進度",

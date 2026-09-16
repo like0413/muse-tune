@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Blend } from '@lucide/vue'
+import type { UnlistenFn } from '@tauri-apps/api/event'
 import { useThrottleFn } from '@vueuse/core'
 
 import {
@@ -12,6 +13,12 @@ import {
 } from '@/components/ui/item'
 import { Slider } from '@/components/ui/slider'
 import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import {
+  DEFAULT_TASKBAR_BACKGROUND_STYLE,
+  getTaskbarBackgroundStyle,
+  listenTaskbarBackgroundStyleChange,
+  type TaskbarBackgroundStyle,
+} from '@/features/settings/background-style'
 import {
   getTaskbarBackgroundTransparency,
   normalizeTaskbarBackgroundTransparency,
@@ -26,6 +33,30 @@ const { t } = useI18n({ useScope: 'global' })
 const selectedBackgroundTransparency = shallowRef(0)
 const committedBackgroundTransparency = shallowRef(0)
 const backgroundTransparencySaving = shallowRef(false)
+const backgroundStyle = shallowRef<TaskbarBackgroundStyle>(DEFAULT_TASKBAR_BACKGROUND_STYLE)
+const transparencyDisabled = computed(
+  () => backgroundTransparencySaving.value || backgroundStyle.value !== 'theme',
+)
+let unlistenBackgroundStyle: UnlistenFn | undefined
+let styleRevision = 0
+let disposed = false
+
+/** 先监听再读取背景样式，确保切换模式后透明度控件立即更新。 */
+async function loadBackgroundStyle() {
+  try {
+    const stop = await listenTaskbarBackgroundStyleChange((style) => {
+      styleRevision += 1
+      backgroundStyle.value = style
+    })
+    if (disposed) return stop()
+    unlistenBackgroundStyle = stop
+    const revision = styleRevision
+    const saved = await getTaskbarBackgroundStyle()
+    if (!disposed && revision === styleRevision) backgroundStyle.value = saved
+  } catch (error) {
+    console.error('读取任务栏背景样式失败', error)
+  }
+}
 
 /** 恢复已保存的背景透明度。 */
 async function loadBackgroundTransparency() {
@@ -57,7 +88,7 @@ const previewTransparency = useThrottleFn(
 
 /** 更新 Slider 状态并实时预览，不写入持久化存储。 */
 function updateBackgroundTransparency(values: number[] | undefined) {
-  if (backgroundTransparencySaving.value) return
+  if (transparencyDisabled.value) return
 
   const transparency = getTransparencyValue(values)
   if (transparency === undefined) return
@@ -68,7 +99,7 @@ function updateBackgroundTransparency(values: number[] | undefined) {
 
 /** 在交互结束时持久化最终透明度。 */
 async function commitBackgroundTransparency(values: number[]) {
-  if (backgroundTransparencySaving.value) return
+  if (transparencyDisabled.value) return
 
   const transparency = getTransparencyValue(values)
   if (transparency === undefined) return
@@ -93,7 +124,14 @@ async function commitBackgroundTransparency(values: number[]) {
   }
 }
 
-onMounted(loadBackgroundTransparency)
+onMounted(() => {
+  void loadBackgroundStyle()
+  void loadBackgroundTransparency()
+})
+onUnmounted(() => {
+  disposed = true
+  unlistenBackgroundStyle?.()
+})
 </script>
 
 <template>
@@ -103,7 +141,13 @@ onMounted(loadBackgroundTransparency)
     </ItemMedia>
     <ItemContent>
       <ItemTitle>{{ t('settings.taskbar.transparency.title') }}</ItemTitle>
-      <ItemDescription>{{ t('settings.taskbar.transparency.description') }}</ItemDescription>
+      <ItemDescription>{{
+        t(
+          backgroundStyle === 'theme'
+            ? 'settings.taskbar.transparency.description'
+            : 'settings.taskbar.transparency.coverDisabled',
+        )
+      }}</ItemDescription>
     </ItemContent>
     <ItemActions class="w-56">
       <Slider
@@ -111,7 +155,7 @@ onMounted(loadBackgroundTransparency)
         :min="TASKBAR_TRANSPARENCY_MIN"
         :max="TASKBAR_TRANSPARENCY_MAX"
         :step="1"
-        :disabled="backgroundTransparencySaving"
+        :disabled="transparencyDisabled"
         :aria-label="t('settings.taskbar.transparency.title')"
         @update:model-value="updateBackgroundTransparency"
         @value-commit="commitBackgroundTransparency"

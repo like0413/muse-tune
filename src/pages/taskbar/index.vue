@@ -12,6 +12,7 @@ import { isTaskbarCoverVisibleInMode } from '@/features/settings/cover'
 import { type TaskbarElement } from '@/features/settings/element-order'
 import { useTaskbarAutoHide } from '@/features/taskbar/useTaskbarAutoHide'
 import { useTaskbarCoverAppearance } from '@/features/taskbar/useTaskbarCoverAppearance'
+import { useTaskbarDisplayedThumbnail } from '@/features/taskbar/useTaskbarDisplayedThumbnail'
 import { useTaskbarNativeMenu } from '@/features/taskbar/useTaskbarNativeMenu'
 import { useTaskbarViewSettings } from '@/features/taskbar/useTaskbarViewSettings'
 import { useTaskbarForegroundColor } from '@/features/theme/useTaskbarForegroundColor'
@@ -19,6 +20,7 @@ import { useTaskbarProgressColor } from '@/features/theme/useTaskbarProgressColo
 import { useAutomaticUpdateMonitor } from '@/features/updater/useAutomaticUpdateMonitor'
 
 import AudioSpectrumElement from './components/AudioSpectrumElement.vue'
+import CoverBackgroundElement from './components/CoverBackgroundElement.vue'
 import CoverElement from './components/CoverElement.vue'
 import LyricsNoticeElement from './components/lyrics/LyricsNoticeElement.vue'
 import LyricsElement from './components/LyricsElement.vue'
@@ -46,8 +48,15 @@ const normalLayer = useTemplateRef<HTMLElement>('normalLayer')
 const normalCoverAnchor = useTemplateRef<HTMLElement>('normalCoverAnchor')
 const lyricsCoverAnchor = useTemplateRef<HTMLElement>('lyricsCoverAnchor')
 const isTaskbarHovered = useElementHover(taskbarRoot)
-const { backgroundTransparency, progressStyle, progressPosition, elementOrder, taskbarWidth } =
-  useTaskbarViewSettings()
+const {
+  backgroundTransparency,
+  backgroundStyle: backgroundMode,
+  progressStyle,
+  progressVisible,
+  progressPosition,
+  elementOrder,
+  taskbarWidth,
+} = useTaskbarViewSettings()
 const isCompact = computed(() => taskbarWidth.value <= TASKBAR_WIDTH_PRESETS.compact)
 // 所有解析入口都要求有效播放器时间线；纯音乐结论本身不伪装成歌词行。
 const hasReliableLyricsTimeline = computed(() => timeline.value !== null)
@@ -81,9 +90,27 @@ useTaskbarAutoHide(mediaSession)
 useAutomaticUpdateMonitor()
 const { show: showNativeMenu } = useTaskbarNativeMenu()
 const thumbnailDataUrl = computed(() => mediaSession.value?.metadata.thumbnailDataUrl ?? null)
+const displayedThumbnail = useTaskbarDisplayedThumbnail(mediaSession)
 const { progressColor } = useTaskbarProgressColor(thumbnailDataUrl)
+const coverImage = computed(() => displayedThumbnail.value?.image ?? null)
+const coverBackgroundActive = computed(() => backgroundMode.value !== 'theme')
 
-const { foregroundColor } = useTaskbarForegroundColor(backgroundTransparency)
+const effectiveBackgroundTransparency = computed(() =>
+  coverBackgroundActive.value ? 0 : backgroundTransparency.value,
+)
+const { foregroundColor, isSystemForegroundActive } = useTaskbarForegroundColor(
+  effectiveBackgroundTransparency,
+)
+const activeForegroundColor = computed(() =>
+  coverBackgroundActive.value ? 'oklch(1 0 0)' : foregroundColor.value,
+)
+const activeSecondaryForegroundColor = computed(() =>
+  coverBackgroundActive.value
+    ? 'oklch(0.96 0 0)'
+    : isSystemForegroundActive.value
+      ? `color-mix(in srgb, ${activeForegroundColor.value} 90%, transparent)`
+      : 'var(--taskbar-secondary-foreground)',
+)
 
 /** 普通层始终保持最终排列；封面位置由同尺寸锚点预留。 */
 const normalElementStyle = computed<Record<TaskbarElement, CSSProperties>>(() => ({
@@ -116,10 +143,14 @@ function refreshCoverAnchors() {
 useMutationObserver(normalLayer, refreshCoverAnchors, { childList: true, subtree: true })
 watch([elementOrder, () => coverAppearance.value.visibility], refreshCoverAnchors)
 
-/** 仅改变页面背景 Alpha，高透明时由前景色策略保证内容对比度。 */
-const backgroundStyle = computed(() => ({
-  backgroundColor: `color-mix(in srgb, var(--taskbar-background) ${100 - backgroundTransparency.value}%, transparent)`,
-  color: foregroundColor.value,
+/** 封面模式使用不透明深色底层，白色前景不受系统模式和封面明度影响。 */
+const backgroundStyle = computed<CSSProperties>(() => ({
+  backgroundColor: !coverBackgroundActive.value
+    ? `color-mix(in srgb, var(--taskbar-background) ${100 - backgroundTransparency.value}%, transparent)`
+    : 'oklch(0.08 0 0)',
+  '--taskbar-active-foreground': activeForegroundColor.value,
+  '--taskbar-active-secondary-foreground': activeSecondaryForegroundColor.value,
+  color: activeForegroundColor.value,
 }))
 
 /** 仅把解析后的主题色暴露给进度条，避免影响全局 primary 色。 */
@@ -165,9 +196,14 @@ onMounted(refreshCoverAnchors)
     @contextmenu.prevent="openNativeMenu"
     @mousemove="restoreTaskbarHover"
   >
+    <CoverBackgroundElement
+      v-if="coverBackgroundActive && progressStyle !== 'vertical-gradient'"
+      :image="coverImage"
+      :flow="backgroundMode === 'cover-flow'"
+    />
     <AudioSpectrumElement
       :theme-color="progressColor"
-      :foreground-color="foregroundColor"
+      :foreground-color="activeForegroundColor"
       :progress="progress"
       :overlaps-progress-gradient="progressStyle === 'vertical-gradient'"
     />
@@ -230,12 +266,16 @@ onMounted(refreshCoverAnchors)
         class="taskbar-cover-motion pointer-events-none absolute top-0 left-0 z-20 size-8"
         :style="coverMotionStyle"
       >
-        <CoverElement :session="mediaSession" :appearance="coverAppearance" />
+        <CoverElement
+          :session="mediaSession"
+          :appearance="coverAppearance"
+          :thumbnail-data-url="displayedThumbnail?.source ?? null"
+        />
       </div>
     </div>
 
     <div
-      v-if="timeline"
+      v-if="timeline && progressVisible"
       class="pointer-events-none absolute inset-0"
       role="progressbar"
       :aria-label="t('media.progress')"

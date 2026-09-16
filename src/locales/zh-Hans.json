@@ -73,7 +73,21 @@
       },
       "transparency": {
         "title": "背景透明度",
-        "description": "仅调组件背景，文字与控件保持清晰"
+        "description": "仅调组件背景，文字与控件保持清晰",
+        "coverDisabled": "模糊封面背景不调整透明度；切换为主题背景后可调整"
+      },
+      "backgroundStyle": {
+        "title": "背景样式",
+        "description": "用歌曲封面的多种颜色形成柔和的模糊背景",
+        "style": "背景效果",
+        "styleDescription": "模糊封面背景与主题透明度独立",
+        "theme": "普通主题色",
+        "coverBlur": "模糊封面",
+        "coverFlow": "流动",
+        "flowDescription": "让模糊封面的色块缓慢流动",
+        "compatibilityTitle": "兼容性提示",
+        "progressFallback": "封面背景与竖向渐变进度不能同时使用。开启封面背景时，进度样式会切换为底部横条。",
+        "backgroundFallback": "竖向渐变进度与封面背景不能同时使用。开启竖向渐变时，背景会切换为普通主题色。"
       },
       "width": {
         "title": "组件宽度",
@@ -126,6 +140,7 @@
       "progress": {
         "title": "进度条",
         "description": "进度条在任务栏组件中的呈现方式",
+        "visible": "显示进度条",
         "style": "进度样式",
         "styleDescription": "选择横条或竖向渐变效果",
         "bar": "条形进度",

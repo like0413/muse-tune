@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AudioSpectrumSetting from './AudioSpectrumSetting.vue'
+import BackgroundStyleSetting from './BackgroundStyleSetting.vue'
 import BackgroundTransparencySetting from './BackgroundTransparencySetting.vue'
 import BarVisibilitySetting from './BarVisibilitySetting.vue'
 import BarWidthSetting from './BarWidthSetting.vue'
@@ -30,6 +31,7 @@ const { t } = useI18n({ useScope: 'global' })
     <BarWidthSetting />
     <ElementOrderSetting />
     <ThemeColorSetting />
+    <BackgroundStyleSetting />
     <BackgroundTransparencySetting />
 
     <div class="pl-2 text-sm font-bold">{{ t('settings.taskbar.groups.content') }}</div>
