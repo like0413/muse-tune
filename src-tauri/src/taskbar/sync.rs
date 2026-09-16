@@ -11,7 +11,7 @@ use std::{
 use windows::Win32::Foundation::HWND;
 
 use super::{
-    TaskbarOverlapPriority, content_visible,
+    RECOVERY_RETRY_DELAY, TaskbarOverlapPriority, content_visible,
     elements::TaskbarElements,
     events::{TaskbarChange, WinEventHooks, wait_for_taskbar_change},
     geometry::{
@@ -28,7 +28,6 @@ use super::{
     },
 };
 
-const RECOVERY_RETRY_DELAY: Duration = Duration::from_millis(400);
 const FULLSCREEN_STATE_CHECK_INTERVAL: Duration = Duration::from_millis(250);
 const UIA_RECOVERY_QUERY_INTERVAL: Duration = Duration::from_secs(1);
 const MIN_CONTENT_WIDTH_DIP: i32 = 200;

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Activity, Database, Info, PanelLeft, Settings2 } from '@lucide/vue'
 import { getVersion } from '@tauri-apps/api/app'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -94,6 +95,24 @@ onMounted(async () => {
     applicationVersion.value = await getVersion()
   } catch (error) {
     console.debug('读取应用版本失败', error)
+  }
+})
+
+/** 首屏挂载与页面资源加载完成后，再显示预先隐藏的原生设置窗口。 */
+onMounted(async () => {
+  try {
+    await nextTick()
+    if (document.readyState !== 'complete') {
+      await new Promise<void>((resolve) =>
+        window.addEventListener('load', () => resolve(), { once: true }),
+      )
+    }
+    await document.fonts.ready
+    const settingsWindow = getCurrentWebviewWindow()
+    await settingsWindow.show()
+    await settingsWindow.setFocus()
+  } catch (error) {
+    console.error('显示设置窗口失败', error)
   }
 })
 </script>

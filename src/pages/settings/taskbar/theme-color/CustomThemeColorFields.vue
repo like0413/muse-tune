@@ -7,7 +7,7 @@ import {
   FieldTitle,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { TASKBAR_THEME_PRESET_COLORS } from '@/features/settings/theme-color'
+import { TASKBAR_THEME_PRESET_COLORS } from '@/features/theme/colors'
 
 const { t } = useI18n({ useScope: 'global' })
 

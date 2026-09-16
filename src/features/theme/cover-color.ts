@@ -9,7 +9,7 @@ import {
 } from 'colorthief'
 import { maxBy, minBy } from 'es-toolkit'
 
-import { TASKBAR_THEME_PRESET_COLORS } from '@/features/settings/theme-color'
+import { TASKBAR_THEME_PRESET_COLORS } from './colors'
 
 const MINIMUM_DOMINANT_CHROMA = 0.05
 const MINIMUM_MUTED_CHROMA = 0.01

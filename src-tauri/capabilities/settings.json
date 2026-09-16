@@ -6,6 +6,8 @@
   "windows": ["settings"],
   "permissions": [
     "core:event:default",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
     "core:app:allow-version",
     "core:resources:allow-close",
     "store:allow-load",

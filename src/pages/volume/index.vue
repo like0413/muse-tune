@@ -99,6 +99,6 @@ function handleWheel(event: WheelEvent) {
   width: 16px;
   height: 16px;
   border-color: var(--volume-theme-color);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 24%);
+  box-shadow: 0 1px 4px oklch(0 0 0 / 24%);
 }
 </style>

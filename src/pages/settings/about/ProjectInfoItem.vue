@@ -14,11 +14,9 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { getErrorMessage } from '@/features/feedback/errors'
+import { PROJECT_ISSUES_URL, PROJECT_REPOSITORY_URL } from '@/features/project/metadata'
 
 const { t } = useI18n({ useScope: 'global' })
-
-const PROJECT_URL = 'https://github.com/like0413/muse-tune'
-const ISSUES_URL = `${PROJECT_URL}/issues`
 
 const errorMessage = shallowRef<string | null>(null)
 
@@ -48,13 +46,13 @@ async function openProjectUrl(url: string) {
           <Globe2 data-icon="inline-start" />
           {{ t('settings.about.project.website') }}
         </Button>
-        <Button variant="outline" size="sm" @click="openProjectUrl(PROJECT_URL)">
+        <Button variant="outline" size="sm" @click="openProjectUrl(PROJECT_REPOSITORY_URL)">
           <svg data-icon="inline-start" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path :d="siGithub.path" />
           </svg>
           {{ t('settings.about.project.repository') }}
         </Button>
-        <Button variant="outline" size="sm" @click="openProjectUrl(ISSUES_URL)">
+        <Button variant="outline" size="sm" @click="openProjectUrl(PROJECT_ISSUES_URL)">
           <ExternalLink data-icon="inline-start" />
           {{ t('settings.about.project.issues') }}
         </Button>

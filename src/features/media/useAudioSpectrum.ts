@@ -8,8 +8,7 @@ import {
 } from '@/features/settings/audio-spectrum'
 
 import { MEDIA_SPECTRUM_CHANGED_EVENT, setMediaSpectrumEnabled } from './client'
-
-const SOURCE_BAND_COUNT = 64
+import { MEDIA_SPECTRUM_SOURCE_BAND_COUNT } from './spectrum'
 
 /** 订阅真实播放器频谱与显示设置，并按显隐状态启停原生采集。 */
 export function useAudioSpectrum() {
@@ -43,7 +42,7 @@ export function useAudioSpectrum() {
     try {
       const [stopFrameListener, stopSettingsListener] = await Promise.all([
         listen<number[]>(MEDIA_SPECTRUM_CHANGED_EVENT, ({ payload }) => {
-          if (payload.length === SOURCE_BAND_COUNT) sourceBands.value = payload
+          if (payload.length === MEDIA_SPECTRUM_SOURCE_BAND_COUNT) sourceBands.value = payload
         }),
         listenTaskbarAudioSpectrumSettingsChange(updateSettings),
       ])
@@ -76,5 +75,5 @@ export function useAudioSpectrum() {
 
 /** 创建与原生频带数量一致的静默帧。 */
 function createSilentFrame(): number[] {
-  return Array.from({ length: SOURCE_BAND_COUNT }, () => 0)
+  return Array.from({ length: MEDIA_SPECTRUM_SOURCE_BAND_COUNT }, () => 0)
 }

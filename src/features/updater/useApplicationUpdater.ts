@@ -5,6 +5,7 @@ import { check } from '@tauri-apps/plugin-updater'
 import type { DownloadEvent, Update } from '@tauri-apps/plugin-updater'
 
 import { getErrorMessage } from '@/features/feedback/errors'
+import { PROJECT_RELEASES_URL } from '@/features/project/metadata'
 
 import {
   DEFAULT_UPDATE_CHECK_FREQUENCY,
@@ -19,8 +20,6 @@ import {
   type UpdateCheckResult,
 } from './settings'
 import type { AvailableUpdateView, UpdateStatus } from './types'
-
-export const UPDATE_RELEASES_URL = 'https://github.com/like0413/muse-tune/releases'
 
 /** 管理关于页的版本读取、更新检查和安装生命周期。 */
 export function useApplicationUpdater() {
@@ -131,7 +130,7 @@ export function useApplicationUpdater() {
   /** 使用系统默认浏览器打开完整的 GitHub Releases 历史。 */
   async function openReleaseNotes() {
     try {
-      await openUrl(UPDATE_RELEASES_URL)
+      await openUrl(PROJECT_RELEASES_URL)
     } catch (error) {
       errorMessage.value = getErrorMessage(error, t('settings.about.update.openReleaseNotesFailed'))
     }

@@ -4,6 +4,7 @@ import { clamp } from 'es-toolkit'
 
 import { setLyricsPreferences } from '@/features/lyrics/client'
 import { LYRICS_ONLINE_STRATEGIES, type LyricsOnlineStrategy } from '@/features/lyrics/types'
+import { DEFAULT_BRAND_COLOR_HEX, DEFAULT_LYRICS_UNPLAYED_COLOR_HEX } from '@/features/theme/colors'
 
 import { SETTINGS_SCHEMA_VERSIONS } from './storage/schema-versions'
 import { loadVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
@@ -61,8 +62,8 @@ export const DEFAULT_TASKBAR_LYRICS_SETTINGS: TaskbarLyricsSettings = {
   animationPreRoll: true,
   fontSize: 14,
   colorScheme: 'theme',
-  playedColor: '#1677ff',
-  unplayedColor: '#adb1b3',
+  playedColor: DEFAULT_BRAND_COLOR_HEX,
+  unplayedColor: DEFAULT_LYRICS_UNPLAYED_COLOR_HEX,
   fontFamily: '',
 }
 

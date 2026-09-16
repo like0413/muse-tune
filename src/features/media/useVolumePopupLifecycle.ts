@@ -3,6 +3,7 @@ import { emit, listen } from '@tauri-apps/api/event'
 
 import { reportBackgroundFailure } from '@/features/feedback/errors'
 import { hideVolumePopup } from '@/features/taskbar/client'
+import { DEFAULT_BRAND_COLOR_HEX } from '@/features/theme/colors'
 
 import {
   VOLUME_POPUP_CLOSE_EVENT,
@@ -16,7 +17,7 @@ import {
 /** 管理音量悬浮窗的事件协议、进出场状态和原生窗口生命周期。 */
 export function useVolumePopupLifecycle() {
   const ownerLabel = shallowRef('')
-  const themeColor = shallowRef('#1677ff')
+  const themeColor = shallowRef(DEFAULT_BRAND_COLOR_HEX)
   const generation = shallowRef(0)
   const entered = shallowRef(false)
   let hideTimer: ReturnType<typeof setTimeout> | undefined

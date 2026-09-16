@@ -24,9 +24,9 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { getApplicationLocaleTag } from '@/features/i18n/locales'
+import { PROJECT_RELEASES_URL } from '@/features/project/metadata'
 import { isUpdateCheckFrequency, type UpdateCheckFrequency } from '@/features/updater/settings'
 import type { AvailableUpdateView, UpdateStatus } from '@/features/updater/types'
-import { UPDATE_RELEASES_URL } from '@/features/updater/useApplicationUpdater'
 
 const { locale, t } = useI18n({ useScope: 'global' })
 
@@ -112,7 +112,7 @@ function selectUpdateCheckFrequency(value: unknown) {
             }}</template>
             <template v-else>{{ t('settings.about.update.source') }}</template>
           </span>
-          <a :href="UPDATE_RELEASES_URL" @click.prevent="emit('openReleaseNotes')" class="ml-2">{{
+          <a :href="PROJECT_RELEASES_URL" @click.prevent="emit('openReleaseNotes')" class="ml-2">{{
             t('settings.about.update.releaseNotes')
           }}</a>
         </ItemDescription>

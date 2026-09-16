@@ -8,14 +8,13 @@ import {
 } from '@/features/settings/theme-color'
 import { getSystemAccentColor, listenSystemAccentColorChange } from '@/features/system/accent-color'
 
+import { DEFAULT_BRAND_COLOR_HEX } from './colors'
 import { extractTaskbarCoverColor } from './cover-color'
-
-const FALLBACK_PROGRESS_COLOR = '#1677ff'
 
 /** 按设置来源解析进度条颜色，并只在封面变化时重新取色。 */
 export function useTaskbarProgressColor(thumbnailDataUrl: ComputedRef<string | null>) {
   const setting = shallowRef<TaskbarThemeColor>({ ...DEFAULT_TASKBAR_THEME_COLOR })
-  const systemColor = shallowRef(FALLBACK_PROGRESS_COLOR)
+  const systemColor = shallowRef(DEFAULT_BRAND_COLOR_HEX)
   const coverColor = shallowRef<string | null>(null)
   let extractionRequestId = 0
   let settingRevision = 0

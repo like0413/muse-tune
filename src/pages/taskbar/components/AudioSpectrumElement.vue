@@ -2,13 +2,15 @@
 import { useDevicePixelRatio, useResizeObserver, useThrottleFn } from '@vueuse/core'
 import type { CSSProperties } from 'vue'
 
+import {
+  MEDIA_SPECTRUM_FRAME_INTERVAL_MS,
+  MEDIA_SPECTRUM_SOURCE_BAND_COUNT,
+} from '@/features/media/spectrum'
 import { useAudioSpectrum } from '@/features/media/useAudioSpectrum'
 
-const SOURCE_BAND_COUNT = 64
 const MAX_BAR_GAP = 2
 const SPECTRUM_OPACITY = 0.34
 const SPECTRUM_CONTRAST_OPACITY = 0.7
-const SPECTRUM_FRAME_INTERVAL_MS = 33
 
 const props = defineProps<{
   themeColor: string
@@ -22,8 +24,8 @@ const wrapper = useTemplateRef<HTMLDivElement>('wrapper')
 const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
 const taskbarContainer = shallowRef<HTMLElement | null>(null)
 const { pixelRatio } = useDevicePixelRatio()
-const barHeights = new Float32Array(SOURCE_BAND_COUNT)
-const smoothedLevels = new Float32Array(SOURCE_BAND_COUNT)
+const barHeights = new Float32Array(MEDIA_SPECTRUM_SOURCE_BAND_COUNT)
+const smoothedLevels = new Float32Array(MEDIA_SPECTRUM_SOURCE_BAND_COUNT)
 let logicalWidth = 0
 let logicalHeight = 0
 let taskbarWidth = 0
@@ -100,8 +102,11 @@ function drawSpectrum() {
   context.clearRect(0, 0, logicalWidth, logicalHeight)
 
   for (let index = 0; index < count; index += 1) {
-    const start = Math.floor((index * SOURCE_BAND_COUNT) / count)
-    const end = Math.max(start + 1, Math.floor(((index + 1) * SOURCE_BAND_COUNT) / count))
+    const start = Math.floor((index * MEDIA_SPECTRUM_SOURCE_BAND_COUNT) / count)
+    const end = Math.max(
+      start + 1,
+      Math.floor(((index + 1) * MEDIA_SPECTRUM_SOURCE_BAND_COUNT) / count),
+    )
     let level = 0
     for (let sourceIndex = start; sourceIndex < end; sourceIndex += 1) {
       level = Math.max(level, (bands[sourceIndex] ?? 0) / 255)
@@ -136,7 +141,7 @@ function drawSpectrum() {
 }
 
 /** 合并音频帧和进度变化，并把 Canvas 重绘频率限制在约 30 FPS。 */
-const requestDraw = useThrottleFn(drawSpectrum, SPECTRUM_FRAME_INTERVAL_MS, true, true)
+const requestDraw = useThrottleFn(drawSpectrum, MEDIA_SPECTRUM_FRAME_INTERVAL_MS, true, true)
 
 /** 缓存布局宽度和浏览器解析后的对比色，避免每个音频帧读取计算样式。 */
 function refreshVisualContext() {

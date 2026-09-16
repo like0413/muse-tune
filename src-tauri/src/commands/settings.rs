@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Manager, WebviewWindow, WebviewWindowBuilder, webview::PageLoadEvent};
+use tauri::{AppHandle, Manager, WebviewWindow, WebviewWindowBuilder};
 
 const SETTINGS_WINDOW_LABEL: &str = "settings";
 
@@ -20,14 +20,7 @@ pub async fn open_settings_window(app: AppHandle) -> Result<(), String> {
         .ok_or_else(|| "未找到设置窗口配置".to_owned())?;
 
     let builder = WebviewWindowBuilder::from_config(&app, window_config)
-        .map_err(|error| error.to_string())?
-        .on_page_load(|window, payload| {
-            if matches!(payload.event(), PageLoadEvent::Finished)
-                && let Err(error) = show_settings_window_after_load(&window)
-            {
-                log::error!("显示设置窗口失败: {error}");
-            }
-        });
+        .map_err(|error| error.to_string())?;
 
     match builder.build() {
         Ok(_) => Ok(()),
@@ -51,15 +44,6 @@ fn activate_settings_window(window: &WebviewWindow) -> Result<(), String> {
 /// 仅唤醒已经显示的窗口；隐藏状态表示页面仍在首次加载。
 fn activate_settings_window_if_ready(window: &WebviewWindow) -> Result<(), String> {
     if window.is_visible().map_err(|error| error.to_string())? {
-        activate_settings_window(window)?;
-    }
-
-    Ok(())
-}
-
-/// 页面首次加载完成后显示窗口，后续页面刷新不抢占用户焦点。
-fn show_settings_window_after_load(window: &WebviewWindow) -> Result<(), String> {
-    if !window.is_visible().map_err(|error| error.to_string())? {
         activate_settings_window(window)?;
     }
 
