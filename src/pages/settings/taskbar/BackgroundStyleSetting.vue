@@ -17,9 +17,13 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_BACKGROUND_STYLE,
+  DEFAULT_TASKBAR_BACKGROUND_FLOW,
+  getTaskbarBackgroundFlow,
   getTaskbarBackgroundStyle,
   isTaskbarBackgroundStyle,
+  listenTaskbarBackgroundFlowChange,
   listenTaskbarBackgroundStyleChange,
+  setTaskbarBackgroundFlow,
   setTaskbarBackgroundStyle,
   type TaskbarBackgroundStyle,
 } from '@/features/settings/background-style'
@@ -28,25 +32,44 @@ import CompatibilityNoticeDialog from './components/CompatibilityNoticeDialog.vu
 
 const { t } = useI18n({ useScope: 'global' })
 const selectedStyle = shallowRef<TaskbarBackgroundStyle>(DEFAULT_TASKBAR_BACKGROUND_STYLE)
+const flowEnabled = shallowRef(DEFAULT_TASKBAR_BACKGROUND_FLOW)
 const saving = shallowRef(false)
+const flowSaving = shallowRef(false)
 const showCompatibilityNotice = shallowRef(false)
-const baseStyle = computed(() => (selectedStyle.value === 'theme' ? 'theme' : 'cover-blur'))
-let unlisten: UnlistenFn | undefined
+let unlistenStyle: UnlistenFn | undefined
+let unlistenFlow: UnlistenFn | undefined
 let styleRevision = 0
+let flowRevision = 0
 let disposed = false
 
 /** 恢复设置并监听另一项设置触发的兼容模式切换。 */
 async function initialize() {
   try {
-    const stop = await listenTaskbarBackgroundStyleChange((style) => {
-      styleRevision += 1
-      selectedStyle.value = style
-    })
-    if (disposed) return stop()
-    unlisten = stop
+    const [stopStyle, stopFlow] = await Promise.all([
+      listenTaskbarBackgroundStyleChange((style) => {
+        styleRevision += 1
+        selectedStyle.value = style
+      }),
+      listenTaskbarBackgroundFlowChange((enabled) => {
+        flowRevision += 1
+        flowEnabled.value = enabled
+      }),
+    ])
+    if (disposed) {
+      stopStyle()
+      stopFlow()
+      return
+    }
+    unlistenStyle = stopStyle
+    unlistenFlow = stopFlow
     const revision = styleRevision
-    const saved = await getTaskbarBackgroundStyle()
-    if (!disposed && revision === styleRevision) selectedStyle.value = saved
+    const savedFlowRevision = flowRevision
+    const [savedStyle, savedFlow] = await Promise.all([
+      getTaskbarBackgroundStyle(),
+      getTaskbarBackgroundFlow(),
+    ])
+    if (!disposed && revision === styleRevision) selectedStyle.value = savedStyle
+    if (!disposed && savedFlowRevision === flowRevision) flowEnabled.value = savedFlow
   } catch (error) {
     console.error('读取背景样式失败', error)
   }
@@ -69,16 +92,27 @@ async function selectStyle(value: unknown) {
   }
 }
 
-/** 流动是模糊封面的附加效果，关闭后仍保留模糊封面。 */
-function selectFlow(enabled: boolean) {
-  if (selectedStyle.value === 'theme') return
-  void selectStyle(enabled ? 'cover-flow' : 'cover-blur')
+/** 独立保存流动偏好，关闭模糊封面不会重置该选择。 */
+async function selectFlow(enabled: boolean) {
+  if (flowSaving.value || enabled === flowEnabled.value) return
+  const previous = flowEnabled.value
+  flowEnabled.value = enabled
+  flowSaving.value = true
+  try {
+    await setTaskbarBackgroundFlow(enabled)
+  } catch (error) {
+    flowEnabled.value = previous
+    notifySettingSaveFailed(t('settings.taskbar.backgroundStyle.coverFlow'), error)
+  } finally {
+    flowSaving.value = false
+  }
 }
 
 onMounted(initialize)
 onUnmounted(() => {
   disposed = true
-  unlisten?.()
+  unlistenStyle?.()
+  unlistenFlow?.()
 })
 </script>
 
@@ -98,7 +132,7 @@ onUnmounted(() => {
               t('settings.taskbar.backgroundStyle.styleDescription')
             }}</FieldDescription>
           </FieldContent>
-          <Tabs :model-value="baseStyle" @update:model-value="selectStyle">
+          <Tabs :model-value="selectedStyle" @update:model-value="selectStyle">
             <TabsList>
               <TabsTrigger value="theme" :disabled="saving">{{
                 t('settings.taskbar.backgroundStyle.theme')
@@ -109,7 +143,7 @@ onUnmounted(() => {
             </TabsList>
           </Tabs>
         </Field>
-        <Field v-if="baseStyle === 'cover-blur'" orientation="horizontal">
+        <Field v-if="selectedStyle === 'cover-blur'" orientation="horizontal">
           <FieldContent>
             <FieldLabel for="taskbar-background-flow">{{
               t('settings.taskbar.backgroundStyle.coverFlow')
@@ -120,8 +154,8 @@ onUnmounted(() => {
           </FieldContent>
           <Switch
             id="taskbar-background-flow"
-            :model-value="selectedStyle === 'cover-flow'"
-            :disabled="saving"
+            :model-value="flowEnabled"
+            :disabled="flowSaving"
             @update:model-value="selectFlow"
           />
         </Field>

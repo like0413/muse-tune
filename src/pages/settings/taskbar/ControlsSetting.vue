@@ -5,7 +5,13 @@ import type { SortableEvent } from 'sortablejs'
 
 import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Field, FieldContent, FieldGroup, FieldTitle } from '@/components/ui/field'
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldTitle,
+} from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -140,6 +146,9 @@ onMounted(loadVisibility)
         <Field :data-disabled="!selectedVisibility.visible">
           <FieldContent>
             <FieldTitle>{{ t('settings.taskbar.controls.buttons') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.controls.buttonsDescription')
+            }}</FieldDescription>
           </FieldContent>
           <div ref="orderContainer" class="grid grid-cols-4 gap-2">
             <div

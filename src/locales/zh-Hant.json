@@ -112,6 +112,7 @@
         "visible": "顯示按鈕群組",
         "visibleDescription": "是否顯示完整按鈕群組",
         "buttons": "顯示的按鈕",
+        "buttonsDescription": "選擇要顯示的按鈕，並可拖曳調整順序",
         "order": "控制按鈕順序"
       },
       "cover": {

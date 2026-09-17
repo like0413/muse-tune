@@ -15,7 +15,7 @@ import {
   type TaskbarTrackInfoScrolling,
 } from '@/features/settings/track-info'
 
-import ScrollingTrackTitle from './track-info/ScrollingTrackTitle.vue'
+import ScrollingTrackTitle from './ScrollingTrackTitle.vue'
 
 const props = defineProps<{ session: MediaSessionSnapshot | null }>()
 const alignment = shallowRef<TaskbarTrackInfoAlignment>(DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT)

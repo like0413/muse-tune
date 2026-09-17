@@ -112,6 +112,7 @@
         "visible": "Show control group",
         "visibleDescription": "Show or hide the complete control group",
         "buttons": "Visible buttons",
+        "buttonsDescription": "Choose which buttons to show and drag them to change their order",
         "order": "Control button order"
       },
       "cover": {

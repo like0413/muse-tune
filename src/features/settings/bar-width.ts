@@ -10,7 +10,7 @@ export const TASKBAR_WIDTH_MIN = 200
 export const TASKBAR_WIDTH_MAX = 360
 export const TASKBAR_WIDTH_PRESETS = {
   compact: 200,
-  standard: 280,
+  standard: 250,
   wide: 360,
 } as const
 

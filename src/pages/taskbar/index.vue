@@ -51,6 +51,7 @@ const isTaskbarHovered = useElementHover(taskbarRoot)
 const {
   backgroundTransparency,
   backgroundStyle: backgroundMode,
+  backgroundFlow,
   progressStyle,
   progressVisible,
   progressPosition,
@@ -199,7 +200,7 @@ onMounted(refreshCoverAnchors)
     <CoverBackgroundElement
       v-if="coverBackgroundActive && progressStyle !== 'vertical-gradient'"
       :image="coverImage"
-      :flow="backgroundMode === 'cover-flow'"
+      :flow="backgroundFlow"
     />
     <AudioSpectrumElement
       :theme-color="progressColor"

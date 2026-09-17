@@ -3,7 +3,10 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_BACKGROUND_STYLE,
+  DEFAULT_TASKBAR_BACKGROUND_FLOW,
+  getTaskbarBackgroundFlow,
   getTaskbarBackgroundStyle,
+  listenTaskbarBackgroundFlowChange,
   listenTaskbarBackgroundStyleChange,
   type TaskbarBackgroundStyle,
 } from '@/features/settings/background-style'
@@ -47,6 +50,7 @@ interface SettingBinding<T> {
 export function useTaskbarViewSettings() {
   const backgroundTransparency = shallowRef(0)
   const backgroundStyle = shallowRef<TaskbarBackgroundStyle>(DEFAULT_TASKBAR_BACKGROUND_STYLE)
+  const backgroundFlow = shallowRef(DEFAULT_TASKBAR_BACKGROUND_FLOW)
   const progressStyle = shallowRef<TaskbarProgressStyle>(DEFAULT_TASKBAR_PROGRESS_STYLE)
   const progressVisible = shallowRef(DEFAULT_TASKBAR_PROGRESS_VISIBLE)
   const progressPosition = shallowRef<TaskbarProgressPosition>(DEFAULT_TASKBAR_PROGRESS_POSITION)
@@ -87,6 +91,12 @@ export function useTaskbarViewSettings() {
         listen: listenTaskbarBackgroundStyleChange,
         apply: (value) => (backgroundStyle.value = value),
         failureMessage: '初始化任务栏背景样式失败',
+      }),
+      bindSetting({
+        load: getTaskbarBackgroundFlow,
+        listen: listenTaskbarBackgroundFlowChange,
+        apply: (value) => (backgroundFlow.value = value),
+        failureMessage: '初始化任务栏背景流动偏好失败',
       }),
       bindSetting({
         load: getTaskbarBackgroundTransparency,
@@ -135,6 +145,7 @@ export function useTaskbarViewSettings() {
 
   return {
     backgroundStyle: readonly(backgroundStyle),
+    backgroundFlow: readonly(backgroundFlow),
     backgroundTransparency: readonly(backgroundTransparency),
     progressStyle: readonly(progressStyle),
     progressVisible: readonly(progressVisible),

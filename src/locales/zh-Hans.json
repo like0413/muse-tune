@@ -112,6 +112,7 @@
         "visible": "显示按钮组",
         "visibleDescription": "是否显示按钮组",
         "buttons": "显示的按钮",
+        "buttonsDescription": "选择需要显示的按钮，并可拖动调整顺序",
         "order": "控制按钮顺序"
       },
       "cover": {
