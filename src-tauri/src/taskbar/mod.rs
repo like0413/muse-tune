@@ -22,6 +22,7 @@ use std::{
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 use tauri_plugin_store::StoreExt;
 
+use crate::native_defaults;
 use crate::settings_store::PATH as SETTINGS_STORE_PATH;
 
 pub use displays::TaskbarDisplay;
@@ -29,7 +30,6 @@ pub use geometry::TaskbarPlacement;
 const TASKBAR_WINDOW_LABEL: &str = "taskbar";
 const RECOVERY_RETRY_DELAY: Duration = Duration::from_millis(400);
 const DISPLAY_TOPOLOGY_CHECK_INTERVAL: Duration = Duration::from_secs(1);
-const ALL_DISPLAYS: &str = "all";
 const DISPLAY_TARGET_KEY: &str = "taskbar.displayTarget";
 const WIDTH_KEY: &str = "taskbar.width";
 const WIDTH_MODE_KEY: &str = "taskbar.widthMode";
@@ -45,7 +45,7 @@ struct DisplayTargetState {
 static DISPLAY_TARGET: LazyLock<(Mutex<DisplayTargetState>, Condvar)> = LazyLock::new(|| {
     (
         Mutex::new(DisplayTargetState {
-            value: ALL_DISPLAYS.to_owned(),
+            value: native_defaults::display_target().to_owned(),
             revision: 0,
         }),
         Condvar::new(),
@@ -227,7 +227,8 @@ pub fn hide_volume_popup<R: Runtime>(
 
 /// 更新目标显示器，并立即唤醒窗口管理线程。
 pub fn set_display_target(target: String) -> Result<(), String> {
-    if target != ALL_DISPLAYS && (target.is_empty() || target.trim() != target) {
+    if target != native_defaults::display_target() && (target.is_empty() || target.trim() != target)
+    {
         return Err("目标显示器标识无效".to_owned());
     }
 
@@ -313,7 +314,10 @@ fn restore_native_settings<R: Runtime>(app: &tauri::App<R>) {
     if let Some(target) = store
         .get(DISPLAY_TARGET_KEY)
         .and_then(|value| value.as_str().map(str::to_owned))
-        .filter(|target| target == ALL_DISPLAYS || (!target.is_empty() && target.trim() == target))
+        .filter(|target| {
+            target == native_defaults::display_target()
+                || (!target.is_empty() && target.trim() == target)
+        })
         && let Err(error) = set_display_target(target)
     {
         log::warn!("恢复目标显示器失败，本次启动使用全部显示器: {error}");
@@ -348,7 +352,7 @@ fn maintain_bar_windows<R: Runtime>(app: AppHandle<R>, stop: Arc<AtomicBool>) {
                 bar_is_alive
                     && display.display.id == *id
                     && display.taskbar == bar.taskbar
-                    && (target == ALL_DISPLAYS || target == *id)
+                    && (target == native_defaults::display_target() || target == *id)
             });
             if !remains_selected {
                 stopped_bar = true;
@@ -360,7 +364,8 @@ fn maintain_bar_windows<R: Runtime>(app: AppHandle<R>, stop: Arc<AtomicBool>) {
         }
 
         let primary_is_selected = displays.iter().any(|display| {
-            display.display.is_primary && (target == ALL_DISPLAYS || target == display.display.id)
+            display.display.is_primary
+                && (target == native_defaults::display_target() || target == display.display.id)
         });
         if !primary_is_selected
             && !primary_was_managed
@@ -370,10 +375,9 @@ fn maintain_bar_windows<R: Runtime>(app: AppHandle<R>, stop: Arc<AtomicBool>) {
             let _ = window.close();
         }
 
-        for display in displays
-            .into_iter()
-            .filter(|display| target == ALL_DISPLAYS || target == display.display.id)
-        {
+        for display in displays.into_iter().filter(|display| {
+            target == native_defaults::display_target() || target == display.display.id
+        }) {
             if bars.contains_key(&display.display.id) {
                 continue;
             }
@@ -426,7 +430,7 @@ fn maintain_bar_windows<R: Runtime>(app: AppHandle<R>, stop: Arc<AtomicBool>) {
 /// 原子读取目标与修订号，避免设置变化发生在两次独立读取之间。
 fn display_target_snapshot() -> (String, u64) {
     DISPLAY_TARGET.0.lock().map_or_else(
-        |_| (ALL_DISPLAYS.to_owned(), 0),
+        |_| (native_defaults::display_target().to_owned(), 0),
         |state| (state.value.clone(), state.revision),
     )
 }

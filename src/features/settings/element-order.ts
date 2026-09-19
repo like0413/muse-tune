@@ -9,6 +9,7 @@ const TASKBAR_ELEMENT_ORDER_CHANGED_EVENT = 'settings://taskbar-element-order-ch
 
 export type TaskbarElement = (typeof TASKBAR_ELEMENTS)[number]
 
+/** 默认顺序由 TASKBAR_ELEMENTS 派生，故留在本模块，未收进 defaults.ts。 */
 export const DEFAULT_TASKBAR_ELEMENT_ORDER: TaskbarElement[] = [...TASKBAR_ELEMENTS]
 
 /** 判断外部值是否为包含全部区块且没有重复项的有效排列。 */

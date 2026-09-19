@@ -1,8 +1,10 @@
+import { DEFAULT_APPLICATION_LOCALE } from '@/features/settings/defaults'
+
 export const APPLICATION_LOCALES = ['zh-Hans', 'zh-Hant', 'en'] as const
 
 export type ApplicationLocale = (typeof APPLICATION_LOCALES)[number]
 
-export const DEFAULT_APPLICATION_LOCALE: ApplicationLocale = 'zh-Hans'
+export { DEFAULT_APPLICATION_LOCALE }
 
 /** 返回 Intl 与 HTML lang 使用的标准语言标识。 */
 export function getApplicationLocaleTag(locale: unknown): ApplicationLocale {

@@ -6,6 +6,7 @@ mod ipc;
 mod logging;
 mod lyrics;
 mod media;
+mod native_defaults;
 mod settings_store;
 mod system;
 mod taskbar;

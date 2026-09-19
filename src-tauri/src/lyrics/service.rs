@@ -15,6 +15,7 @@ use reqwest::{Url, blocking::Client, redirect};
 use tauri::{Emitter, Manager, Runtime};
 
 use crate::media::{MediaPlayer, MediaSessionSnapshot};
+use crate::native_defaults;
 
 use super::{
     cache::{CacheLookup, ParsedLyricsCache},
@@ -95,11 +96,13 @@ struct LyricsPreferences {
 }
 
 impl Default for LyricsPreferences {
+    /// 状态不可用时回退到与前端共用同一份数据的默认偏好。
     fn default() -> Self {
+        let defaults = &native_defaults::shared().taskbar.lyrics;
         Self {
-            enabled: true,
-            allow_online: true,
-            online_strategy: LyricsOnlineStrategy::default(),
+            enabled: defaults.enabled,
+            allow_online: defaults.network_policy.allows_online(),
+            online_strategy: defaults.online_strategy,
         }
     }
 }

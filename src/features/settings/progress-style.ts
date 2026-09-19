@@ -1,6 +1,11 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
 
+import {
+  DEFAULT_TASKBAR_PROGRESS_POSITION,
+  DEFAULT_TASKBAR_PROGRESS_STYLE,
+  DEFAULT_TASKBAR_PROGRESS_VISIBLE,
+} from './defaults'
 import { settingsStore } from './store'
 
 const TASKBAR_PROGRESS_STYLES = ['bottom', 'vertical-gradient'] as const
@@ -15,9 +20,11 @@ const TASKBAR_PROGRESS_VISIBLE_CHANGED_EVENT = 'settings://taskbar-progress-visi
 export type TaskbarProgressStyle = (typeof TASKBAR_PROGRESS_STYLES)[number]
 export type TaskbarProgressPosition = (typeof TASKBAR_PROGRESS_POSITIONS)[number]
 
-export const DEFAULT_TASKBAR_PROGRESS_STYLE: TaskbarProgressStyle = 'bottom'
-export const DEFAULT_TASKBAR_PROGRESS_POSITION: TaskbarProgressPosition = 'bottom'
-export const DEFAULT_TASKBAR_PROGRESS_VISIBLE = true
+export {
+  DEFAULT_TASKBAR_PROGRESS_POSITION,
+  DEFAULT_TASKBAR_PROGRESS_STYLE,
+  DEFAULT_TASKBAR_PROGRESS_VISIBLE,
+}
 
 /** 读取进度条显隐，旧配置默认显示。 */
 export async function getTaskbarProgressVisible(): Promise<boolean> {

@@ -1,8 +1,8 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
 
+import { DEFAULT_TASKBAR_BACKGROUND_STYLE, DEFAULT_TASKBAR_PROGRESS_STYLE } from './defaults'
 import {
-  DEFAULT_TASKBAR_PROGRESS_STYLE,
   getTaskbarProgressStyle,
   setTaskbarProgressStyle,
   type TaskbarProgressStyle,
@@ -11,8 +11,9 @@ import { settingsStore } from './store'
 
 const BACKGROUND_STYLE_KEY = 'taskbar.backgroundStyle'
 const BACKGROUND_STYLE_CHANGED_EVENT = 'settings://taskbar-background-style-changed'
-export const DEFAULT_TASKBAR_BACKGROUND_STYLE = 'theme'
 export type TaskbarBackgroundStyle = 'theme' | 'cover-blur'
+
+export { DEFAULT_TASKBAR_BACKGROUND_STYLE }
 
 /** 验证持久化的背景样式。 */
 export function isTaskbarBackgroundStyle(value: unknown): value is TaskbarBackgroundStyle {

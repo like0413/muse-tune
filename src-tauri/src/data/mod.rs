@@ -117,7 +117,12 @@ pub fn open_directory<R: Runtime>(
     Ok(())
 }
 
-/// 使用官方 Store API 恢复默认配置并立即持久化。
+/// 恢复默认配置并立即持久化。
+///
+/// 这里没有通过 Store API 注册默认值，因此 `reset()` 等价于清空：settings.json
+/// 会被写成空对象，而不是立即写回各项默认值。默认值在下次启动时由各设置模块的
+/// 首次读取兜底并落盘，所以调整默认值只需修改前端的 `features/settings/defaults.ts`，
+/// 无需在此处维护迁移逻辑。调用方负责随后重启应用，避免旧值残留在运行中的窗口。
 pub fn reset_configuration<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let store = app
         .store(settings_store::PATH)

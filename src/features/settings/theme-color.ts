@@ -1,8 +1,7 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
 
-import { DEFAULT_BRAND_COLOR_HEX } from '@/features/theme/colors'
-
+import { DEFAULT_TASKBAR_THEME_COLOR } from './defaults'
 import { settingsStore } from './store'
 
 export const TASKBAR_THEME_COLOR_SOURCES = ['cover', 'system', 'custom'] as const
@@ -17,10 +16,7 @@ export interface TaskbarThemeColor {
   customColor: string
 }
 
-export const DEFAULT_TASKBAR_THEME_COLOR: TaskbarThemeColor = {
-  source: 'system',
-  customColor: DEFAULT_BRAND_COLOR_HEX,
-}
+export { DEFAULT_TASKBAR_THEME_COLOR }
 
 /** 判断主题色来源是否受支持。 */
 export function isTaskbarThemeColorSource(value: unknown): value is TaskbarThemeColorSource {

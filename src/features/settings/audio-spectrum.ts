@@ -2,6 +2,7 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
 import { clamp } from 'es-toolkit'
 
+import { DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS } from './defaults'
 import { SETTINGS_SCHEMA_VERSIONS } from './storage/schema-versions'
 import { loadVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
 
@@ -36,16 +37,7 @@ export interface TaskbarAudioSpectrumSettings {
   frameRate: TaskbarSpectrumFrameRate
 }
 
-export const DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS: TaskbarAudioSpectrumSettings = {
-  visible: true,
-  barCount: 24,
-  widthPercentage: 72,
-  alignment: 'bottom',
-  horizontalPosition: 50,
-  sensitivity: 100,
-  smoothing: 55,
-  frameRate: 20,
-}
+export { DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS }
 
 /** 判断外部值是否为支持的频谱对齐方式。 */
 export function isTaskbarSpectrumAlignment(value: unknown): value is TaskbarSpectrumAlignment {

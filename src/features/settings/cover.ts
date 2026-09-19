@@ -1,6 +1,7 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
 
+import { DEFAULT_TASKBAR_COVER_APPEARANCE } from './defaults'
 import { settingsStore } from './store'
 
 export const TASKBAR_COVER_SHAPES = ['square', 'rounded', 'circle'] as const
@@ -19,12 +20,7 @@ export interface TaskbarCoverAppearance {
   showPlayerSource: boolean
 }
 
-export const DEFAULT_TASKBAR_COVER_APPEARANCE: TaskbarCoverAppearance = {
-  visibility: 'always',
-  shape: 'rounded',
-  rotateWhenPlaying: false,
-  showPlayerSource: true,
-}
+export { DEFAULT_TASKBAR_COVER_APPEARANCE }
 
 /** 判断封面形状是否受支持。 */
 export function isTaskbarCoverShape(value: unknown): value is TaskbarCoverShape {

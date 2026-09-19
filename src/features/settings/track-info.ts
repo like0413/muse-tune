@@ -2,6 +2,11 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
 import { clamp } from 'es-toolkit'
 
+import {
+  DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT,
+  DEFAULT_TASKBAR_TRACK_INFO_SCROLLING,
+  DEFAULT_TASKBAR_TRACK_INFO_VISIBLE,
+} from './defaults'
 import { settingsStore } from './store'
 
 const TASKBAR_TRACK_INFO_ALIGNMENTS = ['left', 'right'] as const
@@ -24,12 +29,10 @@ export interface TaskbarTrackInfoScrolling {
   mode: TaskbarTrackInfoScrollMode
 }
 
-export const DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT: TaskbarTrackInfoAlignment = 'left'
-export const DEFAULT_TASKBAR_TRACK_INFO_VISIBLE = true
-export const DEFAULT_TASKBAR_TRACK_INFO_SCROLLING: TaskbarTrackInfoScrolling = {
-  enabled: true,
-  speed: 30,
-  mode: 'loop',
+export {
+  DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT,
+  DEFAULT_TASKBAR_TRACK_INFO_SCROLLING,
+  DEFAULT_TASKBAR_TRACK_INFO_VISIBLE,
 }
 
 /** 读取歌曲信息整体显隐。 */

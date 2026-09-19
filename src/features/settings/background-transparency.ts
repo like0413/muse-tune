@@ -2,6 +2,7 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
 import { clamp } from 'es-toolkit'
 
+import { DEFAULT_TASKBAR_BACKGROUND_TRANSPARENCY } from './defaults'
 import { SETTINGS_SCHEMA_VERSIONS } from './storage/schema-versions'
 import { loadVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
 
@@ -11,7 +12,6 @@ export const TASKBAR_TRANSPARENCY_MAX = 100
 const TASKBAR_BACKGROUND_TRANSPARENCY_KEY = 'taskbar.backgroundTransparency'
 const TASKBAR_BACKGROUND_TRANSPARENCY_CHANGED_EVENT =
   'settings://taskbar-background-transparency-changed'
-const DEFAULT_TASKBAR_BACKGROUND_TRANSPARENCY = 0
 
 /** 将外部透明度值规范到 0～100 的整数范围。 */
 export function normalizeTaskbarBackgroundTransparency(value: unknown): number | undefined {

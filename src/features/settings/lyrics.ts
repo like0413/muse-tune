@@ -4,8 +4,8 @@ import { clamp } from 'es-toolkit'
 
 import { setLyricsPreferences } from '@/features/lyrics/client'
 import { LYRICS_ONLINE_STRATEGIES, type LyricsOnlineStrategy } from '@/features/lyrics/types'
-import { DEFAULT_BRAND_COLOR_HEX, DEFAULT_LYRICS_UNPLAYED_COLOR_HEX } from '@/features/theme/colors'
 
+import { DEFAULT_TASKBAR_LYRICS_SETTINGS } from './defaults'
 import { SETTINGS_SCHEMA_VERSIONS } from './storage/schema-versions'
 import { loadVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
 import { normalizeHexColor } from './theme-color'
@@ -49,23 +49,7 @@ export interface TaskbarLyricsSettings {
   fontFamily: string
 }
 
-export const DEFAULT_TASKBAR_LYRICS_SETTINGS: TaskbarLyricsSettings = {
-  enabled: true,
-  alignment: 'left',
-  lineMode: 'double',
-  secondaryLine: 'translation_or_next',
-  networkPolicy: 'auto',
-  onlineStrategy: 'parallel',
-  timingOffsetMs: 0,
-  wordHighlight: true,
-  animation: 'up',
-  animationPreRoll: true,
-  fontSize: 14,
-  colorScheme: 'theme',
-  playedColor: DEFAULT_BRAND_COLOR_HEX,
-  unplayedColor: DEFAULT_LYRICS_UNPLAYED_COLOR_HEX,
-  fontFamily: '',
-}
+export { DEFAULT_TASKBAR_LYRICS_SETTINGS }
 
 /** 判断外部值是否为支持的歌词对齐方式。 */
 export function isTaskbarLyricsAlignment(value: unknown): value is TaskbarLyricsAlignment {
@@ -201,7 +185,21 @@ export function getTaskbarLyricsSettings(): Promise<TaskbarLyricsSettings> {
   return loadVersionedSetting(lyricsStorage)
 }
 
-/** 保存显示配置、同步后端解析开关并广播到全部任务栏窗口。 */
+/** 将歌词显示配置映射为后端歌词解析偏好；原生侧值未变化时是空操作。 */
+async function applyLyricsPreferences(settings: TaskbarLyricsSettings): Promise<void> {
+  await setLyricsPreferences({
+    enabled: settings.enabled,
+    allowOnline: settings.networkPolicy === 'auto',
+    onlineStrategy: settings.onlineStrategy,
+  })
+}
+
+/**
+ * 保存显示配置、同步后端解析开关并广播到全部任务栏窗口。
+ *
+ * 必须经由本函数写入：后端只在启动时读取 `enabled` / `networkPolicy` / `onlineStrategy`，
+ * 绕过它直接写 `settingsStore` 不会把这几个字段推送给后端（见 `defaults.ts` 的写入契约）。
+ */
 export async function setTaskbarLyricsSettings(value: TaskbarLyricsSettings): Promise<void> {
   const previous = await getTaskbarLyricsSettings()
   const saved = await setVersionedSetting(lyricsStorage, value)
@@ -211,11 +209,7 @@ export async function setTaskbarLyricsSettings(value: TaskbarLyricsSettings): Pr
     saved.onlineStrategy !== previous.onlineStrategy
   ) {
     try {
-      await setLyricsPreferences({
-        enabled: saved.enabled,
-        allowOnline: saved.networkPolicy === 'auto',
-        onlineStrategy: saved.onlineStrategy,
-      })
+      await applyLyricsPreferences(saved)
     } catch (error) {
       await setVersionedSetting(lyricsStorage, previous)
       throw error

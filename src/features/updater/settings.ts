@@ -1,6 +1,11 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
 
+import {
+  DEFAULT_AUTOMATIC_UPDATE_CHECK,
+  DEFAULT_UPDATE_CHECK_FREQUENCY,
+  DEFAULT_UPDATE_CHECK_RESULT,
+} from '@/features/settings/defaults'
 import { SETTINGS_SCHEMA_VERSIONS } from '@/features/settings/storage/schema-versions'
 import {
   loadVersionedSetting,
@@ -8,7 +13,6 @@ import {
 } from '@/features/settings/storage/versioned-setting'
 
 const AUTOMATIC_UPDATE_CHECK_KEY = 'application.automatic-update-check'
-const AUTOMATIC_UPDATE_CHECK_DEFAULT = true
 const UPDATE_CHECK_FREQUENCY_KEY = 'application.update-check-frequency'
 const UPDATE_CHECK_RESULT_KEY = 'application.update-check-result'
 const UPDATE_CHECK_PREFERENCES_CHANGED_EVENT = 'updater://preferences-changed'
@@ -22,7 +26,7 @@ export interface UpdateCheckResult {
   availableVersion: string | null
 }
 
-export const DEFAULT_UPDATE_CHECK_FREQUENCY: UpdateCheckFrequency = 'weekly'
+export { DEFAULT_UPDATE_CHECK_FREQUENCY }
 
 const UPDATE_CHECK_INTERVALS: Record<UpdateCheckFrequency, number> = {
   daily: 24 * 60 * 60 * 1_000,
@@ -30,13 +34,8 @@ const UPDATE_CHECK_INTERVALS: Record<UpdateCheckFrequency, number> = {
   monthly: 30 * 24 * 60 * 60 * 1_000,
 }
 
-const DEFAULT_UPDATE_CHECK_RESULT: UpdateCheckResult = {
-  checkedAt: 0,
-  availableVersion: null,
-}
-
 function normalizeAutomaticUpdateCheck(value: unknown): boolean {
-  return typeof value === 'boolean' ? value : AUTOMATIC_UPDATE_CHECK_DEFAULT
+  return typeof value === 'boolean' ? value : DEFAULT_AUTOMATIC_UPDATE_CHECK
 }
 
 /** 判断持久化值是否为受支持的自动更新检查频率。 */
@@ -71,7 +70,7 @@ function normalizeUpdateCheckResult(value: unknown): UpdateCheckResult {
 const automaticUpdateCheckOptions = {
   key: AUTOMATIC_UPDATE_CHECK_KEY,
   version: SETTINGS_SCHEMA_VERSIONS.application.automaticUpdateCheck,
-  defaultValue: AUTOMATIC_UPDATE_CHECK_DEFAULT,
+  defaultValue: DEFAULT_AUTOMATIC_UPDATE_CHECK,
   normalize: normalizeAutomaticUpdateCheck,
 }
 

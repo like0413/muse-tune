@@ -1,6 +1,7 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
 
+import { DEFAULT_TASKBAR_AUTO_HIDE } from './defaults'
 import { settingsStore } from './store'
 
 const TASKBAR_AUTO_HIDE_KEY = 'taskbar.autoHide'
@@ -11,10 +12,7 @@ export interface TaskbarAutoHide {
   whenNoMediaSession: boolean
 }
 
-export const DEFAULT_TASKBAR_AUTO_HIDE: TaskbarAutoHide = {
-  whenPaused: false,
-  whenNoMediaSession: false,
-}
+export { DEFAULT_TASKBAR_AUTO_HIDE }
 
 /** 将外部数据规范为完整的 bar 自动隐藏配置。 */
 export function normalizeTaskbarAutoHide(value: unknown): TaskbarAutoHide {

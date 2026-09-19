@@ -25,6 +25,7 @@ export const SUPPORTED_MEDIA_PLAYERS = [
 const MEDIA_SESSION_SELECTION_KEY = 'media.sessionSelection'
 const MEDIA_SESSION_SELECTION_CHANGED_EVENT = 'settings://media-session-selection-changed'
 
+/** playerPriority 由 SUPPORTED_MEDIA_PLAYERS 派生，故整个默认值留在本模块，未收进 defaults.ts。 */
 export const DEFAULT_MEDIA_SESSION_SELECTION_POLICY: MediaSessionSelectionPolicy = {
   strategy: 'recent_playback',
   playerPriority: [...SUPPORTED_MEDIA_PLAYERS],
@@ -75,7 +76,12 @@ export async function getMediaSessionSelectionPolicy(): Promise<MediaSessionSele
   )
 }
 
-/** 保存选择策略并通知任务栏实时应用。 */
+/**
+ * 保存选择策略并通知任务栏实时应用。
+ *
+ * 必须经由本函数写入：原生侧依赖这里广播的变更事件完成推送，绕过它直接写
+ * `settingsStore` 不会触发同步（见 `defaults.ts` 的写入契约）。
+ */
 export async function setMediaSessionSelectionPolicy(
   policy: MediaSessionSelectionPolicy,
 ): Promise<void> {

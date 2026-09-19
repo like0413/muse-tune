@@ -2,13 +2,15 @@
 
 use std::{
     sync::{
-        Arc,
+        Arc, LazyLock,
         atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering},
     },
     time::{Duration, Instant},
 };
 
 use windows::Win32::Foundation::HWND;
+
+use crate::native_defaults;
 
 use super::{
     RECOVERY_RETRY_DELAY, TaskbarOverlapPriority, TaskbarWidthMode, content_visible,
@@ -32,12 +34,26 @@ const FULLSCREEN_STATE_CHECK_INTERVAL: Duration = Duration::from_millis(250);
 /// 全屏轮询被跳过（系统自动隐藏已开启）时的等待上限；WinEvent 仍可随时唤醒循环。
 const IDLE_WAIT_TIMEOUT: Duration = Duration::from_secs(60);
 const UIA_RECOVERY_QUERY_INTERVAL: Duration = Duration::from_secs(1);
-const MIN_CONTENT_WIDTH_DIP: i32 = 200;
-const MAX_CONTENT_WIDTH_DIP: i32 = 360;
-static TASKBAR_PLACEMENT: AtomicU8 = AtomicU8::new(TaskbarPlacement::Auto as u8);
-static TASKBAR_OVERLAP_PRIORITY: AtomicU8 = AtomicU8::new(TaskbarOverlapPriority::Bar as u8);
-static TASKBAR_CONTENT_WIDTH_DIP: AtomicI32 = AtomicI32::new(MAX_CONTENT_WIDTH_DIP);
-static TASKBAR_WIDTH_MODE: AtomicU8 = AtomicU8::new(TaskbarWidthMode::Fixed as u8);
+// 下列静态值的初值即共享默认值（见 `native-defaults.json`）。`restore_native_settings` 会在
+// 创建任务栏窗口之前用已持久化的设置覆盖它们，因此默认值只在共享文件中定义一次。
+static TASKBAR_PLACEMENT: LazyLock<AtomicU8> =
+    LazyLock::new(|| AtomicU8::new(native_defaults::shared().taskbar.placement as u8));
+static TASKBAR_OVERLAP_PRIORITY: LazyLock<AtomicU8> =
+    LazyLock::new(|| AtomicU8::new(native_defaults::shared().taskbar.overlap_priority as u8));
+static TASKBAR_CONTENT_WIDTH_DIP: LazyLock<AtomicI32> =
+    LazyLock::new(|| AtomicI32::new(native_defaults::shared().taskbar.width));
+static TASKBAR_WIDTH_MODE: LazyLock<AtomicU8> =
+    LazyLock::new(|| AtomicU8::new(native_defaults::shared().taskbar.width_mode as u8));
+
+/// bar 基准宽度的可调下限，与前端共用同一份取值。
+fn min_content_width() -> i32 {
+    native_defaults::shared().taskbar.width_min
+}
+
+/// bar 基准宽度的可调上限，与前端共用同一份取值。
+fn max_content_width() -> i32 {
+    native_defaults::shared().taskbar.width_max
+}
 
 /// 隔离 Shell 未提供事件的全屏状态查询，状态未变化时不唤醒完整同步流程。
 struct FullscreenStateMonitor {
@@ -93,7 +109,7 @@ pub(super) fn set_overlap_priority(priority: TaskbarOverlapPriority) {
 
 /// 跨线程更新 bar 基准宽度；仅在值变化时唤醒全部同步线程。
 pub(super) fn set_content_width(width: i32) {
-    let width = width.clamp(MIN_CONTENT_WIDTH_DIP, MAX_CONTENT_WIDTH_DIP);
+    let width = width.clamp(min_content_width(), max_content_width());
     if TASKBAR_CONTENT_WIDTH_DIP.swap(width, Ordering::AcqRel) != width {
         super::events::request_all_layout_updates();
     }
@@ -479,7 +495,7 @@ fn auto_width_from_elements(
         return content_width();
     };
 
-    auto_content_width(taskbar_rect, anchor_right, side, dpi, elements).max(MIN_CONTENT_WIDTH_DIP)
+    auto_content_width(taskbar_rect, anchor_right, side, dpi, elements).max(min_content_width())
 }
 
 /// 窗口保持理想位置和完整尺寸，仅用 Win32 region 提交稳定后的可见范围。

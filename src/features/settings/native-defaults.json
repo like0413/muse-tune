@@ -1,0 +1,28 @@
+{
+  "taskbar": {
+    "widthMin": 200,
+    "widthMax": 360,
+    "width": 360,
+    "widthMode": "fixed",
+    "placement": "auto",
+    "overlapPriority": "bar",
+    "displayTarget": "all",
+    "lyrics": {
+      "enabled": true,
+      "networkPolicy": "auto",
+      "onlineStrategy": "parallel"
+    }
+  },
+  "versions": {
+    "application": {
+      "automaticUpdateCheck": 1,
+      "updateCheckFrequency": 1,
+      "updateCheckResult": 1
+    },
+    "taskbar": {
+      "audioSpectrum": 1,
+      "backgroundTransparency": 1,
+      "lyrics": 1
+    }
+  }
+}

@@ -18,6 +18,7 @@ export interface TaskbarControlsVisibility {
   order: TaskbarControlButton[]
 }
 
+/** order 由 TASKBAR_CONTROL_BUTTONS 派生，故整个默认值留在本模块，未收进 defaults.ts。 */
 export const DEFAULT_TASKBAR_CONTROLS_VISIBILITY: TaskbarControlsVisibility = {
   visible: true,
   previous: true,

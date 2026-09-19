@@ -3,12 +3,19 @@ import { clamp } from 'es-toolkit'
 import { setTaskbarWidth as applyNativeTaskbarWidth } from '@/features/taskbar/client'
 import { TASKBAR_WIDTH_MODES, type TaskbarWidthMode } from '@/features/taskbar/contracts'
 
+import {
+  DEFAULT_TASKBAR_WIDTH,
+  DEFAULT_TASKBAR_WIDTH_MODE,
+  TASKBAR_WIDTH_MAX,
+  TASKBAR_WIDTH_MIN,
+} from './defaults'
 import { settingsStore } from './store'
 
 export type { TaskbarWidthMode } from '@/features/taskbar/contracts'
 
-export const TASKBAR_WIDTH_MIN = 200
-export const TASKBAR_WIDTH_MAX = 360
+/** 可调范围与原生侧共用同一份取值，见 defaults.ts 的 native-defaults.json 说明。 */
+export { TASKBAR_WIDTH_MAX, TASKBAR_WIDTH_MIN }
+
 export const TASKBAR_WIDTH_PRESETS = {
   compact: 200,
   standard: 250,
@@ -19,8 +26,6 @@ export type TaskbarWidthPreset = keyof typeof TASKBAR_WIDTH_PRESETS | 'custom'
 
 const TASKBAR_WIDTH_KEY = 'taskbar.width'
 const TASKBAR_WIDTH_MODE_KEY = 'taskbar.widthMode'
-const DEFAULT_TASKBAR_WIDTH = TASKBAR_WIDTH_MAX
-const DEFAULT_TASKBAR_WIDTH_MODE: TaskbarWidthMode = 'fixed'
 
 /** 根据已保存宽度还原预设；非精确预设值归入自由调整。 */
 export function getTaskbarWidthPreset(width: number): TaskbarWidthPreset {
@@ -62,7 +67,12 @@ export async function applyTaskbarWidth(width: number, mode: TaskbarWidthMode): 
   }
 }
 
-/** 立即应用宽度模式与基准宽度，并在成功后持久化。 */
+/**
+ * 立即应用宽度模式与基准宽度，并在成功后持久化。
+ *
+ * 必须经由本函数写入：原生侧只在启动时读取存储，运行期间不再同步这两个键。
+ * 绕过它直接写 `settingsStore` 会让原生保持旧值，而设置界面显示新值（见 `defaults.ts` 的写入契约）。
+ */
 export async function setTaskbarWidth(width: number, mode: TaskbarWidthMode): Promise<void> {
   const normalized = normalizeTaskbarWidth(width)
   if (normalized === undefined) {
