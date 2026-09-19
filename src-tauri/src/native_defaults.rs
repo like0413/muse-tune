@@ -11,6 +11,7 @@
 use std::sync::LazyLock;
 
 use crate::lyrics::LyricsOnlineStrategy;
+use crate::media::MediaSessionSelectionStrategy;
 use crate::taskbar::{TaskbarOverlapPriority, TaskbarPlacement, TaskbarWidthMode};
 
 const SHARED_DEFAULTS: &str = include_str!("../../src/features/settings/native-defaults.json");
@@ -35,6 +36,7 @@ impl LyricsNetworkPolicy {
 #[serde(rename_all = "camelCase")]
 pub struct SharedDefaults {
     pub taskbar: TaskbarDefaults,
+    pub media: MediaDefaults,
     /// 原生启动期需要自行判废的版本化设置；未在此声明的版本条目会被 serde 忽略。
     pub versions: Versions,
 }
@@ -72,6 +74,14 @@ pub struct LyricsDefaults {
     pub enabled: bool,
     pub network_policy: LyricsNetworkPolicy,
     pub online_strategy: LyricsOnlineStrategy,
+}
+
+/// 媒体服务在前端推送到达前使用的会话选择策略；优先级顺序由播放器枚举派生，故不在此。
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaDefaults {
+    pub selection_strategy: MediaSessionSelectionStrategy,
+    pub only_supported_players: bool,
 }
 
 static DEFAULTS: LazyLock<SharedDefaults> = LazyLock::new(|| {

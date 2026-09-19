@@ -1,5 +1,6 @@
 import type { ApplicationLocale } from '@/features/i18n/locales'
 import type { LyricsOnlineStrategy } from '@/features/lyrics/types'
+import type { MediaSessionSelectionStrategy } from '@/features/media/types'
 import type {
   TaskbarOverlapPriority,
   TaskbarPlacement,
@@ -27,9 +28,9 @@ import type { TaskbarTrackInfoAlignment, TaskbarTrackInfoScrolling } from './tra
  * 与 `./native-defaults.json`，不构成循环导入。
  *
  * 由域枚举派生的默认值仍留在各自模块内，因为它们必须跟随枚举本身变化：
- * `taskbar.elementOrder`、`taskbar.controls.visibility.order`、
- * `media.sessionSelection.playerPriority`。若搬到这里，本文件将反向依赖设置模块，
- * 并触发初始化期的暂时性死区错误。
+ * `taskbar.elementOrder`、`taskbar.controls.visibility`（整份默认值，其 `order`
+ * 与 `TASKBAR_CONTROL_BUTTONS` 一一对应）、`media.sessionSelection.playerPriority`。
+ * 若搬到这里，本文件将反向依赖设置模块，并触发初始化期的暂时性死区错误。
  */
 
 /**
@@ -67,6 +68,10 @@ const sharedDefaults = nativeDefaultsJson as {
       onlineStrategy: LyricsOnlineStrategy
     }
   }
+  media: {
+    selectionStrategy: MediaSessionSelectionStrategy
+    onlySupportedPlayers: boolean
+  }
 }
 
 // ---- application ----
@@ -80,8 +85,8 @@ export const DEFAULT_REDUCED_MOTION = false
 /** 默认开启应用级自动更新检测。 */
 export const DEFAULT_AUTOMATIC_UPDATE_CHECK = true
 
-/** 默认按周检测更新。 */
-export const DEFAULT_UPDATE_CHECK_FREQUENCY: UpdateCheckFrequency = 'weekly'
+/** 默认每日检测更新。 */
+export const DEFAULT_UPDATE_CHECK_FREQUENCY: UpdateCheckFrequency = 'daily'
 
 /** 尚未完成任何一次更新检测时的初始结果。 */
 export const DEFAULT_UPDATE_CHECK_RESULT: UpdateCheckResult = {
@@ -94,8 +99,8 @@ export const DEFAULT_UPDATE_CHECK_RESULT: UpdateCheckResult = {
 /** 任务栏背景透明度默认完全不透明。 */
 export const DEFAULT_TASKBAR_BACKGROUND_TRANSPARENCY = 0
 
-/** 背景样式默认跟随主题。 */
-export const DEFAULT_TASKBAR_BACKGROUND_STYLE: TaskbarBackgroundStyle = 'theme'
+/** 背景样式默认使用封面模糊。 */
+export const DEFAULT_TASKBAR_BACKGROUND_STYLE: TaskbarBackgroundStyle = 'cover-blur'
 
 /** bar 基准宽度的可调下限；原生侧用同一份取值做钳制。 */
 export const TASKBAR_WIDTH_MIN = sharedDefaults.taskbar.widthMin
@@ -128,23 +133,23 @@ export const DEFAULT_TASKBAR_PROGRESS_POSITION: TaskbarProgressPosition = 'botto
 /** 播放进度默认可见。 */
 export const DEFAULT_TASKBAR_PROGRESS_VISIBLE = true
 
-/** 默认暂停与无媒体会话时都不自动隐藏。 */
+/** 默认无媒体会话时自动隐藏，暂停时不隐藏。 */
 export const DEFAULT_TASKBAR_AUTO_HIDE: TaskbarAutoHide = {
   whenPaused: false,
-  whenNoMediaSession: false,
+  whenNoMediaSession: true,
 }
 
-/** 封面默认始终显示、圆角、不旋转，并标注播放器来源。 */
+/** 封面默认始终显示、圆角、播放时旋转，并标注播放器来源。 */
 export const DEFAULT_TASKBAR_COVER_APPEARANCE: TaskbarCoverAppearance = {
   visibility: 'always',
   shape: 'rounded',
-  rotateWhenPlaying: false,
+  rotateWhenPlaying: true,
   showPlayerSource: true,
 }
 
-/** 主题色默认跟随系统主题。 */
+/** 主题色默认取自封面。 */
 export const DEFAULT_TASKBAR_THEME_COLOR: TaskbarThemeColor = {
-  source: 'system',
+  source: 'cover',
   customColor: DEFAULT_BRAND_COLOR_HEX,
 }
 
@@ -176,18 +181,28 @@ export const DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT: TaskbarTrackInfoAlignment = '
 /** 歌名溢出默认循环滚动。 */
 export const DEFAULT_TASKBAR_TRACK_INFO_SCROLLING: TaskbarTrackInfoScrolling = {
   enabled: true,
-  speed: 30,
+  speed: 25,
   mode: 'loop',
 }
 
-/** 频谱默认可见、底部对齐、24 条、占据 72% 宽度。 */
+/** 频谱默认隐藏、底部对齐、24 条、占据 45% 宽度。 */
 export const DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS: TaskbarAudioSpectrumSettings = {
-  visible: true,
+  visible: false,
   barCount: 24,
-  widthPercentage: 72,
+  widthPercentage: 45,
   alignment: 'bottom',
-  horizontalPosition: 50,
+  horizontalPosition: 100,
   sensitivity: 100,
   smoothing: 55,
   frameRate: 20,
 }
+
+// ---- media ----
+
+/** 多播放器并存时默认按最近播放选择会话。 */
+export const DEFAULT_MEDIA_SESSION_SELECTION_STRATEGY: MediaSessionSelectionStrategy =
+  sharedDefaults.media.selectionStrategy
+
+/** 默认只把受支持的播放器纳入候选。 */
+export const DEFAULT_MEDIA_SESSION_ONLY_SUPPORTED_PLAYERS =
+  sharedDefaults.media.onlySupportedPlayers

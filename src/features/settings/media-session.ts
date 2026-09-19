@@ -7,6 +7,10 @@ import type {
   MediaSessionSelectionStrategy,
 } from '@/features/media/types'
 
+import {
+  DEFAULT_MEDIA_SESSION_ONLY_SUPPORTED_PLAYERS,
+  DEFAULT_MEDIA_SESSION_SELECTION_STRATEGY,
+} from './defaults'
 import { settingsStore } from './store'
 
 export const MEDIA_SESSION_SELECTION_STRATEGIES = [
@@ -25,11 +29,11 @@ export const SUPPORTED_MEDIA_PLAYERS = [
 const MEDIA_SESSION_SELECTION_KEY = 'media.sessionSelection'
 const MEDIA_SESSION_SELECTION_CHANGED_EVENT = 'settings://media-session-selection-changed'
 
-/** playerPriority 由 SUPPORTED_MEDIA_PLAYERS 派生，故整个默认值留在本模块，未收进 defaults.ts。 */
+/** 会话选择策略默认值；`playerPriority` 的规范顺序由 SUPPORTED_MEDIA_PLAYERS 派生，其余取自共享配置。 */
 export const DEFAULT_MEDIA_SESSION_SELECTION_POLICY: MediaSessionSelectionPolicy = {
-  strategy: 'recent_playback',
+  strategy: DEFAULT_MEDIA_SESSION_SELECTION_STRATEGY,
   playerPriority: [...SUPPORTED_MEDIA_PLAYERS],
-  onlySupportedPlayers: false,
+  onlySupportedPlayers: DEFAULT_MEDIA_SESSION_ONLY_SUPPORTED_PLAYERS,
 }
 
 /** 判断外部值是否为有效会话选择策略。 */

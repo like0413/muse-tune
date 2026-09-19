@@ -2,16 +2,20 @@
   "taskbar": {
     "widthMin": 200,
     "widthMax": 360,
-    "width": 360,
+    "width": 250,
     "widthMode": "fixed",
     "placement": "auto",
-    "overlapPriority": "bar",
+    "overlapPriority": "taskbar",
     "displayTarget": "all",
     "lyrics": {
       "enabled": true,
       "networkPolicy": "auto",
       "onlineStrategy": "parallel"
     }
+  },
+  "media": {
+    "selectionStrategy": "recent_playback",
+    "onlySupportedPlayers": true
   },
   "versions": {
     "application": {

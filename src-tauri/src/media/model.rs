@@ -1,5 +1,7 @@
 use windows::Media::Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus;
 
+use crate::native_defaults;
+
 /// 当前 GSMTC 会话的媒体信息与控制状态。
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -106,26 +108,32 @@ pub enum MediaSessionSelectionStrategy {
 }
 
 /// 会话选择策略及固定优先级的完整配置。
+///
+/// 三个字段都要求显式传入：前端始终发送规范化后的完整策略，因此这里不使用
+/// `#[serde(default)]`——那会为 `only_supported_players` 引入第二个默认值，
+/// 与下方 `Default` 实现相矛盾。
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaSessionSelectionPolicy {
     pub strategy: MediaSessionSelectionStrategy,
     pub player_priority: Vec<MediaPlayer>,
-    #[serde(default)]
     pub only_supported_players: bool,
 }
 
+/// 前端推送到达前媒体线程使用的占位策略，取值与前端默认值同来自共享配置。
+/// `player_priority` 的规范顺序由 `MediaPlayer` 枚举派生，故仍在此构造。
 impl Default for MediaSessionSelectionPolicy {
     fn default() -> Self {
+        let media = &native_defaults::shared().media;
         Self {
-            strategy: MediaSessionSelectionStrategy::RecentPlayback,
+            strategy: media.selection_strategy,
             player_priority: vec![
                 MediaPlayer::QqMusic,
                 MediaPlayer::NeteaseCloudMusic,
                 MediaPlayer::SodaMusic,
                 MediaPlayer::KugouMusic,
             ],
-            only_supported_players: false,
+            only_supported_players: media.only_supported_players,
         }
     }
 }
