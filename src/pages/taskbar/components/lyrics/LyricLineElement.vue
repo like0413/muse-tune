@@ -10,11 +10,20 @@ const SCROLL_START_PROGRESS = 0.28
 const SCROLL_END_PROGRESS = 0.88
 const WORD_GRADIENT_HALF_WIDTH = 12
 const CENTER_COLOR_STRENGTH = 50
+/** 第二行字号比第一行小 2px，晋升到第一行时用缩放补出这段“由小变大”。 */
+const SECONDARY_FONT_SIZE_OFFSET = 2
 
 const alignmentClasses: Record<TaskbarLyricsAlignment, string> = {
   left: 'text-left',
   center: 'text-center',
   right: 'text-right',
+}
+
+/** 缩放原点跟随对齐方式，保证放大过程中文字不会横向漂移。 */
+const alignmentOrigins: Record<TaskbarLyricsAlignment, string> = {
+  left: 'left center',
+  center: 'center',
+  right: 'right center',
 }
 
 const props = defineProps<{
@@ -70,6 +79,8 @@ const contentStyle = computed<CSSProperties>(() => ({
   fontSize: `${props.fontSize}px`,
   height: `${props.lineHeight}px`,
   lineHeight: `${props.lineHeight}px`,
+  transformOrigin: alignmentOrigins[props.alignment],
+  '--lyric-row-grow-from': `${(props.fontSize - SECONDARY_FONT_SIZE_OFFSET) / props.fontSize}`,
 }))
 const trackClass = computed(() => [
   alignmentClasses[props.alignment],
@@ -140,6 +151,22 @@ function wordStateClass(index: number) {
   if (index === activeWordIndex.value) return 'lyric-word-active'
   return 'lyric-word-pending'
 }
+
+/**
+ * 晋升到第一行时播放一次缩放动画：字号与行高已直接对齐到第一行大小，
+ * 缩放把“由小变大”补回来。动画只跑 transform，不插值 font-size，
+ * 因此文字不会逐帧重排，逐字渐变也不用每帧重画。
+ */
+const growing = shallowRef(false)
+watch(
+  () => props.primary,
+  (primary, previouslyPrimary) => {
+    if (!primary || previouslyPrimary || !props.animated) return
+    // 先复位再于下一帧加类，连续两次晋升都能重新播放。
+    growing.value = false
+    void nextTick(() => (growing.value = true))
+  },
+)
 </script>
 
 <template>
@@ -151,7 +178,7 @@ function wordStateClass(index: number) {
     <div
       ref="viewport"
       class="relative w-full overflow-hidden"
-      :class="{ 'lyric-content-animated': animated }"
+      :class="{ 'lyric-row-growing': growing }"
       :style="contentStyle"
     >
       <div class="lyric-line-track whitespace-pre" :class="trackClass" :style="trackStyle">
@@ -179,12 +206,15 @@ function wordStateClass(index: number) {
   transition: transform 80ms linear;
 }
 
-/* 动画时长由 LyricsElement 统一下发，保证行换位与字号变化同步。 */
-.lyric-content-animated {
-  transition:
-    height var(--lyric-duration-ms) ease-out,
-    line-height var(--lyric-duration-ms) ease-out,
-    font-size var(--lyric-duration-ms) ease-out;
+/* 晋升到第一行：字号与行高已直接对齐，这里只用整体缩放补出“由小变大”。 */
+.lyric-row-growing {
+  animation: lyric-row-grow var(--lyric-duration-ms) ease-out;
+}
+
+@keyframes lyric-row-grow {
+  from {
+    transform: scale(var(--lyric-row-grow-from));
+  }
 }
 
 .lyric-word {

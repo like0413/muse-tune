@@ -4,24 +4,45 @@ const props = defineProps<{
   flow: boolean
 }>()
 
-interface BackgroundArtwork {
-  source: string
-  order: number
+/** 常驻图层数量：新封面写入另一个图层后再切换，靠交叉淡入完成过渡。 */
+const SLOT_COUNT = 2
+
+const sources = shallowRef<(string | null)[]>(Array.from({ length: SLOT_COUNT }, () => null))
+const activeIndex = shallowRef(0)
+let displayedSource: string | null = null
+
+/** 写入指定图层的封面地址；整体替换数组以触发更新。 */
+function setSource(index: number, source: string) {
+  const next = [...sources.value]
+  next[index] = source
+  sources.value = next
 }
 
-const artwork = shallowRef<BackgroundArtwork | null>(null)
-let artworkOrder = 0
-
-/** 共享封面已完成解码并处理短暂空值，此处只同步当前图层。 */
+/**
+ * 交叉淡入淡出：新封面先写入未激活的常驻图层，绘制完成后再切换激活项。
+ * 图层始终存在，只有透明度在变，因此过渡中不会出现图层创建或回收带来的亮度跳变，
+ * 旧封面也会在过渡期间保持可见，不会整条 bar 先暗下去。
+ */
 watch(
   () => props.image,
   (image) => {
-    if (!image) {
-      artwork.value = null
+    const source = image?.src ?? null
+    if (source === displayedSource) return
+    const wasVisible = displayedSource !== null
+    displayedSource = source
+    if (!source) return
+
+    // 上一次没有可见封面时直接写入激活图层，避免外层淡入过程中先露出更早的封面。
+    if (!wasVisible) {
+      setSource(activeIndex.value, source)
       return
     }
 
-    artwork.value = { source: image.src, order: ++artworkOrder }
+    const target = (activeIndex.value + 1) % SLOT_COUNT
+    setSource(target, source)
+    void nextTick(() => {
+      requestAnimationFrame(() => (activeIndex.value = target))
+    })
   },
   { immediate: true },
 )
@@ -30,36 +51,38 @@ watch(
 <template>
   <div
     class="cover-background pointer-events-none absolute -inset-6 z-0"
-    :style="{ opacity: artwork ? 0.4 : 0 }"
+    :style="{ opacity: image ? 0.4 : 0 }"
     aria-hidden="true"
   >
-    <Transition name="cover-image" mode="in-out">
+    <div
+      v-for="(source, index) in sources"
+      :key="index"
+      class="cover-image absolute inset-0"
+      :style="{ opacity: index === activeIndex && source ? 1 : 0 }"
+    >
       <div
-        v-if="artwork"
-        :key="artwork.source"
-        class="cover-image absolute inset-0"
-        :style="{ zIndex: artwork.order }"
-      >
-        <div
-          class="cover-image-blur absolute inset-0"
-          :style="{ backgroundImage: `url(${JSON.stringify(artwork.source)})` }"
-          aria-hidden="true"
-        />
-        <div
-          v-if="flow"
-          class="cover-image-flow absolute inset-0"
-          :style="{ backgroundImage: `url(${JSON.stringify(artwork.source)})` }"
-          aria-hidden="true"
-        />
-      </div>
-    </Transition>
+        class="cover-image-blur absolute inset-0"
+        :style="source ? { backgroundImage: `url(${JSON.stringify(source)})` } : undefined"
+        aria-hidden="true"
+      />
+      <div
+        v-if="flow"
+        class="cover-image-flow absolute inset-0"
+        :style="source ? { backgroundImage: `url(${JSON.stringify(source)})` } : undefined"
+        aria-hidden="true"
+      />
+    </div>
   </div>
 </template>
 
 <style scoped>
+/* 常驻图层只切换透明度，并保持独立合成层，避免过渡前后重新栅格化导致的亮度跳变。 */
 .cover-image {
   background-position: center;
   background-size: 100% 100%;
+  opacity: 0;
+  transition: opacity 420ms ease;
+  will-change: opacity;
 }
 
 .cover-image-blur {
@@ -95,14 +118,6 @@ watch(
 
 .cover-background {
   transition: opacity 420ms ease;
-}
-
-.cover-image-enter-active {
-  transition: opacity 420ms ease;
-}
-
-.cover-image-enter-from {
-  opacity: 0;
 }
 
 @keyframes cover-color-drift-a {
