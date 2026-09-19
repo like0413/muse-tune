@@ -16,22 +16,28 @@ import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import {
   applyTaskbarWidth,
   getTaskbarWidth,
+  getTaskbarWidthMode,
   getTaskbarWidthPreset,
   normalizeTaskbarWidth,
   setTaskbarWidth,
   TASKBAR_WIDTH_MAX,
   TASKBAR_WIDTH_MIN,
   TASKBAR_WIDTH_PRESETS,
+  type TaskbarWidthMode,
   type TaskbarWidthPreset,
 } from '@/features/settings/bar-width'
 
 const { t } = useI18n({ useScope: 'global' })
 
+/** 宽度页签：三个固定预设、自由调整，以及自动占满任务栏空白。 */
+type WidthOption = TaskbarWidthPreset | 'auto'
+
 const WIDTH_PREVIEW_INTERVAL_MS = 50
 const selectedWidth = shallowRef(TASKBAR_WIDTH_MAX)
 const committedWidth = shallowRef(TASKBAR_WIDTH_MAX)
+const committedMode = shallowRef<TaskbarWidthMode>('fixed')
 const widthSaving = shallowRef(false)
-const selectedPreset = shallowRef<TaskbarWidthPreset>('wide')
+const selectedPreset = shallowRef<WidthOption>('wide')
 const widthPresetOptions = computed(
   () =>
     [
@@ -39,31 +45,38 @@ const widthPresetOptions = computed(
       { value: 'standard', label: t('settings.taskbar.width.standard') },
       { value: 'wide', label: t('settings.taskbar.width.wide') },
       { value: 'custom', label: t('settings.taskbar.width.custom') },
+      { value: 'auto', label: t('settings.taskbar.width.auto') },
     ] as const,
 )
 
-/** 恢复已保存的 bar 基准宽度。 */
+/** 恢复已保存的 bar 宽度与宽度模式。 */
 async function loadWidth() {
   try {
-    const width = await getTaskbarWidth()
+    const [width, mode] = await Promise.all([getTaskbarWidth(), getTaskbarWidthMode()])
     selectedWidth.value = width
     committedWidth.value = width
-    selectedPreset.value = getTaskbarWidthPreset(width)
+    committedMode.value = mode
+    selectedPreset.value = mode === 'auto' ? 'auto' : getTaskbarWidthPreset(width)
   } catch (error) {
     console.error('读取 bar 宽度失败', error)
   }
 }
 
-/** 切换宽度预设；自由调整只展开滑块，不主动改变当前宽度。 */
+/** 切换宽度预设；自由调整只展开滑块，自适应直接切到原生自适应模式。 */
 async function selectPreset(value: string | number) {
   if (!(typeof value === 'string' && widthPresetOptions.value.some((item) => item.value === value)))
     return
-  const preset = value as TaskbarWidthPreset
+  const preset = value as WidthOption
   selectedPreset.value = preset
+  if (preset === 'auto') {
+    // 保留已保存的固定宽度，切回固定宽度时可以继续使用。
+    await commitWidth([selectedWidth.value], 'auto')
+    return
+  }
   if (preset === 'custom') return
   const width = TASKBAR_WIDTH_PRESETS[preset]
   selectedWidth.value = width
-  await commitWidth([width])
+  await commitWidth([width], 'fixed')
 }
 
 /** 读取 Slider 的单个有效宽度值。 */
@@ -74,7 +87,7 @@ function getWidthValue(values: number[] | undefined): number | undefined {
 /** 限频应用拖动预览；关闭尾调用可防止旧宽度覆盖最终提交值。 */
 const previewWidth = useThrottleFn(
   (width: number) => {
-    applyTaskbarWidth(width).catch((error) => {
+    applyTaskbarWidth(width, 'fixed').catch((error) => {
       console.error('预览 bar 宽度失败', error)
     })
   },
@@ -95,8 +108,8 @@ function updateWidth(values: number[] | undefined) {
   previewWidth(width)
 }
 
-/** 在交互结束时应用并持久化最终宽度。 */
-async function commitWidth(values: number[]) {
+/** 在交互结束时应用并持久化最终宽度与模式。 */
+async function commitWidth(values: number[], mode: TaskbarWidthMode = 'fixed') {
   if (widthSaving.value) return
 
   const width = getWidthValue(values)
@@ -104,15 +117,16 @@ async function commitWidth(values: number[]) {
 
   widthSaving.value = true
   try {
-    await setTaskbarWidth(width)
+    await setTaskbarWidth(width, mode)
     committedWidth.value = width
+    committedMode.value = mode
   } catch (error) {
     notifySettingSaveFailed(t('settings.taskbar.width.title'), error)
-    const previousWidth = committedWidth.value
-    selectedWidth.value = previousWidth
-    selectedPreset.value = getTaskbarWidthPreset(previousWidth)
+    selectedWidth.value = committedWidth.value
+    selectedPreset.value =
+      committedMode.value === 'auto' ? 'auto' : getTaskbarWidthPreset(committedWidth.value)
     try {
-      await applyTaskbarWidth(previousWidth)
+      await applyTaskbarWidth(committedWidth.value, committedMode.value)
     } catch (rollbackError) {
       console.error('恢复之前的 bar 宽度失败', rollbackError)
     }

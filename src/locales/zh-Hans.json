@@ -83,8 +83,6 @@
         "styleDescription": "模糊封面背景与主题透明度独立",
         "theme": "普通主题色",
         "coverBlur": "模糊封面",
-        "coverFlow": "流动",
-        "flowDescription": "让模糊封面的色块缓慢流动",
         "compatibilityTitle": "兼容性提示",
         "progressFallback": "封面背景与竖向渐变进度不能同时使用。开启封面背景时，进度样式会切换为底部横条。",
         "backgroundFallback": "竖向渐变进度与封面背景不能同时使用。开启竖向渐变时，背景会切换为普通主题色。"
@@ -96,7 +94,9 @@
         "compact": "紧凑",
         "standard": "标准",
         "wide": "宽",
-        "custom": "自由调整"
+        "custom": "自由调整",
+        "auto": "自适应",
+        "autoHint": "自动占满任务栏空白，最小 200px"
       },
       "display": {
         "title": "目标显示器",

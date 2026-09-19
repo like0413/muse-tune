@@ -83,8 +83,6 @@
         "styleDescription": "Blurred artwork uses its own transparency, independent of the theme",
         "theme": "Theme color",
         "coverBlur": "Blurred album art",
-        "coverFlow": "Flowing colors",
-        "flowDescription": "Slowly move the colors of the blurred album art",
         "compatibilityTitle": "Compatibility notice",
         "progressFallback": "Album-art backgrounds and vertical progress cannot be used together. Turning on an album-art background switches progress to the bottom bar.",
         "backgroundFallback": "Vertical progress and album-art backgrounds cannot be used together. Turning on vertical progress switches the background to the theme color."
@@ -96,7 +94,9 @@
         "compact": "Compact",
         "standard": "Standard",
         "wide": "Wide",
-        "custom": "Custom width"
+        "custom": "Custom width",
+        "auto": "Auto",
+        "autoHint": "Fills the free taskbar space, 200px minimum"
       },
       "display": {
         "title": "Target display",

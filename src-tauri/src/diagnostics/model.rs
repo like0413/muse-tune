@@ -44,6 +44,7 @@ pub struct TaskbarDiagnostics {
     pub placement: String,
     pub overlap_priority: String,
     pub content_width_dip: i32,
+    pub width_mode: String,
     pub displays: Vec<TaskbarDisplay>,
     pub windows: Vec<TaskbarWindowDiagnostics>,
 }

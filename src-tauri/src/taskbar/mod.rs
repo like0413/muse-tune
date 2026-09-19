@@ -32,6 +32,7 @@ const DISPLAY_TOPOLOGY_CHECK_INTERVAL: Duration = Duration::from_secs(1);
 const ALL_DISPLAYS: &str = "all";
 const DISPLAY_TARGET_KEY: &str = "taskbar.displayTarget";
 const WIDTH_KEY: &str = "taskbar.width";
+const WIDTH_MODE_KEY: &str = "taskbar.widthMode";
 const PLACEMENT_KEY: &str = "taskbar.placement";
 const OVERLAP_PRIORITY_KEY: &str = "taskbar.overlapPriority";
 static TASKBAR_CONTENT_VISIBLE: AtomicBool = AtomicBool::new(true);
@@ -135,6 +136,28 @@ impl TaskbarOverlapPriority {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize)]
+#[repr(u8)]
+#[serde(rename_all = "lowercase")]
+pub enum TaskbarWidthMode {
+    /// 使用设置里保存的固定宽度。
+    #[default]
+    Fixed,
+    /// 自动占用停靠侧到最近任务栏元素之间的空白，不低于最小宽度。
+    Auto,
+}
+
+impl TaskbarWidthMode {
+    /// 从跨线程存储值恢复宽度模式，非法值回退到固定宽度。
+    const fn from_stored(value: u8) -> Self {
+        if value == Self::Auto as u8 {
+            Self::Auto
+        } else {
+            Self::Fixed
+        }
+    }
+}
+
 /// 更新播放器定位偏好，并通知监控线程立即重新计算位置。
 pub fn set_placement(placement: TaskbarPlacement) {
     sync::set_placement(placement);
@@ -148,6 +171,11 @@ pub fn set_overlap_priority(priority: TaskbarOverlapPriority) {
 /// 更新 bar 基准宽度，并通知监控线程立即重新计算位置与裁剪区域。
 pub fn set_content_width(width: i32) {
     sync::set_content_width(width);
+}
+
+/// 更新 bar 宽度模式（固定宽度或自适应），并通知监控线程重新计算布局。
+pub fn set_width_mode(mode: TaskbarWidthMode) {
+    sync::set_width_mode(mode);
 }
 
 /// 更新 bar 内容可见性；值变化时立即唤醒全部同步线程。
@@ -168,10 +196,16 @@ pub fn available_displays() -> Vec<TaskbarDisplay> {
 }
 
 /// 返回诊断页所需的目标显示器和当前原生布局设置。
-pub(crate) fn diagnostic_settings() -> (String, TaskbarPlacement, TaskbarOverlapPriority, i32) {
+pub(crate) fn diagnostic_settings() -> (
+    String,
+    TaskbarPlacement,
+    TaskbarOverlapPriority,
+    TaskbarWidthMode,
+    i32,
+) {
     let target = display_target_snapshot().0;
-    let (placement, overlap_priority, width) = sync::diagnostic_settings();
-    (target, placement, overlap_priority, width)
+    let (placement, overlap_priority, width_mode, width) = sync::diagnostic_settings();
+    (target, placement, overlap_priority, width_mode, width)
 }
 
 /// 显示并定位独立音量悬浮窗。
@@ -263,6 +297,12 @@ fn restore_native_settings<R: Runtime>(app: &tauri::App<R>) {
         .and_then(|value| i32::try_from(value).ok())
     {
         set_content_width(width);
+    }
+    if let Some(mode) = store
+        .get(WIDTH_MODE_KEY)
+        .and_then(|value| serde_json::from_value::<TaskbarWidthMode>(value).ok())
+    {
+        set_width_mode(mode);
     }
     if let Some(priority) = store
         .get(OVERLAP_PRIORITY_KEY)

@@ -4,6 +4,7 @@ import type {
   TaskbarDisplay,
   TaskbarOverlapPriority,
   TaskbarPlacement,
+  TaskbarWidthMode,
   TrayMenuPresentation,
 } from './contracts'
 
@@ -34,9 +35,9 @@ export function setTaskbarPlacement(placement: TaskbarPlacement): Promise<void> 
   return invoke('set_taskbar_placement', { placement })
 }
 
-/** 设置任务栏宽度。 */
-export function setTaskbarWidth(width: number): Promise<void> {
-  return invoke('set_taskbar_width', { width })
+/** 设置任务栏宽度模式与固定宽度基准值。 */
+export function setTaskbarWidth(width: number, mode: TaskbarWidthMode): Promise<void> {
+  return invoke('set_taskbar_width', { width, mode })
 }
 
 /** 同步托盘菜单的文案与勾选状态。 */

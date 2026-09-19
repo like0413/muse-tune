@@ -54,15 +54,25 @@ const isTaskbarHovered = useElementHover(taskbarRoot)
 const {
   backgroundTransparency,
   backgroundStyle: backgroundMode,
-  backgroundFlow,
   progressStyle,
   progressVisible,
   progressPosition,
   elementOrder,
-  taskbarWidth,
 } = useTaskbarViewSettings()
 const { visible: taskbarContentVisible } = useTaskbarAutoHide(mediaSession)
-const isCompact = computed(() => taskbarWidth.value <= TASKBAR_WIDTH_PRESETS.compact)
+// 必须测量根元素（视口）而不是 bar 内容容器：内容容器会被内容撑大（紧凑模式本身会改变内容宽度），
+// 用测量结果判断会形成死循环；同时 bar 窗口由原生 SetWindowPos 改尺寸，不一定派发 window resize 事件。
+const { width: barWindowWidth } = useElementBounding(document.documentElement, {
+  windowScroll: false,
+})
+// 宽度可能来自固定设置或自适应计算，因此按实际窗口宽度判断紧凑模式。
+// 窗口按 DPI 换算物理像素、WebView 再折回 CSS 像素时会有几 px 取整误差，需要容差。
+const COMPACT_WIDTH_TOLERANCE = 2
+const isCompact = computed(
+  () =>
+    barWindowWidth.value > 0 &&
+    barWindowWidth.value <= TASKBAR_WIDTH_PRESETS.compact + COMPACT_WIDTH_TOLERANCE,
+)
 // 纯音乐、歌词关闭或鼠标悬停显示控件时，不需要持续推演歌词播放位置。
 const hasTimedLyrics = computed(
   () => lyrics.value.status === 'ready' && lyrics.value.lines.length > 0,
@@ -271,7 +281,6 @@ onMounted(refreshCoverAnchors)
         progressStyle !== 'vertical-gradient'
       "
       :image="coverImage"
-      :flow="backgroundFlow"
     />
     <AudioSpectrumElement
       v-if="spectrumSettingsReady && taskbarContentVisible && spectrumSettings.visible"

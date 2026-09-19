@@ -1,6 +1,8 @@
 use tauri::WebviewWindow;
 
-use crate::taskbar::{self, TaskbarDisplay, TaskbarOverlapPriority, TaskbarPlacement};
+use crate::taskbar::{
+    self, TaskbarDisplay, TaskbarOverlapPriority, TaskbarPlacement, TaskbarWidthMode,
+};
 
 /// 枚举当前拥有任务栏的显示器。
 #[tauri::command]
@@ -28,10 +30,11 @@ pub fn set_taskbar_overlap_priority(priority: TaskbarOverlapPriority) -> Result<
     Ok(())
 }
 
-/// 更新 bar 基准宽度，并立即唤醒所有任务栏同步线程。
+/// 更新 bar 宽度模式与基准宽度，并立即唤醒所有任务栏同步线程。
 #[tauri::command]
-pub fn set_taskbar_width(width: i32) -> Result<(), String> {
+pub fn set_taskbar_width(width: i32, mode: TaskbarWidthMode) -> Result<(), String> {
     taskbar::set_content_width(width);
+    taskbar::set_width_mode(mode);
     Ok(())
 }
 

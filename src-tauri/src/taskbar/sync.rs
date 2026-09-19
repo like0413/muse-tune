@@ -11,12 +11,12 @@ use std::{
 use windows::Win32::Foundation::HWND;
 
 use super::{
-    RECOVERY_RETRY_DELAY, TaskbarOverlapPriority, content_visible,
+    RECOVERY_RETRY_DELAY, TaskbarOverlapPriority, TaskbarWidthMode, content_visible,
     elements::TaskbarElements,
     events::{TaskbarChange, WinEventHooks, wait_for_taskbar_change},
     geometry::{
-        ScreenRect, TaskbarPlacement, TaskbarSide, calculate_bar_rect, hard_clip_bar_rect,
-        is_rect_within, monitor_rect, window_rect,
+        ScreenRect, TaskbarPlacement, TaskbarSide, auto_content_width, calculate_bar_rect,
+        hard_clip_bar_rect, is_rect_within, monitor_rect, window_rect,
     },
     layout::{BarLayout, LayoutStabilizer},
     platform::{
@@ -37,6 +37,7 @@ const MAX_CONTENT_WIDTH_DIP: i32 = 360;
 static TASKBAR_PLACEMENT: AtomicU8 = AtomicU8::new(TaskbarPlacement::Auto as u8);
 static TASKBAR_OVERLAP_PRIORITY: AtomicU8 = AtomicU8::new(TaskbarOverlapPriority::Bar as u8);
 static TASKBAR_CONTENT_WIDTH_DIP: AtomicI32 = AtomicI32::new(MAX_CONTENT_WIDTH_DIP);
+static TASKBAR_WIDTH_MODE: AtomicU8 = AtomicU8::new(TaskbarWidthMode::Fixed as u8);
 
 /// 隔离 Shell 未提供事件的全屏状态查询，状态未变化时不唤醒完整同步流程。
 struct FullscreenStateMonitor {
@@ -98,9 +99,27 @@ pub(super) fn set_content_width(width: i32) {
     }
 }
 
+/// 跨线程更新宽度模式；仅在值变化时唤醒全部同步线程。
+pub(super) fn set_width_mode(mode: TaskbarWidthMode) {
+    if TASKBAR_WIDTH_MODE.swap(mode as u8, Ordering::AcqRel) != mode as u8 {
+        super::events::request_all_layout_updates();
+    }
+}
+
 /// 读取已经规范化的 bar 基准宽度。
 fn content_width() -> i32 {
     TASKBAR_CONTENT_WIDTH_DIP.load(Ordering::Acquire)
+}
+
+/// 读取当前宽度模式。
+fn width_mode() -> TaskbarWidthMode {
+    TaskbarWidthMode::from_stored(TASKBAR_WIDTH_MODE.load(Ordering::Acquire))
+}
+
+/// 判断是否需要任务栏元素矩形：避让任务栏元素要用于裁剪，自适应宽度要用于计算空白。
+const fn needs_taskbar_elements(priority: TaskbarOverlapPriority, mode: TaskbarWidthMode) -> bool {
+    matches!(priority, TaskbarOverlapPriority::TaskbarElements)
+        || matches!(mode, TaskbarWidthMode::Auto)
 }
 
 /// 读取当前遮挡优先级。
@@ -109,10 +128,16 @@ fn overlap_priority() -> TaskbarOverlapPriority {
 }
 
 /// 返回当前生效的定位、遮挡优先级与逻辑宽度。
-pub(super) fn diagnostic_settings() -> (TaskbarPlacement, TaskbarOverlapPriority, i32) {
+pub(super) fn diagnostic_settings() -> (
+    TaskbarPlacement,
+    TaskbarOverlapPriority,
+    TaskbarWidthMode,
+    i32,
+) {
     (
         TaskbarPlacement::from_stored(TASKBAR_PLACEMENT.load(Ordering::Acquire)),
         overlap_priority(),
+        width_mode(),
         content_width(),
     )
 }
@@ -138,26 +163,31 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
     let bar = HWND(window_handle as *mut _);
     let mut current_taskbar = HWND::default();
     let mut active_priority = overlap_priority();
+    let mut active_width_mode = width_mode();
     let mut applied_layout: Option<BarLayout> = None;
-    let mut immediate_layout_needed = active_priority == TaskbarOverlapPriority::Bar;
-    let mut uia_watch_needed = active_priority == TaskbarOverlapPriority::TaskbarElements;
+    let mut needs_elements = needs_taskbar_elements(active_priority, active_width_mode);
+    let mut immediate_layout_needed = !needs_elements;
+    let mut uia_watch_needed = needs_elements;
     let mut next_uia_recovery_query = Instant::now() + UIA_RECOVERY_QUERY_INTERVAL;
     let mut bar_was_suppressed = true;
     let mut z_order_refresh_needed = true;
     let mut fullscreen_monitor = FullscreenStateMonitor::new(taskbar, Instant::now());
 
-    if active_priority == TaskbarOverlapPriority::TaskbarElements {
+    if needs_elements {
         stabilizer.invalidate(Instant::now());
     }
 
     while !stop.load(Ordering::Acquire) && is_window_alive(bar) {
         let now = Instant::now();
         let priority = overlap_priority();
-        if priority != active_priority {
+        let mode = width_mode();
+        if priority != active_priority || mode != active_width_mode {
             active_priority = priority;
+            active_width_mode = mode;
+            needs_elements = needs_taskbar_elements(priority, mode);
             stabilizer.reset();
-            immediate_layout_needed = priority == TaskbarOverlapPriority::Bar;
-            if priority == TaskbarOverlapPriority::TaskbarElements {
+            immediate_layout_needed = !needs_elements;
+            if needs_elements {
                 uia_watch_needed = true;
                 stabilizer.invalidate(now);
             } else {
@@ -187,14 +217,14 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
             attach_bar_to_taskbar(bar, taskbar);
             if is_bar_attached_to_taskbar(bar, taskbar) {
                 current_taskbar = taskbar;
-                uia_watch_needed = active_priority == TaskbarOverlapPriority::TaskbarElements;
+                uia_watch_needed = needs_elements;
             } else {
                 retry_needed = true;
             }
             applied_layout = None;
             stabilizer.reset();
-            immediate_layout_needed = active_priority == TaskbarOverlapPriority::Bar;
-            if active_priority == TaskbarOverlapPriority::TaskbarElements {
+            immediate_layout_needed = !needs_elements;
+            if needs_elements {
                 stabilizer.invalidate(Instant::now());
             }
         }
@@ -212,7 +242,7 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
         // 订阅成功只能证明事件处理器已注册；bar 仍被裁剪期间低频校验，恢复后自动停止。
         let applied_layout_is_clipped = applied_layout
             .is_some_and(|layout| layout.visible_rect.width() < layout.window_rect.width());
-        let uia_recovery_query_needed = active_priority == TaskbarOverlapPriority::TaskbarElements
+        let uia_recovery_query_needed = needs_elements
             && (applied_layout_is_clipped
                 || taskbar_elements
                     .as_ref()
@@ -237,9 +267,10 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
             bar_was_suppressed = true;
             z_order_refresh_needed = true;
         } else {
-            let should_measure = match active_priority {
-                TaskbarOverlapPriority::Bar => immediate_layout_needed || applied_layout.is_none(),
-                TaskbarOverlapPriority::TaskbarElements => stabilizer.sample_due(Instant::now()),
+            let should_measure = if needs_elements {
+                stabilizer.sample_due(Instant::now())
+            } else {
+                immediate_layout_needed || applied_layout.is_none()
             };
 
             if should_measure {
@@ -247,13 +278,14 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
                     taskbar,
                     taskbar_rect,
                     active_priority,
+                    active_width_mode,
                     taskbar_elements.as_ref(),
                 ) {
                     Ok(candidate) => {
-                        let ready = if active_priority == TaskbarOverlapPriority::Bar {
-                            Some(candidate)
-                        } else {
+                        let ready = if needs_elements {
                             stabilizer.observe(candidate, Instant::now())
+                        } else {
+                            Some(candidate)
                         };
                         if let Some(layout) = ready {
                             if applied_layout == Some(layout) {
@@ -264,7 +296,7 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
                             } else {
                                 applied_layout = None;
                                 retry_needed = true;
-                                if active_priority == TaskbarOverlapPriority::TaskbarElements {
+                                if needs_elements {
                                     stabilizer.invalidate(Instant::now());
                                 }
                             }
@@ -310,19 +342,36 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
             next_uia_recovery_query,
             &mut fullscreen_monitor,
         ) {
-            TaskbarChange::Layout => match active_priority {
-                TaskbarOverlapPriority::Bar => immediate_layout_needed = true,
-                TaskbarOverlapPriority::TaskbarElements => {
-                    stabilizer.invalidate(Instant::now());
-                }
-            },
-            TaskbarChange::Timeout if hook_fallback_needed => match active_priority {
-                TaskbarOverlapPriority::Bar => immediate_layout_needed = true,
-                TaskbarOverlapPriority::TaskbarElements => stabilizer.invalidate(Instant::now()),
-            },
+            TaskbarChange::Layout => {
+                mark_layout_dirty(
+                    &mut immediate_layout_needed,
+                    &mut stabilizer,
+                    needs_elements,
+                );
+            }
+            TaskbarChange::Timeout if hook_fallback_needed => {
+                mark_layout_dirty(
+                    &mut immediate_layout_needed,
+                    &mut stabilizer,
+                    needs_elements,
+                );
+            }
             TaskbarChange::WindowState => z_order_refresh_needed = true,
             TaskbarChange::Timeout => {}
         }
+    }
+}
+
+/// 标记布局需要重算：依赖任务栏元素矩形时走限频采样，否则立即应用。
+fn mark_layout_dirty(
+    immediate_layout_needed: &mut bool,
+    stabilizer: &mut LayoutStabilizer,
+    needs_elements: bool,
+) {
+    if needs_elements {
+        stabilizer.invalidate(Instant::now());
+    } else {
+        *immediate_layout_needed = true;
     }
 }
 
@@ -382,6 +431,7 @@ fn measure_layout(
     taskbar: HWND,
     taskbar_rect: ScreenRect,
     priority: TaskbarOverlapPriority,
+    width_mode: TaskbarWidthMode,
     taskbar_elements: Option<&TaskbarElements>,
 ) -> windows::core::Result<BarLayout> {
     let side = resolve_taskbar_side();
@@ -391,17 +441,20 @@ fn measure_layout(
         TaskbarSide::Right => tray_rect.map_or(taskbar_rect.right, |rect| rect.left),
     };
     let dpi = window_dpi(taskbar);
-    let ideal_rect = calculate_bar_rect(taskbar_rect, anchor_right, dpi, side, content_width());
+    // 避让任务栏元素和自适应宽度都需要元素矩形，因此只读取一次。
+    let button_rects =
+        taskbar_elements.map(|elements| elements.button_rects(taskbar_rect, tray_rect));
+    let content_width = match width_mode {
+        TaskbarWidthMode::Fixed => content_width(),
+        TaskbarWidthMode::Auto => {
+            auto_width_from_elements(button_rects.as_ref(), taskbar_rect, anchor_right, side, dpi)
+        }
+    };
+    let ideal_rect = calculate_bar_rect(taskbar_rect, anchor_right, dpi, side, content_width);
     let visible_rect = if priority == TaskbarOverlapPriority::TaskbarElements {
-        if let Some(elements) = taskbar_elements {
-            hard_clip_bar_rect(
-                ideal_rect,
-                &elements.button_rects(taskbar_rect, tray_rect)?,
-                side,
-                dpi,
-            )
-        } else {
-            ideal_rect
+        match button_rects {
+            Some(rects) => hard_clip_bar_rect(ideal_rect, &rects?, side, dpi),
+            None => ideal_rect,
         }
     } else {
         ideal_rect
@@ -411,6 +464,22 @@ fn measure_layout(
         window_rect: ideal_rect,
         visible_rect,
     })
+}
+
+/// 自适应宽度：元素矩形可用时取停靠侧空白；不可用时退回用户设定的固定宽度，
+/// 避免 UIA 暂时不可用导致自适应模式下 bar 直接消失。空白不足时按最小宽度兜底。
+fn auto_width_from_elements(
+    button_rects: Option<&windows::core::Result<Vec<ScreenRect>>>,
+    taskbar_rect: ScreenRect,
+    anchor_right: i32,
+    side: TaskbarSide,
+    dpi: u32,
+) -> i32 {
+    let Some(Ok(elements)) = button_rects else {
+        return content_width();
+    };
+
+    auto_content_width(taskbar_rect, anchor_right, side, dpi, elements).max(MIN_CONTENT_WIDTH_DIP)
 }
 
 /// 窗口保持理想位置和完整尺寸，仅用 Win32 region 提交稳定后的可见范围。

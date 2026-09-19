@@ -8,6 +8,8 @@ use windows::Win32::{
 
 const BASE_DPI: u32 = 96;
 const RIGHT_CLIP_CLEARANCE_DIP: i32 = 8;
+/// 自适应宽度与最近任务栏元素之间保留的视觉间距。
+const AUTO_WIDTH_ELEMENT_GAP_DIP: i32 = 8;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum TaskbarSide {
@@ -174,4 +176,35 @@ pub(super) fn hard_clip_bar_rect(
 /// 将设备无关像素按当前窗口 DPI 转换为物理像素。
 fn scale_dip(value: i32, dpi: u32) -> i32 {
     ((i64::from(value) * i64::from(dpi) + i64::from(BASE_DPI / 2)) / i64::from(BASE_DPI)) as i32
+}
+
+/// 反方向换算：把物理像素折回设备无关像素。
+fn to_dip(value: i32, dpi: u32) -> i32 {
+    ((i64::from(value) * i64::from(BASE_DPI) + i64::from(dpi / 2)) / i64::from(dpi)) as i32
+}
+
+/// 计算自适应模式下的内容宽度（DIP）：停靠侧到最近任务栏元素之间的空白，
+/// 已扣除 bar 与元素之间的视觉间距。空间不足时返回 0，由调用方按最小宽度兜底。
+pub(super) fn auto_content_width(
+    taskbar: ScreenRect,
+    anchor_right: i32,
+    side: TaskbarSide,
+    dpi: u32,
+    elements: &[ScreenRect],
+) -> i32 {
+    let dpi = if dpi == 0 { BASE_DPI } else { dpi };
+    let gap = scale_dip(AUTO_WIDTH_ELEMENT_GAP_DIP, dpi);
+    let available = match side {
+        TaskbarSide::Left => match elements.iter().map(|element| element.left).min() {
+            Some(boundary) => boundary - gap - taskbar.left,
+            // 停靠侧没有任何元素时占满整段可用区。
+            None => taskbar.width(),
+        },
+        TaskbarSide::Right => match elements.iter().map(|element| element.right).max() {
+            Some(boundary) => anchor_right - gap - boundary,
+            None => anchor_right - taskbar.left,
+        },
+    };
+
+    to_dip(available.max(0), dpi)
 }

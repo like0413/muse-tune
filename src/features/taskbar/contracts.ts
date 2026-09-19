@@ -11,9 +11,12 @@ export interface TaskbarDisplay {
 export const TASKBAR_PLACEMENTS = ['auto', 'left', 'right'] as const
 /** 原生任务栏支持的遮挡优先级。 */
 export const TASKBAR_OVERLAP_PRIORITIES = ['bar', 'taskbar'] as const
+/** 原生任务栏支持的宽度模式：固定宽度或自适应任务栏空白。 */
+export const TASKBAR_WIDTH_MODES = ['fixed', 'auto'] as const
 
 export type TaskbarPlacement = (typeof TASKBAR_PLACEMENTS)[number]
 export type TaskbarOverlapPriority = (typeof TASKBAR_OVERLAP_PRIORITIES)[number]
+export type TaskbarWidthMode = (typeof TASKBAR_WIDTH_MODES)[number]
 
 /** 托盘菜单项要求任务栏窗口执行的动作。 */
 export const TRAY_MENU_ACTIONS = ['normal-cover', 'lyrics-cover', 'lyrics', 'spectrum'] as const
