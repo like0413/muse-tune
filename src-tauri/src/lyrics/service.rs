@@ -192,21 +192,8 @@ impl LyricsService {
             return;
         }
         self.cancel_resolution();
-        let watchers = self
-            .inner
-            .watchers
-            .lock()
-            .map(|mut watchers| std::mem::take(&mut *watchers))
-            .unwrap_or_default();
-        let registry_watchers = self
-            .inner
-            .registry_watchers
-            .lock()
-            .map(|mut watchers| std::mem::take(&mut *watchers))
-            .unwrap_or_default();
         // 不在持有 service mutex 时 join，避免与正在结束的 callback 形成锁等待。
-        drop(watchers);
-        drop(registry_watchers);
+        self.release_watchers();
     }
 
     /// 返回最近一次歌词快照。
@@ -429,11 +416,18 @@ impl LyricsService {
                 (current.as_ref().map(|track| track.key.clone()), generation)
             };
             self.cancel_resolution();
+            // 关闭歌词后释放文件与注册表监听，避免后台线程继续为缓存写入做本地解析。
+            self.release_watchers();
             self.publish_if_current(
                 LyricsSnapshot::unavailable(track_key, "歌词显示已关闭"),
                 generation,
             );
             return Ok(());
+        }
+        if enabled_changed {
+            // 重新开启歌词时恢复关闭期间释放掉的文件与注册表监听。
+            self.refresh_watchers();
+            self.start_registry_watcher();
         }
         if enabled_changed || online_changed {
             self.force_resolve_current(online_changed && allow_online)
@@ -503,7 +497,7 @@ impl LyricsService {
             );
             return;
         };
-        if !self.preferences().enabled {
+        if !self.lyrics_enabled() {
             self.cancel_resolution();
             self.publish_if_current(
                 LyricsSnapshot::unavailable(Some(track.key), "歌词显示已关闭"),
@@ -939,17 +933,24 @@ impl LyricsService {
         generation: u64,
         resolution_method: LyricsResolutionMethod,
     ) {
-        // 代数检查、缓存写入和发布必须与歌曲身份更新互斥，否则旧任务可能覆盖新歌曲。
-        let Ok(_current) = self.inner.current_track.lock() else {
-            return;
-        };
-        if !self.is_current_generation(generation) {
+        // 代数检查必须与歌曲身份更新互斥，否则旧任务可能覆盖新歌曲。
+        if !self.current_generation_matches(generation) {
             return;
         }
+        // 磁盘写入是本流程最慢的一步，移出歌曲身份锁，避免阻塞媒体监控线程更新当前歌曲。
         if let Err(error) = self.inner.cache.store(&snapshot) {
             log::warn!("保存解析后歌词缓存失败: {error}");
         }
-        self.publish(snapshot, resolution_method);
+        // 写入期间可能已经切歌，发布前重新校验，避免把过期结果广播出去。
+        self.publish_if_current_with_method(snapshot, generation, resolution_method);
+    }
+
+    /// 在歌曲身份锁内校验代数，供锁外工作的入口与出口复用。
+    fn current_generation_matches(&self, generation: u64) -> bool {
+        let Ok(_current) = self.inner.current_track.lock() else {
+            return false;
+        };
+        self.is_current_generation(generation)
     }
 
     fn publish_if_current(&self, snapshot: LyricsSnapshot, generation: u64) {
@@ -997,6 +998,11 @@ impl LyricsService {
             .preferences
             .read()
             .map_or_else(|_| LyricsPreferences::default(), |preferences| *preferences)
+    }
+
+    /// 歌词总开关是否开启；关闭后所有后台歌词工作都应停止。
+    fn lyrics_enabled(&self) -> bool {
+        self.preferences().enabled
     }
 
     fn cache_path(&self, player: MediaPlayer) -> Option<PathBuf> {

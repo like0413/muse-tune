@@ -24,7 +24,7 @@ const FFT_SIZE: usize = 2_048;
 const OUTPUT_BAND_COUNT: usize = 64;
 const MIN_FREQUENCY_HZ: f32 = 45.0;
 const MAX_FREQUENCY_HZ: f32 = 16_000.0;
-const FRAME_INTERVAL: Duration = Duration::from_millis(33);
+const DEFAULT_FRAME_RATE: u16 = 20;
 const STOP_CHECK_INTERVAL_MS: u32 = 100;
 const NOISE_FLOOR_DB: f32 = -72.0;
 const PEAK_DB: f32 = -8.0;
@@ -34,6 +34,7 @@ pub(super) struct AudioSpectrumController<R: Runtime> {
     app: AppHandle<R>,
     enabled: bool,
     process_id: Option<u32>,
+    frame_rate: u16,
     worker: Option<SpectrumWorker>,
 }
 
@@ -44,16 +45,21 @@ impl<R: Runtime> AudioSpectrumController<R> {
             app,
             enabled: false,
             process_id: None,
+            frame_rate: DEFAULT_FRAME_RATE,
             worker: None,
         }
     }
 
     /// 切换频谱采集；关闭时立即释放 WASAPI 流并清空画面。
-    pub(super) fn set_enabled(&mut self, enabled: bool) -> Result<(), String> {
-        if self.enabled == enabled {
+    pub(super) fn set_enabled(&mut self, enabled: bool, frame_rate: u16) -> Result<(), String> {
+        if !(15..=30).contains(&frame_rate) {
+            return Err("频谱帧率必须在 15 到 30 之间".to_owned());
+        }
+        if self.enabled == enabled && self.frame_rate == frame_rate {
             return Ok(());
         }
         self.enabled = enabled;
+        self.frame_rate = frame_rate;
         self.restart()
     }
 
@@ -81,7 +87,11 @@ impl<R: Runtime> AudioSpectrumController<R> {
         let Some(process_id) = self.process_id.filter(|_| self.enabled) else {
             return Ok(());
         };
-        self.worker = Some(SpectrumWorker::spawn(self.app.clone(), process_id)?);
+        self.worker = Some(SpectrumWorker::spawn(
+            self.app.clone(),
+            process_id,
+            Duration::from_millis(1000 / self.frame_rate as u64),
+        )?);
         Ok(())
     }
 }
@@ -94,13 +104,18 @@ struct SpectrumWorker {
 
 impl SpectrumWorker {
     /// 为单个播放器进程创建按事件驱动的回环捕获线程。
-    fn spawn<R: Runtime>(app: AppHandle<R>, process_id: u32) -> Result<Self, String> {
+    fn spawn<R: Runtime>(
+        app: AppHandle<R>,
+        process_id: u32,
+        frame_interval: Duration,
+    ) -> Result<Self, String> {
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = Arc::clone(&stop);
         let thread = thread::Builder::new()
             .name("media-spectrum-capture".to_owned())
             .spawn(move || {
-                if let Err(error) = capture_spectrum(&app, process_id, &worker_stop) {
+                if let Err(error) = capture_spectrum(&app, process_id, &worker_stop, frame_interval)
+                {
                     log::warn!("捕获播放器音频频谱失败: {error}");
                     emit_spectrum(&app, &zero_frame());
                 }
@@ -129,6 +144,7 @@ fn capture_spectrum<R: Runtime>(
     app: &AppHandle<R>,
     process_id: u32,
     stop: &AtomicBool,
+    frame_interval: Duration,
 ) -> Result<(), String> {
     initialize_mta().ok().map_err(|error| error.to_string())?;
 
@@ -165,9 +181,11 @@ fn capture_spectrum<R: Runtime>(
     let mut samples = VecDeque::with_capacity(FFT_SIZE);
     let mut packet = Vec::new();
     let mut analyzer = SpectrumAnalyzer::new();
-    let mut last_frame_at = Instant::now() - FRAME_INTERVAL;
+    let mut last_frame_at = Instant::now() - frame_interval;
 
     while !stop.load(Ordering::Acquire) {
+        // 本轮是否读到新音频包；没有新包时不再重复发射同一份陈旧频谱。
+        let mut has_new_samples = false;
         while let Some(frame_count) = capture_client
             .get_next_packet_size()
             .map_err(|error| error.to_string())?
@@ -183,9 +201,12 @@ fn capture_spectrum<R: Runtime>(
                 &packet[..read_frames as usize * CHANNEL_COUNT * BYTES_PER_SAMPLE],
                 info.flags.silent,
             );
+            has_new_samples = true;
         }
 
-        if samples.len() == FFT_SIZE && last_frame_at.elapsed() >= FRAME_INTERVAL {
+        // 暂停或无音频输出期间 samples 仍保留旧数据，继续做 FFT 并发射只会让前端反复重绘同一帧。
+        if has_new_samples && samples.len() == FFT_SIZE && last_frame_at.elapsed() >= frame_interval
+        {
             emit_spectrum(app, analyzer.analyze(&samples));
             last_frame_at = Instant::now();
         }
@@ -264,12 +285,13 @@ impl SpectrumAnalyzer {
         self.fft.process(&mut self.buffer);
 
         for (band, range) in self.band_ranges.iter().enumerate() {
-            let magnitude = self.buffer[range.clone()]
+            let power = self.buffer[range.clone()]
                 .iter()
-                .map(|value| value.norm())
+                // 频带最大能量只需要平方值，避免对每个 bin 做一次平方根。
+                .map(|value| value.norm_sqr())
                 .fold(0.0_f32, f32::max)
-                / (FFT_SIZE as f32 * 0.5);
-            let decibels = 20.0 * magnitude.max(1.0e-6).log10();
+                / (FFT_SIZE as f32 * 0.5).powi(2);
+            let decibels = 10.0 * power.max(1.0e-12).log10();
             let normalized = ((decibels - NOISE_FLOOR_DB) / (PEAK_DB - NOISE_FLOOR_DB))
                 .clamp(0.0, 1.0)
                 .sqrt();

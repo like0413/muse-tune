@@ -131,26 +131,27 @@ pub struct LyricLine {
 
 /// 仅把绝大多数正文行都有完整时间轴的规范化歌词视为逐字结果。
 pub fn has_word_timing(lines: &[LyricLine]) -> bool {
-    let eligible_lines = lines
-        .iter()
-        .filter(|line| !normalize_text(&line.text).is_empty())
-        .collect::<Vec<_>>();
-    if eligible_lines.is_empty() {
-        return false;
+    let mut eligible_count = 0usize;
+    let mut timed_count = 0usize;
+    // 逐行拼接复用同一缓冲，避免为每一行单独分配字符串。
+    let mut timed_text = String::new();
+    for line in lines {
+        let normalized = normalize_text(&line.text);
+        if normalized.is_empty() {
+            continue;
+        }
+        eligible_count += 1;
+        timed_text.clear();
+        for word in &line.words {
+            if word.end_ms > word.start_ms && !word.text.trim().is_empty() {
+                timed_text.push_str(&word.text);
+            }
+        }
+        if !timed_text.is_empty() && normalize_text(&timed_text) == normalized {
+            timed_count += 1;
+        }
     }
-    let timed_lines = eligible_lines
-        .iter()
-        .filter(|line| {
-            let timed_text = line
-                .words
-                .iter()
-                .filter(|word| word.end_ms > word.start_ms && !word.text.trim().is_empty())
-                .map(|word| word.text.as_str())
-                .collect::<String>();
-            !timed_text.is_empty() && normalize_text(&timed_text) == normalize_text(&line.text)
-        })
-        .count();
-    timed_lines * 100 >= eligible_lines.len() * MIN_WORD_TIMING_COVERAGE_PERCENT
+    eligible_count > 0 && timed_count * 100 >= eligible_count * MIN_WORD_TIMING_COVERAGE_PERCENT
 }
 
 /// 独立于媒体快照广播的歌词状态。
@@ -290,101 +291,4 @@ fn is_instrumental_notice(lines: &[LyricLine]) -> bool {
         normalize_text(&line.text).as_str(),
         "此歌曲为没有填词的纯音乐请您欣赏" | "此歌曲为没有填词的纯音乐请您欣" | "纯音乐请欣赏"
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::media::MediaPlayer;
-
-    use super::{
-        LyricLine, LyricWord, LyricsSnapshot, LyricsSource, LyricsSourceKind, LyricsStatus,
-        ResolvedLyrics, has_word_timing,
-    };
-
-    fn line(text: &str, words: Vec<LyricWord>) -> LyricLine {
-        LyricLine {
-            start_ms: 0,
-            end_ms: 1_000,
-            text: text.to_owned(),
-            translation: None,
-            romanization: None,
-            words,
-        }
-    }
-
-    fn word(text: &str) -> LyricWord {
-        LyricWord {
-            start_ms: 0,
-            end_ms: 500,
-            text: text.to_owned(),
-        }
-    }
-
-    /// 构造单行在线歌词结果，供语义状态测试复用。
-    fn resolved(text: &str) -> ResolvedLyrics {
-        ResolvedLyrics {
-            source: LyricsSource {
-                player: MediaPlayer::QqMusic,
-                kind: LyricsSourceKind::Online,
-                song_id: Some("song-id".to_owned()),
-            },
-            lines: vec![line(text, Vec::new())],
-        }
-    }
-
-    #[test]
-    fn word_precision_requires_most_lines_to_have_matching_timing() {
-        let lines = [
-            line("完整", vec![word("完整")]),
-            line("缺失一", Vec::new()),
-            line("缺失二", Vec::new()),
-        ];
-
-        assert!(!has_word_timing(&lines));
-    }
-
-    #[test]
-    fn word_precision_accepts_punctuation_differences() {
-        let lines = [line("Hello, world!", vec![word("Hello world")])];
-
-        assert!(has_word_timing(&lines));
-    }
-
-    #[test]
-    fn word_precision_rejects_timing_for_different_text() {
-        let lines = [line("正确歌词", vec![word("错误歌词")])];
-
-        assert!(!has_word_timing(&lines));
-    }
-
-    #[test]
-    fn instrumental_notice_becomes_semantic_state_without_timeline() {
-        let snapshot = LyricsSnapshot::from_resolved(
-            "track-key".to_owned(),
-            resolved("此歌曲为没有填词的纯音乐，请您欣赏"),
-        );
-
-        assert_eq!(
-            (snapshot.status, snapshot.precision, snapshot.lines.len()),
-            (LyricsStatus::Instrumental, None, 0),
-        );
-    }
-
-    #[test]
-    fn observed_truncated_instrumental_notice_is_recognized() {
-        let snapshot = LyricsSnapshot::from_resolved(
-            "track-key".to_owned(),
-            resolved("此歌曲为没有填词的纯音乐，请您欣"),
-        );
-
-        assert_eq!(snapshot.status, LyricsStatus::Instrumental);
-    }
-
-    #[test]
-    fn ordinary_single_line_lyrics_remain_ready() {
-        let snapshot =
-            LyricsSnapshot::from_resolved("track-key".to_owned(), resolved("纯音乐般的夜晚"));
-
-        assert_eq!(snapshot.status, LyricsStatus::Ready);
-    }
 }

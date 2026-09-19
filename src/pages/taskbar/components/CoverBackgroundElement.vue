@@ -38,18 +38,31 @@ watch(
         v-if="artwork"
         :key="artwork.source"
         class="cover-image absolute inset-0"
-        :class="{ 'cover-image-flow': flow }"
-        :style="{
-          backgroundImage: `url(${JSON.stringify(artwork.source)})`,
-          zIndex: artwork.order,
-        }"
-      />
+        :style="{ zIndex: artwork.order }"
+      >
+        <div
+          class="cover-image-blur absolute inset-0"
+          :style="{ backgroundImage: `url(${JSON.stringify(artwork.source)})` }"
+          aria-hidden="true"
+        />
+        <div
+          v-if="flow"
+          class="cover-image-flow absolute inset-0"
+          :style="{ backgroundImage: `url(${JSON.stringify(artwork.source)})` }"
+          aria-hidden="true"
+        />
+      </div>
     </Transition>
   </div>
 </template>
 
 <style scoped>
 .cover-image {
+  background-position: center;
+  background-size: 100% 100%;
+}
+
+.cover-image-blur {
   background-position: center;
   background-size: 100% 100%;
   filter: blur(20px) saturate(1.3);
@@ -64,7 +77,6 @@ watch(
   background-image: inherit;
   background-repeat: no-repeat;
   filter: saturate(1.5);
-  will-change: transform;
 }
 
 .cover-image-flow::before {

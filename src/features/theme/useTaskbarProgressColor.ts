@@ -11,11 +11,21 @@ import { getSystemAccentColor, listenSystemAccentColorChange } from '@/features/
 import { DEFAULT_BRAND_COLOR_HEX } from './colors'
 import { extractTaskbarCoverColor } from './cover-color'
 
-/** 按设置来源解析进度条颜色，并只在封面变化时重新取色。 */
-export function useTaskbarProgressColor(thumbnailDataUrl: ComputedRef<string | null>) {
+/** 主色提取结果缓存上限；键为曲目身份字符串，避免长期驻留 Data URL 本身。 */
+const COVER_COLOR_CACHE_LIMIT = 16
+
+/**
+ * 按设置来源解析进度条颜色，并只在封面变化时重新取色。
+ * 同一曲目的提取结果会被复用，避免来回切歌时重复解码与像素遍历。
+ */
+export function useTaskbarProgressColor(
+  thumbnailDataUrl: ComputedRef<string | null>,
+  trackIdentity: Readonly<Ref<string | null>> = shallowRef(null),
+) {
   const setting = shallowRef<TaskbarThemeColor>({ ...DEFAULT_TASKBAR_THEME_COLOR })
   const systemColor = shallowRef(DEFAULT_BRAND_COLOR_HEX)
   const coverColor = shallowRef<string | null>(null)
+  const extractedColors = new Map<string, string>()
   let extractionRequestId = 0
   let settingRevision = 0
   let systemColorRevision = 0
@@ -23,15 +33,33 @@ export function useTaskbarProgressColor(thumbnailDataUrl: ComputedRef<string | n
   let unlistenSetting: UnlistenFn | undefined
   let unlistenSystemColor: UnlistenFn | undefined
 
+  /** 记录已提取的主色，并按插入序淘汰最旧的一条。 */
+  function rememberCoverColor(identity: string, color: string) {
+    if (extractedColors.size >= COVER_COLOR_CACHE_LIMIT) {
+      const oldest = extractedColors.keys().next()
+      if (!oldest.done) extractedColors.delete(oldest.value)
+    }
+    extractedColors.set(identity, color)
+  }
+
   /** 异步提取封面主色；新颜色产出前保留上一个有效结果，避免切歌闪色。 */
   async function extractCoverColor() {
     const thumbnail = thumbnailDataUrl.value
     const requestId = ++extractionRequestId
     if (setting.value.source !== 'cover' || !thumbnail) return
 
+    const identity = trackIdentity.value
+    const cached = identity === null ? undefined : extractedColors.get(identity)
+    if (cached !== undefined) {
+      coverColor.value = cached
+      return
+    }
+
     try {
       const extractedColor = await extractTaskbarCoverColor(thumbnail)
-      if (requestId === extractionRequestId) coverColor.value = extractedColor
+      if (requestId !== extractionRequestId) return
+      coverColor.value = extractedColor
+      if (identity !== null) rememberCoverColor(identity, extractedColor)
     } catch (error) {
       if (requestId === extractionRequestId) {
         console.error('提取封面主色失败', error)

@@ -38,8 +38,8 @@ export function toggleCurrentMediaMute(): Promise<MediaVolumeSnapshot> {
 }
 
 /** 设置原生频谱采集开关。 */
-export function setMediaSpectrumEnabled(enabled: boolean): Promise<void> {
-  return invoke('set_media_spectrum_enabled', { enabled })
+export function setMediaSpectrumEnabled(enabled: boolean, frameRate: number): Promise<void> {
+  return invoke('set_media_spectrum_enabled', { enabled, frameRate })
 }
 
 /** 设置媒体会话选择策略。 */

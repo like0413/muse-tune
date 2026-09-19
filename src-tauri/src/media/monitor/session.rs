@@ -9,6 +9,7 @@ use windows::{
         GlobalSystemMediaTransportControlsSessionManager, MediaPropertiesChangedEventArgs,
         PlaybackInfoChangedEventArgs, SessionsChangedEventArgs, TimelinePropertiesChangedEventArgs,
     },
+    Storage::Streams::IRandomAccessStreamReference,
 };
 
 use super::{metrics::WorkerSender, pending_events::WorkerEvent};
@@ -171,33 +172,76 @@ pub(super) fn read_snapshot(
     })
 }
 
+/// 播放器发布的文本元数据；不含封面，用于廉价判断曲目内容是否变化。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct MediaMetadataText {
+    pub(super) title: String,
+    pub(super) artist: String,
+    pub(super) album_artist: String,
+    pub(super) subtitle: String,
+}
+
+impl MediaMetadataText {
+    /// 从完整元数据提取文本键，忽略封面本身。
+    pub(super) fn from_metadata(metadata: &MediaMetadata) -> Self {
+        Self {
+            title: metadata.title.clone(),
+            artist: metadata.artist.clone(),
+            album_artist: metadata.album_artist.clone(),
+            subtitle: metadata.subtitle.clone(),
+        }
+    }
+}
+
+/// SMTC 属性的一次性读取结果：文本立即可用，封面只保留引用供按需解码。
+pub(super) struct MediaPropertiesSnapshot {
+    pub(super) text: MediaMetadataText,
+    pub(super) thumbnail: Option<IRandomAccessStreamReference>,
+}
+
+/// 读取文本属性与封面引用；封面数据本身的解码与 Base64 编码由调用方按需触发。
+pub(super) fn read_properties(
+    session: &GlobalSystemMediaTransportControlsSession,
+) -> windows::core::Result<MediaPropertiesSnapshot> {
+    let properties = session.TryGetMediaPropertiesAsync()?.get()?;
+    Ok(MediaPropertiesSnapshot {
+        text: MediaMetadataText {
+            title: properties
+                .Title()
+                .map(|value| value.to_string())
+                .unwrap_or_default(),
+            artist: properties
+                .Artist()
+                .map(|value| value.to_string())
+                .unwrap_or_default(),
+            album_artist: properties
+                .AlbumArtist()
+                .map(|value| value.to_string())
+                .unwrap_or_default(),
+            subtitle: properties
+                .Subtitle()
+                .map(|value| value.to_string())
+                .unwrap_or_default(),
+        },
+        thumbnail: properties.Thumbnail().ok(),
+    })
+}
+
 /// 读取播放器实际向 SMTC 发布的全部歌曲元数据。
 pub(super) fn read_metadata(
     session: &GlobalSystemMediaTransportControlsSession,
 ) -> windows::core::Result<MediaMetadata> {
-    let properties = session.TryGetMediaPropertiesAsync()?.get()?;
+    let properties = read_properties(session)?;
     let thumbnail_data_url = properties
-        .Thumbnail()
-        .ok()
-        .and_then(|thumbnail| read_thumbnail_data_url(&thumbnail).ok().flatten());
+        .thumbnail
+        .as_ref()
+        .and_then(|thumbnail| read_thumbnail_data_url(thumbnail).ok().flatten());
 
     Ok(MediaMetadata {
-        title: properties
-            .Title()
-            .map(|value| value.to_string())
-            .unwrap_or_default(),
-        artist: properties
-            .Artist()
-            .map(|value| value.to_string())
-            .unwrap_or_default(),
-        album_artist: properties
-            .AlbumArtist()
-            .map(|value| value.to_string())
-            .unwrap_or_default(),
-        subtitle: properties
-            .Subtitle()
-            .map(|value| value.to_string())
-            .unwrap_or_default(),
+        title: properties.text.title,
+        artist: properties.text.artist,
+        album_artist: properties.text.album_artist,
+        subtitle: properties.text.subtitle,
         thumbnail_data_url,
     })
 }

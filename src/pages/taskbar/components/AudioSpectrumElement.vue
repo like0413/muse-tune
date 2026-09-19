@@ -7,19 +7,22 @@ import {
   MEDIA_SPECTRUM_SOURCE_BAND_COUNT,
 } from '@/features/media/spectrum'
 import { useAudioSpectrum } from '@/features/media/useAudioSpectrum'
+import type { TaskbarAudioSpectrumSettings } from '@/features/settings/audio-spectrum'
 
 const MAX_BAR_GAP = 2
 const SPECTRUM_OPACITY = 0.34
 const SPECTRUM_CONTRAST_OPACITY = 0.7
 
 const props = defineProps<{
+  settings: Readonly<TaskbarAudioSpectrumSettings>
   themeColor: string
   foregroundColor: string
   progress: number
   overlapsProgressGradient: boolean
 }>()
 
-const { settings, sourceBands } = useAudioSpectrum()
+const settings = toRef(props, 'settings')
+const { sourceBands } = useAudioSpectrum(settings)
 const wrapper = useTemplateRef<HTMLDivElement>('wrapper')
 const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
 const taskbarContainer = shallowRef<HTMLElement | null>(null)
@@ -30,6 +33,8 @@ let logicalWidth = 0
 let logicalHeight = 0
 let taskbarWidth = 0
 let contrastColor = ''
+let context: CanvasRenderingContext2D | null = null
+let lastDrawnFrameWasSilent = false
 
 /** 频谱只设置低频变化的布局属性，音频帧不会触发 Vue 模板更新。 */
 const canvasStyle = computed<CSSProperties>(() => ({
@@ -87,12 +92,16 @@ function getPlayedBoundary(): number {
 /** 把固定 64 频带聚合进 Canvas，并在已播放区域叠加同主题对比色阶。 */
 function drawSpectrum() {
   const element = canvas.value
-  const context = element?.getContext('2d')
-  if (!element || !context || logicalWidth <= 0 || logicalHeight <= 0) return
+  if (!element || logicalWidth <= 0 || logicalHeight <= 0) return
+  context ??= element.getContext('2d', { alpha: true, desynchronized: true })
+  if (!context) return
 
   const ratio = pixelRatio.value
   const currentSettings = settings.value
   const bands = sourceBands.value
+  const frameIsSilent = bands.every((level) => level === 0)
+  if (frameIsSilent && lastDrawnFrameWasSilent) return
+  lastDrawnFrameWasSilent = frameIsSilent
   const count = currentSettings.barCount
   const gap = Math.min(MAX_BAR_GAP, logicalWidth / (count * 3))
   const barWidth = Math.max(0.5, (logicalWidth - gap * (count - 1)) / count)
@@ -140,8 +149,15 @@ function drawSpectrum() {
   context.globalAlpha = 1
 }
 
-/** 合并音频帧和进度变化，并把 Canvas 重绘频率限制在约 30 FPS。 */
-const requestDraw = useThrottleFn(drawSpectrum, MEDIA_SPECTRUM_FRAME_INTERVAL_MS, true, true)
+/** 合并音频帧和进度变化，并把 Canvas 重绘频率限制在原生帧率上限。 */
+const requestDraw = useThrottleFn(
+  () => {
+    if (settings.value.visible) drawSpectrum()
+  },
+  MEDIA_SPECTRUM_FRAME_INTERVAL_MS,
+  true,
+  true,
+)
 
 /** 缓存布局宽度和浏览器解析后的对比色，避免每个音频帧读取计算样式。 */
 function refreshVisualContext() {
@@ -161,7 +177,8 @@ useResizeObserver(taskbarContainer, () => {
 })
 
 watch(sourceBands, requestDraw, { flush: 'sync' })
-watch(() => props.progress, requestDraw, { flush: 'sync' })
+// 进度只影响叠加在频谱上的已播放分界线；不叠加时重绘结果与上一帧逐像素相同。
+watch(() => (props.overlapsProgressGradient ? props.progress : 0), requestDraw, { flush: 'sync' })
 watch(() => props.overlapsProgressGradient, requestDraw, { flush: 'sync' })
 watch(
   [pixelRatio, () => props.themeColor, () => props.foregroundColor],
@@ -196,7 +213,6 @@ onMounted(() => {
 
 <template>
   <div
-    v-show="settings.visible"
     ref="wrapper"
     class="pointer-events-none absolute inset-y-1 z-1"
     :style="canvasStyle"

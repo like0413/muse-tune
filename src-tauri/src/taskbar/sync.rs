@@ -29,6 +29,8 @@ use super::{
 };
 
 const FULLSCREEN_STATE_CHECK_INTERVAL: Duration = Duration::from_millis(250);
+/// 全屏轮询被跳过（系统自动隐藏已开启）时的等待上限；WinEvent 仍可随时唤醒循环。
+const IDLE_WAIT_TIMEOUT: Duration = Duration::from_secs(60);
 const UIA_RECOVERY_QUERY_INTERVAL: Duration = Duration::from_secs(1);
 const MIN_CONTENT_WIDTH_DIP: i32 = 200;
 const MAX_CONTENT_WIDTH_DIP: i32 = 360;
@@ -40,6 +42,8 @@ static TASKBAR_CONTENT_WIDTH_DIP: AtomicI32 = AtomicI32::new(MAX_CONTENT_WIDTH_D
 struct FullscreenStateMonitor {
     active: bool,
     next_check_at: Instant,
+    /// 系统任务栏自动隐藏开启时该状态不会被消费，此时完全跳过 Shell 轮询。
+    enabled: bool,
 }
 
 impl FullscreenStateMonitor {
@@ -48,12 +52,18 @@ impl FullscreenStateMonitor {
         Self {
             active: shell_reports_fullscreen_activity(taskbar),
             next_check_at: now + FULLSCREEN_STATE_CHECK_INTERVAL,
+            enabled: true,
         }
+    }
+
+    /// 同步本轮是否真的需要全屏状态；关闭时立即停止查询，重新开启时立刻复查。
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
     }
 
     /// 到期时只读取一次 Shell 状态，并报告状态是否发生变化。
     fn refresh_if_due(&mut self, taskbar: HWND, now: Instant) -> bool {
-        if now < self.next_check_at {
+        if !self.enabled || now < self.next_check_at {
             return false;
         }
         self.next_check_at = now + FULLSCREEN_STATE_CHECK_INTERVAL;
@@ -290,6 +300,7 @@ pub(super) fn run(window_handle: isize, taskbar_handle: isize, stop: Arc<AtomicB
             retry_needed = true;
         }
 
+        fullscreen_monitor.set_enabled(!auto_hide_enabled);
         match wait_for_relevant_change(
             taskbar,
             retry_needed,
@@ -329,9 +340,15 @@ fn wait_for_relevant_change(
         (retry_needed || hook_fallback_needed).then(|| Instant::now() + RECOVERY_RETRY_DELAY);
     loop {
         let now = Instant::now();
-        let mut wait_timeout = fullscreen_monitor
-            .next_check_at
-            .saturating_duration_since(now);
+        // 系统任务栏自动隐藏开启时全屏状态结果不会被消费，因此不把它的截止时间纳入等待，
+        // 从而消除每显示器 4Hz 的 Shell 状态查询；WinEvent 仍能立即唤醒本循环。
+        let mut wait_timeout = if fullscreen_monitor.enabled {
+            fullscreen_monitor
+                .next_check_at
+                .saturating_duration_since(now)
+        } else {
+            IDLE_WAIT_TIMEOUT
+        };
         if let Some(deadline) = recovery_deadline {
             wait_timeout = wait_timeout.min(deadline.saturating_duration_since(now));
         }

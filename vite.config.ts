@@ -4,7 +4,6 @@ import { fileURLToPath, URL } from 'node:url'
 import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
 import tailwindcss from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
-import MotionResolver from 'motion-v/resolver'
 import AutoImport from 'unplugin-auto-import/vite'
 // import TurboConsole from 'unplugin-turbo-console/vite'
 import Components from 'unplugin-vue-components/vite'
@@ -116,7 +115,6 @@ export default defineConfig({
     Components({
       dts: true,
       dirs: ['src/components', '!src/components/ui'],
-      resolvers: [MotionResolver()],
     }),
     VueI18nPlugin({
       include: resolve(dirname(fileURLToPath(import.meta.url)), './src/locales/**'),

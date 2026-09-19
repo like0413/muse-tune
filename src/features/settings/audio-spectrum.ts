@@ -18,10 +18,12 @@ export const TASKBAR_SPECTRUM_SENSITIVITY_MIN = 50
 export const TASKBAR_SPECTRUM_SENSITIVITY_MAX = 200
 export const TASKBAR_SPECTRUM_SMOOTHING_MIN = 0
 export const TASKBAR_SPECTRUM_SMOOTHING_MAX = 90
+export const TASKBAR_SPECTRUM_FRAME_RATES = [15, 20, 25, 30] as const
 
 const TASKBAR_SPECTRUM_ALIGNMENTS = ['center', 'bottom'] as const
 
 export type TaskbarSpectrumAlignment = (typeof TASKBAR_SPECTRUM_ALIGNMENTS)[number]
+export type TaskbarSpectrumFrameRate = (typeof TASKBAR_SPECTRUM_FRAME_RATES)[number]
 
 export interface TaskbarAudioSpectrumSettings {
   visible: boolean
@@ -31,6 +33,7 @@ export interface TaskbarAudioSpectrumSettings {
   horizontalPosition: number
   sensitivity: number
   smoothing: number
+  frameRate: TaskbarSpectrumFrameRate
 }
 
 export const DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS: TaskbarAudioSpectrumSettings = {
@@ -41,6 +44,7 @@ export const DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS: TaskbarAudioSpectrumSettin
   horizontalPosition: 50,
   sensitivity: 100,
   smoothing: 55,
+  frameRate: 20,
 }
 
 /** 判断外部值是否为支持的频谱对齐方式。 */
@@ -95,7 +99,15 @@ export function normalizeTaskbarAudioSpectrumSettings(
       TASKBAR_SPECTRUM_SMOOTHING_MAX,
       DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS.smoothing,
     ),
+    frameRate: isTaskbarSpectrumFrameRate(record.frameRate)
+      ? record.frameRate
+      : DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS.frameRate,
   }
+}
+
+/** 判断外部值是否为支持的频谱帧率。 */
+export function isTaskbarSpectrumFrameRate(value: unknown): value is TaskbarSpectrumFrameRate {
+  return TASKBAR_SPECTRUM_FRAME_RATES.some((frameRate) => frameRate === value)
 }
 
 const audioSpectrumStorage = {
@@ -132,6 +144,43 @@ export async function listenTaskbarAudioSpectrumSettingsChange(
   return listen<unknown>(TASKBAR_AUDIO_SPECTRUM_CHANGED_EVENT, ({ payload }) => {
     handler(normalizeTaskbarAudioSpectrumSettings(payload))
   })
+}
+
+/** 为任务栏恢复并订阅频谱显示配置；具体采集和绘制由频谱组件按需接管。 */
+export function useTaskbarAudioSpectrumSettings() {
+  const settings = shallowRef({ ...DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS })
+  const ready = shallowRef(false)
+  let disposed = false
+  let unlisten: UnlistenFn | undefined
+
+  /** 先监听再读取，避免设置窗口事件被旧的持久化值覆盖。 */
+  async function initialize() {
+    try {
+      const stopListener = await listenTaskbarAudioSpectrumSettingsChange((next) => {
+        settings.value = next
+      })
+      if (disposed) {
+        stopListener()
+        return
+      }
+      unlisten = stopListener
+      const initial = await getTaskbarAudioSpectrumSettings()
+      if (!disposed) {
+        settings.value = initial
+        ready.value = true
+      }
+    } catch (error) {
+      console.error('初始化任务栏频谱配置失败', error)
+    }
+  }
+
+  onMounted(initialize)
+  onUnmounted(() => {
+    disposed = true
+    unlisten?.()
+  })
+
+  return { settings: readonly(settings), ready: readonly(ready) }
 }
 
 /** 将单个数值约束为指定范围内的整数。 */

@@ -167,7 +167,9 @@
         "sensitivity": "Sensitivity",
         "sensitivityDescription": "Increase or reduce the spectrum response to input volume",
         "smoothing": "Smoothing",
-        "smoothingDescription": "Higher values are steadier but respond more slowly to rapid changes"
+        "smoothingDescription": "Higher values are steadier but respond more slowly to rapid changes",
+        "frameRate": "Frame rate",
+        "frameRateDescription": "Lower frame rates reduce spectrum capture, IPC, and drawing work"
       },
       "trackInfo": {
         "title": "Track information",

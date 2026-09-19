@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useElementSize } from '@vueuse/core'
-import { motion } from 'motion-v'
 
 import { useReducedMotionPreference } from '@/features/motion/useReducedMotionPreference'
 import type { TaskbarTrackInfoScrolling } from '@/features/settings/track-info'
@@ -8,6 +7,8 @@ import type { TaskbarTrackInfoScrolling } from '@/features/settings/track-info'
 const props = defineProps<{
   text: string
   scrolling: TaskbarTrackInfoScrolling
+  /** 所在内容层是否可见；不可见时停止滚动，避免无限动画持续驱动合成器出帧。 */
+  active: boolean
 }>()
 
 const viewport = useTemplateRef<HTMLElement>('viewport')
@@ -19,9 +20,13 @@ const prefersReducedMotion = useReducedMotionPreference()
 /** 计算文字末尾完整进入显示区域时需要移动的距离。 */
 const overflowDistance = computed(() => Math.max(0, titleWidth.value - viewportWidth.value))
 
-/** 只有配置开启、文字确实溢出且系统允许动效时才创建滚动动画。 */
+/** 只有所在层可见、配置开启、文字确实溢出且系统允许动效时才创建滚动动画。 */
 const shouldScroll = computed(
-  () => props.scrolling.enabled && !prefersReducedMotion.value && overflowDistance.value > 0,
+  () =>
+    props.active &&
+    props.scrolling.enabled &&
+    !prefersReducedMotion.value &&
+    overflowDistance.value > 0,
 )
 
 /** 循环滚动跨过一个视口宽度，前一份离开时副本恰好进入。 */
@@ -40,13 +45,9 @@ const animationKey = computed(
     `${props.text}:${props.scrolling.mode}:${props.scrolling.speed}:${viewportWidth.value}:${titleWidth.value}`,
 )
 
-const animationTarget = computed(() => ({ x: [0, -animationDistance.value] }))
-const animationTransition = computed(() => ({
-  type: 'tween' as const,
-  duration: animationDuration.value,
-  ease: 'linear' as const,
-  repeat: Number.POSITIVE_INFINITY,
-  repeatType: props.scrolling.mode === 'alternate' ? ('reverse' as const) : ('loop' as const),
+const animationStyle = computed(() => ({
+  '--scroll-distance': `-${animationDistance.value}px`,
+  '--scroll-duration': `${animationDuration.value}s`,
 }))
 </script>
 
@@ -61,13 +62,12 @@ const animationTransition = computed(() => ({
       {{ text }}
     </span>
 
-    <motion.div
+    <div
       v-if="shouldScroll"
       :key="animationKey"
-      class="flex w-max will-change-transform"
-      :initial="{ x: 0 }"
-      :animate="animationTarget"
-      :transition="animationTransition"
+      class="track-title-scroll flex w-max"
+      :class="{ 'track-title-scroll-alternate': scrolling.mode === 'alternate' }"
+      :style="animationStyle"
       aria-hidden="true"
     >
       <span class="whitespace-nowrap">{{ text }}</span>
@@ -75,7 +75,27 @@ const animationTransition = computed(() => ({
       <span v-if="scrolling.mode === 'loop'" class="whitespace-nowrap" aria-hidden="true">
         {{ text }}
       </span>
-    </motion.div>
+    </div>
     <span v-else class="block truncate" aria-hidden="true">{{ text }}</span>
   </div>
 </template>
+
+<style scoped>
+.track-title-scroll {
+  animation: track-title-scroll var(--scroll-duration) linear infinite;
+}
+
+.track-title-scroll-alternate {
+  animation-direction: alternate;
+}
+
+@keyframes track-title-scroll {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    transform: translate3d(var(--scroll-distance), 0, 0);
+  }
+}
+</style>

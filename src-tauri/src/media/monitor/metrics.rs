@@ -104,7 +104,7 @@ impl WorkerMessage {
             Self::SetVolume(_, _) => WorkerMessageKind::SetVolume,
             Self::ToggleMute(_) => WorkerMessageKind::ToggleMute,
             Self::GetDiagnostics(_) => WorkerMessageKind::GetDiagnostics,
-            Self::SpectrumEnabled(_, _) => WorkerMessageKind::SpectrumEnabled,
+            Self::SpectrumEnabled(_, _, _) => WorkerMessageKind::SpectrumEnabled,
             Self::Shutdown => WorkerMessageKind::Shutdown,
         }
     }

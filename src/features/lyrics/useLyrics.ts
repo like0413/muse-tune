@@ -14,34 +14,59 @@ const EMPTY_LYRICS: LyricsSnapshot = {
 }
 
 /** 同步 Rust 歌词服务的低频快照；播放进度由媒体 composable 单独提供。 */
-export function useLyrics() {
+export function useLyrics(enabled: Readonly<Ref<boolean>> = ref(true)) {
   const lyrics = shallowRef<LyricsSnapshot>(EMPTY_LYRICS)
   let receivedEvent = false
   let disposed = false
+  let initializationId = 0
   let unlisten: UnlistenFn | undefined
 
   /** 先监听后补取缓存，避免窗口初始化期间漏掉解析完成事件。 */
-  async function initialize() {
+  async function enable() {
+    const currentInitializationId = ++initializationId
+    receivedEvent = false
     try {
       const stopListener = await listen<LyricsSnapshot>(LYRICS_CHANGED_EVENT, ({ payload }) => {
         receivedEvent = true
         lyrics.value = payload
       })
-      if (disposed) {
+      if (disposed || !enabled.value || currentInitializationId !== initializationId) {
         stopListener()
         return
       }
       unlisten = stopListener
       const initial = await getCurrentLyrics()
-      if (!disposed && !receivedEvent) lyrics.value = initial
+      if (
+        !disposed &&
+        enabled.value &&
+        currentInitializationId === initializationId &&
+        !receivedEvent
+      ) {
+        lyrics.value = initial
+      }
     } catch (error) {
       console.error('初始化歌词状态失败', error)
     }
   }
 
-  onMounted(initialize)
+  watch(
+    enabled,
+    (value) => {
+      if (value) {
+        void enable()
+        return
+      }
+      initializationId += 1
+      unlisten?.()
+      unlisten = undefined
+      lyrics.value = EMPTY_LYRICS
+    },
+    { immediate: true },
+  )
+
   onUnmounted(() => {
     disposed = true
+    initializationId += 1
     unlisten?.()
   })
 

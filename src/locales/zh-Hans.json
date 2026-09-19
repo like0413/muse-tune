@@ -167,7 +167,9 @@
         "sensitivity": "灵敏度",
         "sensitivityDescription": "放大或压低频谱对输入音量的响应",
         "smoothing": "动态平滑",
-        "smoothingDescription": "数值越高越稳定，但快速变化的响应会更慢"
+        "smoothingDescription": "数值越高越稳定，但快速变化的响应会更慢",
+        "frameRate": "帧率",
+        "frameRateDescription": "降低帧率可减少频谱采集、通信和绘制开销"
       },
       "trackInfo": {
         "title": "歌曲信息",

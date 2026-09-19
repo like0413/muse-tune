@@ -154,9 +154,9 @@ impl MediaService {
     }
 
     /// 启用或停止当前播放器的真实音频频谱采集。
-    pub fn set_spectrum_enabled(&self, enabled: bool) -> Result<(), String> {
+    pub fn set_spectrum_enabled(&self, enabled: bool, frame_rate: u16) -> Result<(), String> {
         self.request(
-            |sender| WorkerMessage::SpectrumEnabled(enabled, sender),
+            |sender| WorkerMessage::SpectrumEnabled(enabled, frame_rate, sender),
             WORKER_RESPONSE_TIMEOUT,
             "媒体会话未返回频谱开关结果",
         )?

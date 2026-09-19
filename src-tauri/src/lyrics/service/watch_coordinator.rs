@@ -33,6 +33,10 @@ impl LyricsService {
                     return;
                 }
                 let service = LyricsService { inner };
+                // 歌词关闭时缓存写入不产生任何工作，避免仍重建索引或读取播放器本地文件。
+                if !service.lyrics_enabled() {
+                    return;
+                }
                 let configuration_changed = players::configuration_changed(player, &paths);
                 let result = if configuration_changed {
                     service.handle_configuration_change(player)
@@ -86,8 +90,30 @@ impl LyricsService {
         drop(previous);
     }
 
+    /// 歌词关闭时释放全部文件与注册表监听，避免后台线程继续响应缓存写入。
+    pub(super) fn release_watchers(&self) {
+        let previous_watchers = self
+            .inner
+            .watchers
+            .lock()
+            .ok()
+            .map(|mut current| std::mem::take(&mut *current));
+        let previous_registry = self
+            .inner
+            .registry_watchers
+            .lock()
+            .ok()
+            .map(|mut current| std::mem::take(&mut *current));
+        // watcher Drop 会 join；必须在释放 service mutex 后执行。
+        drop(previous_watchers);
+        drop(previous_registry);
+    }
+
     /// 播放器目录配置变化属于低频事件，需要重建监听并淘汰旧来源结果。
     fn handle_configuration_change(&self, player: MediaPlayer) -> Result<(), String> {
+        if !self.lyrics_enabled() {
+            return Ok(());
+        }
         let pending = self.prepare_player_resolution(player)?;
         self.refresh_watchers();
         if let Err(error) = self.inner.cache.clear_local_source(player) {
@@ -103,6 +129,9 @@ impl LyricsService {
         player: MediaPlayer,
         paths: &[PathBuf],
     ) -> Result<(), String> {
+        if !self.lyrics_enabled() {
+            return Ok(());
+        }
         let cache_path = self.cache_path(player);
         // notify 事件可能早于 Windows 目录修改时间更新，先按事件事实淘汰旧索引。
         players::invalidate_local_index(player, cache_path.as_deref());

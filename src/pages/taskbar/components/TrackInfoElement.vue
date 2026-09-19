@@ -17,7 +17,11 @@ import {
 
 import ScrollingTrackTitle from './ScrollingTrackTitle.vue'
 
-const props = defineProps<{ session: MediaSessionSnapshot | null }>()
+const props = defineProps<{
+  session: MediaSessionSnapshot | null
+  /** 所在内容层是否可见；仅在可见时才继续运行标题滚动动画。 */
+  active: boolean
+}>()
 const alignment = shallowRef<TaskbarTrackInfoAlignment>(DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT)
 const scrolling = shallowRef<TaskbarTrackInfoScrolling>({
   ...DEFAULT_TASKBAR_TRACK_INFO_SCROLLING,
@@ -95,6 +99,7 @@ onUnmounted(() => {
       class="text-sm font-medium text-(--taskbar-active-foreground)"
       :text="title"
       :scrolling="scrolling"
+      :active="active"
     />
     <span class="max-w-full truncate text-xs text-(--taskbar-active-secondary-foreground)">{{
       artist

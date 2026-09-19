@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { useElementBounding, useElementHover, useMutationObserver } from '@vueuse/core'
+import {
+  useElementBounding,
+  useElementHover,
+  useMutationObserver,
+  useThrottleFn,
+} from '@vueuse/core'
 import type { CSSProperties } from 'vue'
 
 import { useLyrics } from '@/features/lyrics/useLyrics'
@@ -7,6 +12,8 @@ import { useTaskbarLyricsSettings } from '@/features/lyrics/useTaskbarLyricsSett
 import { useMediaProgress } from '@/features/media/useMediaProgress'
 import { useMediaSession } from '@/features/media/useMediaSession'
 import { useMediaSessionSelectionPolicy } from '@/features/media/useMediaSessionSelectionPolicy'
+import { useReducedMotionPreference } from '@/features/motion/useReducedMotionPreference'
+import { useTaskbarAudioSpectrumSettings } from '@/features/settings/audio-spectrum'
 import { TASKBAR_WIDTH_PRESETS } from '@/features/settings/bar-width'
 import { isTaskbarCoverVisibleInMode } from '@/features/settings/cover'
 import { type TaskbarElement } from '@/features/settings/element-order'
@@ -28,19 +35,14 @@ import PlaybackControlsElement from './components/PlaybackControlsElement.vue'
 import TrackInfoElement from './components/TrackInfoElement.vue'
 
 const { t } = useI18n({ useScope: 'global' })
+const reducedMotion = useReducedMotionPreference()
 
 const { session: mediaSession, timeline, controlPending, control } = useMediaSession()
 const playbackStatus = computed(() => mediaSession.value?.playback.status ?? 'unknown')
-const { positionMs, progress } = useMediaProgress(timeline, playbackStatus)
 const { settings: lyricsSettings } = useTaskbarLyricsSettings()
-// 歌词时间轴始终以歌曲起点为零，GSMTC 对片段媒体可能提供非零起点。
-const lyricsPositionMs = computed(() =>
-  Math.max(
-    0,
-    positionMs.value - (timeline.value?.startTimeMs ?? 0) - lyricsSettings.value.timingOffsetMs,
-  ),
-)
-const { lyrics } = useLyrics()
+const { lyrics } = useLyrics(computed(() => lyricsSettings.value.enabled))
+const { settings: spectrumSettings, ready: spectrumSettingsReady } =
+  useTaskbarAudioSpectrumSettings()
 const { appearance: coverAppearance } = useTaskbarCoverAppearance()
 const taskbarRoot = useTemplateRef<HTMLElement>('taskbarRoot')
 const contentRoot = useTemplateRef<HTMLElement>('contentRoot')
@@ -58,14 +60,47 @@ const {
   elementOrder,
   taskbarWidth,
 } = useTaskbarViewSettings()
+const { visible: taskbarContentVisible } = useTaskbarAutoHide(mediaSession)
 const isCompact = computed(() => taskbarWidth.value <= TASKBAR_WIDTH_PRESETS.compact)
+// 纯音乐、歌词关闭或鼠标悬停显示控件时，不需要持续推演歌词播放位置。
+const hasTimedLyrics = computed(
+  () => lyrics.value.status === 'ready' && lyrics.value.lines.length > 0,
+)
+const hasLyricsContent = computed(
+  () => hasTimedLyrics.value || lyrics.value.status === 'instrumental',
+)
+/** 歌词是否需要持续推进时间轴；与刷新是否平滑无关。 */
+const needsLyricsTimeline = computed(
+  () =>
+    lyricsSettings.value.enabled &&
+    hasTimedLyrics.value &&
+    playbackStatus.value === 'playing' &&
+    !isTaskbarHovered.value,
+)
+// 开启减少动态效果时降级为 1 FPS 低频更新，避免逐帧重算歌词并触发重绘。
+const needsSmoothProgress = computed(() => needsLyricsTimeline.value && !reducedMotion.value)
+const needsProgress = computed(
+  () =>
+    taskbarContentVisible.value &&
+    (progressVisible.value ||
+      (spectrumSettings.value.visible && progressStyle.value === 'vertical-gradient') ||
+      needsLyricsTimeline.value),
+)
+const { positionMs, progress } = useMediaProgress(
+  timeline,
+  playbackStatus,
+  needsProgress,
+  needsSmoothProgress,
+)
+// 歌词时间轴始终以歌曲起点为零，GSMTC 对片段媒体可能提供非零起点。
+const lyricsPositionMs = computed(() =>
+  Math.max(
+    0,
+    positionMs.value - (timeline.value?.startTimeMs ?? 0) - lyricsSettings.value.timingOffsetMs,
+  ),
+)
 // 所有解析入口都要求有效播放器时间线；纯音乐结论本身不伪装成歌词行。
 const hasReliableLyricsTimeline = computed(() => timeline.value !== null)
-const hasLyricsContent = computed(
-  () =>
-    (lyrics.value.status === 'ready' && lyrics.value.lines.length > 0) ||
-    lyrics.value.status === 'instrumental',
-)
 const showLyrics = computed(
   () =>
     lyricsSettings.value.enabled &&
@@ -83,16 +118,22 @@ const lyricsCoverVisible = computed(() =>
 const activeCoverVisible = computed(() =>
   showLyrics.value ? lyricsCoverVisible.value : normalCoverVisible.value,
 )
-const contentBounds = useElementBounding(contentRoot)
-const normalCoverBounds = useElementBounding(normalCoverAnchor)
-const lyricsCoverBounds = useElementBounding(lyricsCoverAnchor)
+// 锚点位于固定尺寸的 bar 窗口内，不随页面滚动变化，无需订阅全局 scroll。
+const contentBounds = useElementBounding(contentRoot, { windowScroll: false })
+const normalCoverBounds = useElementBounding(normalCoverAnchor, { windowScroll: false })
+const lyricsCoverBounds = useElementBounding(lyricsCoverAnchor, { windowScroll: false })
 useMediaSessionSelectionPolicy()
-useTaskbarAutoHide(mediaSession)
 useAutomaticUpdateMonitor()
 const { show: showNativeMenu } = useTaskbarNativeMenu()
 const thumbnailDataUrl = computed(() => mediaSession.value?.metadata.thumbnailDataUrl ?? null)
+/** 曲目身份键；用于复用封面主色提取结果，避免来回切歌时重复解码与像素遍历。 */
+const trackIdentity = computed(() => {
+  const metadata = mediaSession.value?.metadata
+  if (!metadata) return null
+  return `${metadata.title}\u0000${metadata.artist}\u0000${metadata.albumArtist}`
+})
 const displayedThumbnail = useTaskbarDisplayedThumbnail(mediaSession)
-const { progressColor } = useTaskbarProgressColor(thumbnailDataUrl)
+const { progressColor } = useTaskbarProgressColor(thumbnailDataUrl, trackIdentity)
 const coverImage = computed(() => displayedThumbnail.value?.image ?? null)
 const coverBackgroundActive = computed(() => backgroundMode.value !== 'theme')
 
@@ -132,14 +173,23 @@ const coverMotionStyle = computed<CSSProperties>(() => {
   }
 })
 
-/** 在排列、控件可见性或窗口尺寸变化后刷新两个封面锚点。 */
-function refreshCoverAnchors() {
-  void nextTick(() => {
-    contentBounds.update()
-    normalCoverBounds.update()
-    lyricsCoverBounds.update()
-  })
-}
+/**
+ * 在排列、控件可见性或窗口尺寸变化后刷新两个封面锚点。
+ * 普通层在歌词模式下仍保持挂载，其文本变动会持续触发子树变更，因此必须节流，
+ * 否则每次变更都会产生 3 次强制布局读取。
+ */
+const refreshCoverAnchors = useThrottleFn(
+  () => {
+    void nextTick(() => {
+      contentBounds.update()
+      normalCoverBounds.update()
+      lyricsCoverBounds.update()
+    })
+  },
+  100,
+  true,
+  true,
+)
 
 useMutationObserver(normalLayer, refreshCoverAnchors, { childList: true, subtree: true })
 watch([elementOrder, () => coverAppearance.value.visibility], refreshCoverAnchors)
@@ -159,9 +209,20 @@ const progressColorStyle = computed(() => ({
   '--taskbar-progress-color': progressColor.value,
 }))
 
-/** 计算条形进度已经播放部分的宽度。 */
+/**
+ * 合并根节点样式为单个对象：其引用只在自身依赖变化时改变，播放中每帧重渲染会因此
+ * 直接跳过整块 style 的归一化与逐属性 diff（数组写法每次渲染都会产生新引用）。
+ */
+const rootStyle = computed<CSSProperties>(() => ({
+  ...backgroundStyle.value,
+  ...progressColorStyle.value,
+}))
+
+/** 用合成器缩放已播放区域，避免播放进度变化触发布局。 */
 const barProgressStyle = computed(() => ({
-  width: `${progress.value}%`,
+  width: '100%',
+  transform: `scaleX(${progress.value / 100})`,
+  transformOrigin: 'left center',
 }))
 
 const progressBarPositionClass = computed(() =>
@@ -181,7 +242,9 @@ function restoreTaskbarHover() {
 
 /** 用贴近任务栏背景的同色系渐变标示已播放区域，避免与歌词颜色混在一起。 */
 const verticalProgressStyle = computed(() => ({
-  width: `${progress.value}%`,
+  width: '100%',
+  transform: `scaleX(${progress.value / 100})`,
+  transformOrigin: 'left center',
   background:
     'linear-gradient(to right, transparent 0%, color-mix(in srgb, var(--taskbar-progress-color) 40%, var(--taskbar-background)) 100%)',
 }))
@@ -193,16 +256,23 @@ onMounted(refreshCoverAnchors)
   <main
     ref="taskbarRoot"
     class="text-taskbar-foreground relative flex size-full items-center gap-2 overflow-hidden px-2 py-1 shadow-sm select-none"
-    :style="[backgroundStyle, progressColorStyle]"
+    :style="rootStyle"
     @contextmenu.prevent="openNativeMenu"
     @mousemove="restoreTaskbarHover"
   >
     <CoverBackgroundElement
-      v-if="coverBackgroundActive && progressStyle !== 'vertical-gradient'"
+      v-if="
+        taskbarContentVisible &&
+        coverBackgroundActive &&
+        coverImage &&
+        progressStyle !== 'vertical-gradient'
+      "
       :image="coverImage"
       :flow="backgroundFlow"
     />
     <AudioSpectrumElement
+      v-if="spectrumSettingsReady && taskbarContentVisible && spectrumSettings.visible"
+      :settings="spectrumSettings"
       :theme-color="progressColor"
       :foreground-color="activeForegroundColor"
       :progress="progress"
@@ -224,7 +294,11 @@ onMounted(refreshCoverAnchors)
           :style="normalElementStyle.cover"
           aria-hidden="true"
         />
-        <TrackInfoElement :session="mediaSession" :style="normalElementStyle['track-info']" />
+        <TrackInfoElement
+          :session="mediaSession"
+          :active="!showLyrics"
+          :style="normalElementStyle['track-info']"
+        />
         <PlaybackControlsElement
           :session="mediaSession"
           :pending="controlPending"
@@ -247,7 +321,7 @@ onMounted(refreshCoverAnchors)
           aria-hidden="true"
         />
         <LyricsElement
-          v-if="lyrics.status === 'ready'"
+          v-if="taskbarContentVisible && lyricsSettings.enabled && lyrics.status === 'ready'"
           :key="lyrics.trackKey ?? 'no-track'"
           :lyrics="lyrics"
           :position-ms="lyricsPositionMs"
@@ -255,7 +329,9 @@ onMounted(refreshCoverAnchors)
           :theme-color="progressColor"
         />
         <LyricsNoticeElement
-          v-else-if="lyrics.status === 'instrumental'"
+          v-else-if="
+            taskbarContentVisible && lyricsSettings.enabled && lyrics.status === 'instrumental'
+          "
           :text="t('taskbar.lyrics.instrumental')"
           :settings="lyricsSettings"
           :theme-color="progressColor"
@@ -282,7 +358,7 @@ onMounted(refreshCoverAnchors)
       :aria-label="t('media.progress')"
       aria-valuemin="0"
       aria-valuemax="100"
-      :aria-valuenow="progress"
+      :aria-valuenow="Math.round(progress)"
     >
       <div
         v-if="progressStyle === 'bottom'"

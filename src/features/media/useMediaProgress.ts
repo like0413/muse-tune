@@ -1,4 +1,4 @@
-import { useRafFn } from '@vueuse/core'
+import { useIntervalFn, useRafFn } from '@vueuse/core'
 import type { DeepReadonly } from 'vue'
 
 import type { MediaPlaybackStatus, MediaTimeline } from './types'
@@ -10,6 +10,8 @@ import type { MediaPlaybackStatus, MediaTimeline } from './types'
 export function useMediaProgress(
   timeline: DeepReadonly<Ref<MediaTimeline | null>>,
   playbackStatus: Readonly<Ref<MediaPlaybackStatus>>,
+  active: Readonly<Ref<boolean>> = ref(true),
+  smooth: Readonly<Ref<boolean>> = active,
 ) {
   const positionMs = shallowRef(0)
   let anchorPositionMs = 0
@@ -29,10 +31,37 @@ export function useMediaProgress(
     )
   }
 
-  const { pause, resume } = useRafFn(({ timestamp }) => updatePosition(timestamp), {
-    immediate: false,
-    fpsLimit: 30,
-  })
+  const { pause: pauseRaf, resume: resumeRaf } = useRafFn(
+    ({ timestamp }) => updatePosition(timestamp),
+    {
+      immediate: false,
+      // 逐字歌词仍需连续更新，但 20 FPS 已足够保持渐变平滑。
+      fpsLimit: 20,
+    },
+  )
+  const { pause: pauseInterval, resume: resumeInterval } = useIntervalFn(
+    () => updatePosition(),
+    // 进度条和频谱进度边界使用独立的 1 FPS 低频更新。
+    1000,
+    { immediate: false },
+  )
+
+  /** 按当前视觉消费者选择平滑 RAF、低频定时器或完全休眠。 */
+  function synchronizeLoop() {
+    pauseRaf()
+    pauseInterval()
+    if (!active.value || !timeline.value || playbackStatus.value !== 'playing') return
+    if (smooth.value) resumeRaf()
+    else resumeInterval()
+  }
+
+  /** 重新设置外推锚点，避免切换平滑与低频模式时产生跳变。 */
+  function resynchronizePosition() {
+    const now = performance.now()
+    anchorPositionMs = positionMs.value
+    anchorTime = now
+    updatePosition(now)
+  }
 
   watch(
     timeline,
@@ -40,8 +69,7 @@ export function useMediaProgress(
       anchorPositionMs = value?.positionMs ?? 0
       anchorTime = performance.now()
       updatePosition(anchorTime)
-      if (value && playbackStatus.value === 'playing') resume()
-      else pause()
+      synchronizeLoop()
     },
     { immediate: true },
   )
@@ -53,8 +81,30 @@ export function useMediaProgress(
       if (previousStatus === 'playing') updatePosition(now, true)
       anchorPositionMs = positionMs.value
       anchorTime = now
-      if (status === 'playing' && timeline.value) resume()
-      else pause()
+      synchronizeLoop()
+    },
+    { immediate: true },
+  )
+
+  watch(
+    active,
+    (enabled) => {
+      if (!enabled) {
+        pauseRaf()
+        pauseInterval()
+        return
+      }
+      resynchronizePosition()
+      synchronizeLoop()
+    },
+    { immediate: true },
+  )
+
+  watch(
+    smooth,
+    () => {
+      resynchronizePosition()
+      synchronizeLoop()
     },
     { immediate: true },
   )

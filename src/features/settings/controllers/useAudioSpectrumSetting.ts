@@ -6,6 +6,7 @@ import {
   DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS,
   getTaskbarAudioSpectrumSettings,
   isTaskbarSpectrumAlignment,
+  isTaskbarSpectrumFrameRate,
   normalizeTaskbarAudioSpectrumSettings,
   setTaskbarAudioSpectrumSettings,
   type TaskbarAudioSpectrumSettings,
@@ -74,6 +75,12 @@ export function useAudioSpectrumSetting() {
     if (isTaskbarSpectrumAlignment(value)) void updateSettings({ alignment: value })
   }
 
+  /** 更新频谱帧率并立即重启原生采集节奏。 */
+  function selectFrameRate(value: string | number) {
+    const frameRate = Number(value)
+    if (isTaskbarSpectrumFrameRate(frameRate)) void updateSettings({ frameRate })
+  }
+
   /** 规范单个滑块值并广播完整配置。 */
   function updateSliderPreview(key: SpectrumSliderKey, value: number | undefined) {
     if (settingsSaving.value || value === undefined) return
@@ -122,6 +129,7 @@ export function useAudioSpectrumSetting() {
     settingsSaving: readonly(settingsSaving),
     updateSettings,
     selectAlignment,
+    selectFrameRate,
     updateBarCount,
     updateWidthPercentage,
     updateHorizontalPosition,

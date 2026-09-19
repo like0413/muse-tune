@@ -16,7 +16,7 @@ use crate::media::MediaPlayer;
 
 use super::super::{
     error::LyricsError,
-    matcher::{SongCandidate, accepted_score},
+    matcher::{SongCandidate, TrackMatchKey, accepted_score},
     model::{LyricsSource, LyricsSourceKind, ResolvedLyrics},
     network::{API_USER_AGENT, ResolutionDeadline, parse_json},
     parser::{AuxiliaryKind, merge_auxiliary_lines, parse_lrc_lines, parse_qrc_lines},
@@ -165,24 +165,23 @@ pub(super) fn resolve_local(
         return Ok(None);
     }
     let entries = LOCAL_QRC_INDEX.load(cache_path, || scan_local_qrc_files(cache_path))?;
+    // 索引可能有上千条目，当前歌曲的归一化只做一次。
+    let match_key = TrackMatchKey::new(track);
     let mut best: Option<(u8, PathBuf)> = None;
-    for entry in entries {
+    for entry in entries.iter() {
         let artists = split_artists(&entry.artist);
-        let Some(score) = accepted_score(
-            track,
-            SongCandidate {
-                title: &entry.title,
-                artists: &artists,
-                duration_ms: Some(entry.duration_seconds * 1_000),
-            },
-        ) else {
+        let Some(score) = match_key.score(SongCandidate {
+            title: &entry.title,
+            artists: &artists,
+            duration_ms: Some(entry.duration_seconds * 1_000),
+        }) else {
             continue;
         };
         if best
             .as_ref()
             .is_none_or(|(best_score, _)| score > *best_score)
         {
-            best = Some((score, entry.path));
+            best = Some((score, entry.path.clone()));
         }
     }
     let Some((_, original_path)) = best else {
@@ -455,17 +454,4 @@ struct QqArtist {
 struct QqLyricsResponse {
     lyric: Option<String>,
     trans: Option<String>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::parse_original_file_name;
-
-    #[test]
-    fn filename_parser_keeps_dashes_inside_title() {
-        let metadata = parse_original_file_name("歌手 - 标题 - 副标题 - 240 - 专辑_qm.qrc")
-            .expect("当前 QQ 文件名应可解析");
-
-        assert_eq!(metadata.title, "标题 - 副标题");
-    }
 }

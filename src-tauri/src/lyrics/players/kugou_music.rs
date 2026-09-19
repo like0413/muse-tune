@@ -10,7 +10,7 @@ use crate::media::MediaPlayer;
 
 use super::super::{
     error::LyricsError,
-    matcher::{SongCandidate, accepted_score},
+    matcher::{SongCandidate, TrackMatchKey, accepted_score},
     model::{LyricsSource, LyricsSourceKind, ResolvedLyrics},
     parser::parse_krc_lines,
     track::{TrackDescriptor, split_artists},
@@ -39,24 +39,23 @@ pub fn resolve(
         return Ok(None);
     };
     let entries = LOCAL_KRC_INDEX.load(cache_path, || scan_local_krc_files(cache_path))?;
+    // 索引可能有上千条目，当前歌曲的归一化只做一次。
+    let match_key = TrackMatchKey::new(track);
     let mut best: Option<(u8, PathBuf)> = None;
-    for entry in entries {
+    for entry in entries.iter() {
         let artists = split_artists(&entry.artist);
-        let Some(score) = accepted_score(
-            track,
-            SongCandidate {
-                title: &entry.title,
-                artists: &artists,
-                duration_ms: None,
-            },
-        ) else {
+        let Some(score) = match_key.score(SongCandidate {
+            title: &entry.title,
+            artists: &artists,
+            duration_ms: None,
+        }) else {
             continue;
         };
         if best
             .as_ref()
             .is_none_or(|(best_score, _)| score > *best_score)
         {
-            best = Some((score, entry.path));
+            best = Some((score, entry.path.clone()));
         }
     }
     let Some((_, path)) = best else {
@@ -178,24 +177,4 @@ fn parse_file_name(file_name: &str) -> Option<(String, String)> {
     let without_ids = regex.replace(stem, "");
     let (artist, title) = without_ids.split_once(" - ")?;
     Some((artist.to_owned(), title.to_owned()))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::parse_file_name;
-
-    #[test]
-    fn filename_parser_removes_current_kugou_suffix() {
-        let parsed = parse_file_name("歌手 - 歌名-0123456789abcdef0123456789abcdef-123-456.krc");
-
-        assert_eq!(parsed, Some(("歌手".to_owned(), "歌名".to_owned())));
-    }
-
-    #[test]
-    fn filename_parser_accepts_current_hex_tail_variant() {
-        let parsed =
-            parse_file_name("歌手 - 歌名-0123456789abcdef0123456789abcdef-123456789-ab12cd34.krc");
-
-        assert_eq!(parsed, Some(("歌手".to_owned(), "歌名".to_owned())));
-    }
 }

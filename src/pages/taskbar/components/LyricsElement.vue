@@ -60,10 +60,24 @@ const currentLineIndex = computed(() => {
   return Math.max(0, matched)
 })
 
+/**
+ * 只在行号真正变化时更新。
+ * `currentLineIndex` 依赖每帧变化的 `positionMs`，直接作为下游依赖会让行级数据与
+ * 样式对象在播放中每帧重建；改由本引用驱动后，它们只在换行时重算。
+ */
+const activeLineIndex = shallowRef(-1)
+watch(
+  currentLineIndex,
+  (index) => {
+    activeLineIndex.value = index
+  },
+  { immediate: true },
+)
+
 /** 判断当前内容是否确实存在第二行，末句无翻译和下一句时恢复单行居中。 */
 const hasSecondaryLine = computed(() => {
   if (props.settings.lineMode !== 'double') return false
-  const index = currentLineIndex.value
+  const index = activeLineIndex.value
   const current = props.lyrics.lines[index]
   return Boolean(current && selectSecondaryContent(current, props.lyrics.lines[index + 1]))
 })
@@ -107,7 +121,7 @@ const layoutMetrics = computed(() => {
 
 /** 生成最多两行稳定标识的数据，使下一句能够准确移动到第一行槽位。 */
 const displayLines = computed<DisplayLine[]>(() => {
-  const index = currentLineIndex.value
+  const index = activeLineIndex.value
   const current = props.lyrics.lines[index]
   if (!current) return []
   const trackKey = props.lyrics.trackKey ?? 'unknown'

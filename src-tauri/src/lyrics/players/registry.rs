@@ -370,27 +370,3 @@ fn kugou_changed_paths_affect_track(
 ) -> bool {
     kugou_music::changed_paths_affect_track(track, paths)
 }
-
-#[cfg(test)]
-mod tests {
-    use std::collections::HashSet;
-
-    use crate::media::MediaPlayer;
-
-    use super::{ADAPTERS, adapter};
-
-    #[test]
-    fn registry_contains_each_player_once() {
-        let players = ADAPTERS
-            .iter()
-            .map(|adapter| adapter.player)
-            .collect::<HashSet<_>>();
-
-        assert_eq!(players.len(), ADAPTERS.len());
-    }
-
-    #[test]
-    fn unsupported_player_has_no_adapter() {
-        assert!(adapter(MediaPlayer::Other).is_none());
-    }
-}

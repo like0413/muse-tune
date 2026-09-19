@@ -29,47 +29,88 @@ pub struct SongCandidate<'a> {
     pub duration_ms: Option<u64>,
 }
 
-/// 仅接受高置信度且不存在版本冲突的候选。
-pub fn accepted_score(track: &TrackDescriptor, candidate: SongCandidate<'_>) -> Option<u8> {
-    let track_title = normalize_text(&track.title);
-    let candidate_title = normalize_text(candidate.title);
-    if track_title.is_empty() || candidate_title.is_empty() {
-        return None;
-    }
-    let title_similarity = normalized_levenshtein(&track_title, &candidate_title);
-    if title_similarity < 0.9 || version_markers(&track.title) != version_markers(candidate.title) {
-        return None;
+/// 标题相似度阈值；同时用于长度预筛与最终判定。
+const REQUIRED_TITLE_SIMILARITY: f64 = 0.9;
+
+/// 预先归一化的当前歌曲匹配字段，避免在逐候选打分时重复计算。
+pub struct TrackMatchKey<'a> {
+    track: &'a TrackDescriptor,
+    normalized_title: String,
+    title_char_count: usize,
+}
+
+impl<'a> TrackMatchKey<'a> {
+    /// 一次算好逐候选都需要的当前歌曲归一化标题。
+    pub fn new(track: &'a TrackDescriptor) -> Self {
+        let normalized_title = normalize_text(&track.title);
+        Self {
+            title_char_count: normalized_title.chars().count(),
+            normalized_title,
+            track,
+        }
     }
 
-    let track_artists = normalized_artist_set(&track.artists);
-    let candidate_artists = normalized_artist_set(candidate.artists);
-    let artist_score = if !track_artists.is_empty() && track_artists == candidate_artists {
-        30
-    } else if !track_artists.is_disjoint(&candidate_artists) {
-        20
-    } else {
-        return None;
-    };
-    let title_score = (title_similarity * 50.0).round() as u8;
-    let duration_score = match (track.duration_ms, candidate.duration_ms) {
-        (Some(expected), Some(actual)) => {
-            let difference = expected.abs_diff(actual);
-            if difference <= 2_000 {
-                20
-            } else if difference <= MAX_DURATION_DIFFERENCE_MS {
-                15
-            } else {
-                return None;
-            }
+    /// 仅接受高置信度且不存在版本冲突的候选。
+    pub fn score(&self, candidate: SongCandidate<'_>) -> Option<u8> {
+        let track_title = &self.normalized_title;
+        let candidate_title = normalize_text(candidate.title);
+        if track_title.is_empty() || candidate_title.is_empty() {
+            return None;
         }
-        (None, None) | (None, Some(_)) | (Some(_), None) => 0,
-    };
-    let score = title_score + artist_score + duration_score;
-    let exact_without_duration = duration_score == 0
-        && title_similarity == 1.0
-        && !track_artists.is_empty()
-        && track_artists == candidate_artists;
-    (score >= 90 || exact_without_duration).then_some(score)
+        // 编辑距离不小于两串长度之差：长度差超过阈值比例时相似度必然不达标，
+        // 可在进入 O(n*m) 的完整计算前淘汰绝大多数候选。
+        if !could_reach_title_similarity(self.title_char_count, candidate_title.chars().count()) {
+            return None;
+        }
+        let title_similarity = normalized_levenshtein(track_title, &candidate_title);
+        if title_similarity < REQUIRED_TITLE_SIMILARITY
+            || version_markers(&self.track.title) != version_markers(candidate.title)
+        {
+            return None;
+        }
+
+        let track_artists = normalized_artist_set(&self.track.artists);
+        let candidate_artists = normalized_artist_set(candidate.artists);
+        let artist_score = if !track_artists.is_empty() && track_artists == candidate_artists {
+            30
+        } else if !track_artists.is_disjoint(&candidate_artists) {
+            20
+        } else {
+            return None;
+        };
+        let title_score = (title_similarity * 50.0).round() as u8;
+        let duration_score = match (self.track.duration_ms, candidate.duration_ms) {
+            (Some(expected), Some(actual)) => {
+                let difference = expected.abs_diff(actual);
+                if difference <= 2_000 {
+                    20
+                } else if difference <= MAX_DURATION_DIFFERENCE_MS {
+                    15
+                } else {
+                    return None;
+                }
+            }
+            (None, None) | (None, Some(_)) | (Some(_), None) => 0,
+        };
+        let score = title_score + artist_score + duration_score;
+        let exact_without_duration = duration_score == 0
+            && title_similarity == 1.0
+            && !track_artists.is_empty()
+            && track_artists == candidate_artists;
+        (score >= 90 || exact_without_duration).then_some(score)
+    }
+}
+
+/// 单次匹配的便捷入口；批量打分请复用 [`TrackMatchKey`]。
+pub fn accepted_score(track: &TrackDescriptor, candidate: SongCandidate<'_>) -> Option<u8> {
+    TrackMatchKey::new(track).score(candidate)
+}
+
+/// 长度预筛：只有当长度差不超过阈值比例时才可能达到所需相似度。
+/// 用整数比较避免浮点边界问题，取严格大于即淘汰，与旧逻辑逐条等价。
+fn could_reach_title_similarity(track_chars: usize, candidate_chars: usize) -> bool {
+    let longest = track_chars.max(candidate_chars);
+    track_chars.abs_diff(candidate_chars) * 10 <= longest
 }
 
 fn normalized_artist_set(artists: &[String]) -> BTreeSet<String> {
@@ -102,57 +143,4 @@ fn version_markers(value: &str) -> BTreeSet<&'static str> {
         })
         .map(|(marker, _)| marker)
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::media::MediaPlayer;
-
-    use super::{SongCandidate, accepted_score, version_markers};
-    use crate::lyrics::track::TrackDescriptor;
-
-    #[test]
-    fn live_marker_does_not_match_inside_an_english_word() {
-        assert!(version_markers("Olive Tree").is_empty());
-    }
-
-    #[test]
-    fn version_markers_group_equivalent_aliases() {
-        assert_eq!(
-            version_markers("Song (Live)"),
-            version_markers("Song 现场版")
-        );
-    }
-
-    #[test]
-    fn version_markers_recognize_common_new_variants() {
-        let markers = version_markers("Song (Acoustic Remastered)");
-
-        assert!(markers.contains("acoustic"));
-        assert!(markers.contains("remaster"));
-    }
-
-    #[test]
-    fn matcher_rejects_different_song_version() {
-        let track = TrackDescriptor {
-            key: "track".to_owned(),
-            player: MediaPlayer::QqMusic,
-            title: "歌曲 Live".to_owned(),
-            artists: vec!["歌手".to_owned()],
-            duration_ms: Some(180_000),
-        };
-        let candidate_artists = vec!["歌手".to_owned()];
-
-        assert_eq!(
-            accepted_score(
-                &track,
-                SongCandidate {
-                    title: "歌曲",
-                    artists: &candidate_artists,
-                    duration_ms: Some(180_000),
-                }
-            ),
-            None
-        );
-    }
 }

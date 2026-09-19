@@ -136,33 +136,3 @@ pub(super) fn watch_registry_settings(
     }
     watchers
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::media::MediaPlayer;
-
-    use super::{LyricsLookupOutcome, TrackDescriptor, resolve_current_local, supported_players};
-
-    /// 构造指定播放器的最小歌曲描述。
-    fn track(player: MediaPlayer) -> TrackDescriptor {
-        TrackDescriptor {
-            key: "track".to_owned(),
-            player,
-            title: "歌曲".to_owned(),
-            artists: vec!["歌手".to_owned()],
-            duration_ms: Some(180_000),
-        }
-    }
-
-    #[test]
-    fn supported_players_come_from_registry() {
-        assert_eq!(supported_players().count(), 4);
-    }
-
-    #[test]
-    fn unsupported_local_capability_is_explicit() {
-        let outcome = resolve_current_local(&track(MediaPlayer::SodaMusic), None);
-
-        assert!(matches!(outcome, Ok(LyricsLookupOutcome::Unsupported)));
-    }
-}

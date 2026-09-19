@@ -14,6 +14,5 @@ declare module 'vue' {
     CollapsibleItem: typeof import('./src/components/settings/CollapsibleItem.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
-    TaskbarPlayer: typeof import('./src/components/taskbar/TaskbarPlayer.vue')['default']
   }
 }

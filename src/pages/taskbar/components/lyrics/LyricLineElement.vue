@@ -3,6 +3,7 @@ import { useElementSize } from '@vueuse/core'
 import type { CSSProperties, DeepReadonly } from 'vue'
 
 import type { LyricLine } from '@/features/lyrics/types'
+import { useReducedMotionPreference } from '@/features/motion/useReducedMotionPreference'
 import type { TaskbarLyricsAlignment } from '@/features/settings/lyrics'
 
 const SCROLL_START_PROGRESS = 0.28
@@ -31,6 +32,7 @@ const props = defineProps<{
 
 const viewport = useTemplateRef<HTMLElement>('viewport')
 const textMeasure = useTemplateRef<HTMLElement>('textMeasure')
+const reducedMotion = useReducedMotionPreference()
 const { width: viewportWidth } = useElementSize(viewport)
 // 测量实际渲染的逐字内容，宽度与字号变化时由 ResizeObserver 同步滚动边界。
 const { width: textWidth } = useElementSize(textMeasure)
@@ -72,6 +74,8 @@ const contentStyle = computed<CSSProperties>(() => ({
 const trackClass = computed(() => [
   alignmentClasses[props.alignment],
   overflowDistance.value > 0 ? 'w-max will-change-transform' : 'w-full',
+  // 位置更新只有 20 FPS，用短线性过渡让合成器把位移插值到显示刷新率，避免滚动逐帧跳动。
+  overflowDistance.value > 0 && !reducedMotion.value ? 'lyric-line-scrolling' : '',
 ])
 
 /** 只有原文主行参与逐字高亮，翻译和下一句保持纯文本展示。 */
@@ -170,6 +174,11 @@ function wordStateClass(index: number) {
 </template>
 
 <style scoped>
+/* 叠加在 20 FPS 的进度更新之上：时长略大于更新间隔，既不留空隙也不会感到迟滞。 */
+.lyric-line-scrolling {
+  transition: transform 80ms linear;
+}
+
 /* 动画时长由 LyricsElement 统一下发，保证行换位与字号变化同步。 */
 .lyric-content-animated {
   transition:

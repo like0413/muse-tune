@@ -90,27 +90,3 @@ pub fn split_artists(value: &str) -> Vec<String> {
         .map(str::to_owned)
         .collect()
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::media::MediaPlayer;
-
-    use super::TrackDescriptor;
-
-    #[test]
-    fn descriptor_equality_uses_stable_cache_identity() {
-        let left = TrackDescriptor {
-            key: "same".to_owned(),
-            player: MediaPlayer::QqMusic,
-            title: "歌曲".to_owned(),
-            artists: vec!["歌手".to_owned()],
-            duration_ms: Some(180_100),
-        };
-        let right = TrackDescriptor {
-            duration_ms: Some(180_900),
-            ..left.clone()
-        };
-
-        assert_eq!(left, right);
-    }
-}

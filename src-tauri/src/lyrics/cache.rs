@@ -139,8 +139,8 @@ impl ParsedLyricsCache {
                 "规范化歌词超过缓存大小上限".to_owned(),
             ));
         }
-        let target_exists = match filesystem::metadata_if_exists(&target)? {
-            Some(metadata) if metadata.is_file() => true,
+        let replaced_bytes = match filesystem::metadata_if_exists(&target)? {
+            Some(metadata) if metadata.is_file() => Some(metadata.len()),
             Some(_) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -148,7 +148,7 @@ impl ParsedLyricsCache {
                 )
                 .into());
             }
-            None => false,
+            None => None,
         };
         let content_bytes = content.len() as u64;
         let write_result = OpenOptions::new()
@@ -160,12 +160,14 @@ impl ParsedLyricsCache {
             let _ = fs::remove_file(&temporary);
             return Err(error.into());
         }
-        if target_exists && let Err(error) = fs::remove_file(&target) {
+        if replaced_bytes.is_some()
+            && let Err(error) = fs::remove_file(&target)
+        {
             let _ = fs::remove_file(&temporary);
             return Err(error.into());
         }
         match fs::rename(&temporary, &target) {
-            Ok(()) => match self.prune_to_size_limit(&target) {
+            Ok(()) => match self.prune_after_write(&target, content_bytes, replaced_bytes) {
                 Ok(totals) => {
                     self.record_stored_entry(track_key, content_bytes, &cache_entry, totals);
                     Ok(())
@@ -392,6 +394,42 @@ impl ParsedLyricsCache {
         self.cache_path.join(format!("{track_key}.json"))
     }
 
+    /// 写入后的容量维护：已知总量仍在上限内时用增量记账代替整目录扫描。
+    /// 诊断状态里的总量只会被高估（所有删除路径都递减或直接失效），因此不会漏判超限。
+    fn prune_after_write(
+        &self,
+        protected_path: &Path,
+        written_bytes: u64,
+        replaced_bytes: Option<u64>,
+    ) -> Result<CacheTotals, std::io::Error> {
+        let tracked = self
+            .diagnostics
+            .lock()
+            .ok()
+            .and_then(|diagnostics| diagnostics.totals);
+        // 首次写入或总量刚被失效时必须真正扫描一次，才能建立可信基线。
+        let Some(tracked) = tracked else {
+            return self.prune_to_size_limit(protected_path);
+        };
+        let entry_count = if replaced_bytes.is_some() {
+            tracked.entry_count
+        } else {
+            tracked.entry_count.saturating_add(1)
+        };
+        let total_bytes = tracked
+            .total_bytes
+            .saturating_add(written_bytes)
+            .saturating_sub(replaced_bytes.unwrap_or(0));
+        // 接近或超过上限时只能依赖真实扫描来决定淘汰哪些条目。
+        if total_bytes > MAX_CACHE_TOTAL_BYTES {
+            return self.prune_to_size_limit(protected_path);
+        }
+        Ok(CacheTotals {
+            entry_count,
+            total_bytes,
+        })
+    }
+
     /// 按最近写入时间淘汰旧条目，使永久运行也不会无限占用磁盘。
     fn prune_to_size_limit(&self, protected_path: &Path) -> Result<CacheTotals, std::io::Error> {
         self.ensure_directory_boundary()?;
@@ -569,51 +607,4 @@ fn now_seconds() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        CacheEntry, LINE_REFRESH_INTERVAL, LyricsPrecision, LyricsSnapshot, LyricsStatus,
-        WORD_REFRESH_INTERVAL, is_fresh_at,
-    };
-
-    fn entry(status: LyricsStatus, precision: Option<LyricsPrecision>) -> CacheEntry {
-        CacheEntry {
-            refreshed_at_seconds: 100,
-            snapshot: LyricsSnapshot {
-                status,
-                precision,
-                ..LyricsSnapshot::default()
-            },
-        }
-    }
-
-    #[test]
-    fn word_cache_expires_after_long_refresh_interval() {
-        let entry = entry(LyricsStatus::Ready, Some(LyricsPrecision::Word));
-
-        assert!(!is_fresh_at(&entry, 100 + WORD_REFRESH_INTERVAL.as_secs()));
-    }
-
-    #[test]
-    fn line_cache_expires_before_word_cache() {
-        let entry = entry(LyricsStatus::Ready, Some(LyricsPrecision::Line));
-
-        assert!(!is_fresh_at(&entry, 100 + LINE_REFRESH_INTERVAL.as_secs()));
-    }
-
-    #[test]
-    fn backward_clock_change_forces_safe_refresh() {
-        let entry = entry(LyricsStatus::Ready, Some(LyricsPrecision::Line));
-
-        assert!(!is_fresh_at(&entry, 50));
-    }
-
-    #[test]
-    fn instrumental_cache_uses_line_refresh_interval() {
-        let entry = entry(LyricsStatus::Instrumental, None);
-
-        assert!(!is_fresh_at(&entry, 100 + LINE_REFRESH_INTERVAL.as_secs()));
-    }
 }

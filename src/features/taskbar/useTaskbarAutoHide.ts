@@ -62,4 +62,9 @@ export function useTaskbarAutoHide(session: Readonly<Ref<MediaSessionSnapshot | 
     disposed = true
     unlisten?.()
   })
+
+  return {
+    /** 原生 bar 隐藏期间供高频视觉组件停止工作。 */
+    visible: readonly(visible),
+  }
 }

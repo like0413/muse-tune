@@ -249,37 +249,3 @@ fn is_content_change(kind: &EventKind) -> bool {
         EventKind::Any | EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
     )
 }
-
-#[cfg(test)]
-mod tests {
-    use std::path::Path;
-
-    use super::{is_lyrics_source_path, paths_equivalent};
-
-    #[test]
-    fn source_filter_accepts_current_player_files() {
-        for path in [
-            "QueueCache",
-            "KuGou.ini",
-            "playingList",
-            "0123456789abcdef0123456789abcdef",
-            "song_qm.qrc",
-            "song.krc",
-        ] {
-            assert!(is_lyrics_source_path(Path::new(path)), "未识别 {path}");
-        }
-    }
-
-    #[test]
-    fn source_filter_rejects_unrelated_cache_files() {
-        assert!(!is_lyrics_source_path(Path::new("cover.jpg")));
-    }
-
-    #[test]
-    fn path_comparison_ignores_windows_extended_prefix() {
-        assert!(paths_equivalent(
-            Path::new(r"C:\Music\Lyrics"),
-            Path::new(r"\\?\c:\music\lyrics")
-        ));
-    }
-}

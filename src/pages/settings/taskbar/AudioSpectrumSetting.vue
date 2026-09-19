@@ -16,6 +16,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   TASKBAR_SPECTRUM_BAR_COUNT_MAX,
   TASKBAR_SPECTRUM_BAR_COUNT_MIN,
+  TASKBAR_SPECTRUM_FRAME_RATES,
   TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MAX,
   TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MIN,
   TASKBAR_SPECTRUM_SENSITIVITY_MAX,
@@ -42,6 +43,7 @@ const {
   settingsSaving,
   updateSettings,
   selectAlignment,
+  selectFrameRate,
   updateBarCount,
   updateWidthPercentage,
   updateHorizontalPosition,
@@ -93,6 +95,30 @@ const {
               {{ selectedSettings.barCount }}
             </output>
           </div>
+        </Field>
+
+        <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
+          <FieldContent>
+            <FieldTitle>{{ t('settings.taskbar.spectrum.frameRate') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.spectrum.frameRateDescription')
+            }}</FieldDescription>
+          </FieldContent>
+          <Tabs
+            :model-value="String(selectedSettings.frameRate)"
+            @update:model-value="selectFrameRate"
+          >
+            <TabsList>
+              <TabsTrigger
+                v-for="frameRate in TASKBAR_SPECTRUM_FRAME_RATES"
+                :key="frameRate"
+                :value="String(frameRate)"
+                :disabled="settingsSaving || !selectedSettings.visible"
+              >
+                {{ frameRate }}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </Field>
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">

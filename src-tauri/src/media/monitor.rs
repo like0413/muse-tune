@@ -15,6 +15,7 @@ use super::{
     players::{identify, selection_hold_after_title_change},
     selector::{SelectionCandidate, select_session},
     spectrum::AudioSpectrumController,
+    thumbnail::read_thumbnail_data_url,
     volume::ApplicationVolumeController,
 };
 
@@ -46,7 +47,7 @@ pub(super) enum WorkerMessage {
     SetVolume(f32, mpsc::SyncSender<Result<MediaVolumeSnapshot, String>>),
     ToggleMute(mpsc::SyncSender<Result<MediaVolumeSnapshot, String>>),
     GetDiagnostics(mpsc::SyncSender<super::MediaRuntimeDiagnostics>),
-    SpectrumEnabled(bool, mpsc::SyncSender<Result<(), String>>),
+    SpectrumEnabled(bool, u16, mpsc::SyncSender<Result<(), String>>),
     Shutdown,
 }
 
@@ -55,6 +56,8 @@ struct SessionEntry {
     id: u64,
     registration: SessionRegistration,
     snapshot: MediaSessionSnapshot,
+    /// 当前封面所对应的文本元数据键；用于跳过未变内容的封面重复解码。
+    thumbnail_key: Option<session::MediaMetadataText>,
     activity_order: u64,
     selection_hold_until: Option<Instant>,
     pending_previous_position_ms: Option<i64>,
@@ -399,8 +402,8 @@ fn run_worker<R: Runtime>(
                     worker: worker_metrics.snapshot(deadlines.metadata_settle_pending_count()),
                 });
             }
-            WorkerMessage::SpectrumEnabled(enabled, result_sender) => {
-                let result = selected.spectrum.set_enabled(enabled);
+            WorkerMessage::SpectrumEnabled(enabled, frame_rate, result_sender) => {
+                let result = selected.spectrum.set_enabled(enabled, frame_rate);
                 let _ = result_sender.send(result);
             }
             WorkerMessage::Shutdown => break,
@@ -526,6 +529,11 @@ fn synchronize_sessions(
         entries.push(SessionEntry {
             id,
             registration,
+            thumbnail_key: snapshot
+                .metadata
+                .thumbnail_data_url
+                .as_ref()
+                .map(|_| session::MediaMetadataText::from_metadata(&snapshot.metadata)),
             snapshot,
             activity_order,
             selection_hold_until: None,
@@ -560,10 +568,30 @@ fn refresh_metadata(entries: &mut [SessionEntry], session_id: u64) -> MetadataRe
     let Some(entry) = entries.iter_mut().find(|entry| entry.id == session_id) else {
         return MetadataRefresh::default();
     };
-    let Ok(metadata) = session::read_metadata(&entry.registration.session)
+    let Ok(properties) = session::read_properties(&entry.registration.session)
         .inspect_err(|error| log::warn!("刷新媒体属性失败: {error}"))
     else {
         return MetadataRefresh::default();
+    };
+    // 文本内容不变且封面已经就绪时直接结束，跳过封面流的读取、解码与 Base64 编码。
+    if entry.thumbnail_key.as_ref() == Some(&properties.text)
+        && entry.snapshot.metadata.thumbnail_data_url.is_some()
+    {
+        return MetadataRefresh::default();
+    }
+    let thumbnail_data_url = properties
+        .thumbnail
+        .as_ref()
+        .and_then(|thumbnail| read_thumbnail_data_url(thumbnail).ok().flatten());
+    // 只有真正取到封面才记录内容键，使“封面晚于标题到达”的播放器能在下一次刷新补上。
+    entry.thumbnail_key = thumbnail_data_url.as_ref().map(|_| properties.text.clone());
+
+    let metadata = MediaMetadata {
+        title: properties.text.title,
+        artist: properties.text.artist,
+        album_artist: properties.text.album_artist,
+        subtitle: properties.text.subtitle,
+        thumbnail_data_url,
     };
     if entry.snapshot.metadata == metadata {
         return MetadataRefresh::default();
