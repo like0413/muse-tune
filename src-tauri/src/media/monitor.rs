@@ -11,6 +11,7 @@ use windows::Media::Control::{
 use super::{
     MediaControlAction, MediaMetadata, MediaPlayer, MediaSessionSelectionPolicy,
     MediaSessionSnapshot, MediaSnapshotSubscriber, MediaVolumeSnapshot,
+    activation::toggle_player_window,
     model::MediaPlaybackStatus,
     players::{identify, selection_hold_after_title_change},
     selector::{SelectionCandidate, select_session},
@@ -43,6 +44,7 @@ pub(super) enum WorkerMessage {
         mpsc::SyncSender<Result<(), String>>,
     ),
     Control(MediaControlAction, mpsc::SyncSender<Result<bool, String>>),
+    TogglePlayerWindow(mpsc::SyncSender<Result<(), String>>),
     GetVolume(mpsc::SyncSender<Option<MediaVolumeSnapshot>>),
     SetVolume(f32, mpsc::SyncSender<Result<MediaVolumeSnapshot, String>>),
     ToggleMute(mpsc::SyncSender<Result<MediaVolumeSnapshot, String>>),
@@ -351,6 +353,10 @@ fn run_worker<R: Runtime>(
                 );
                 let _ = result_sender.send(result);
             }
+            WorkerMessage::TogglePlayerWindow(result_sender) => {
+                let result = toggle_selected_player_window(&sessions, selected.id);
+                let _ = result_sender.send(result);
+            }
             WorkerMessage::GetVolume(result_sender) => {
                 // 首次订阅可能晚于播放器启动；读取前补齐尚未就绪的音频绑定。
                 if selected.volume.snapshot().is_none()
@@ -473,6 +479,25 @@ fn handle_volume_rebind_due<R: Runtime>(
 
 fn non_empty_metadata(value: &str) -> Option<String> {
     (!value.trim().is_empty()).then(|| value.to_owned())
+}
+
+/// 从当前选择读取稳定来源标识，并交由窗口开关模块处理。
+fn toggle_selected_player_window(
+    entries: &[SessionEntry],
+    selected_id: Option<u64>,
+) -> Result<(), String> {
+    let entry = entries
+        .iter()
+        .find(|entry| Some(entry.id) == selected_id)
+        .ok_or_else(|| "当前没有可打开的媒体播放器".to_owned())?;
+    let source_app_id = entry
+        .registration
+        .session
+        .SourceAppUserModelId()
+        .map(|value| value.to_string())
+        .map_err(|error| format!("读取当前播放器来源失败: {error}"))?;
+    let player = identify(&source_app_id);
+    toggle_player_window(&source_app_id, &player, &entry.snapshot.metadata.title)
 }
 
 /// 获取 GSMTC 管理器并订阅当前会话与会话列表变化。

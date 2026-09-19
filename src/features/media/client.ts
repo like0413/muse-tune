@@ -22,6 +22,11 @@ export function controlMediaSession(action: MediaControlAction): Promise<boolean
   return invoke<boolean>('control_media_session', { action })
 }
 
+/** 开关当前媒体会话所属的播放器主窗口：已打开时关闭，最小化或隐藏时打开。 */
+export function toggleCurrentMediaPlayer(): Promise<void> {
+  return invoke('toggle_current_media_player')
+}
+
 /** 读取当前应用音量。 */
 export function getCurrentMediaVolume(): Promise<MediaVolumeSnapshot | null> {
   return invoke<MediaVolumeSnapshot | null>('get_current_media_volume')

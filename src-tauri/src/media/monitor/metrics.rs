@@ -26,6 +26,7 @@ pub(super) enum WorkerMessageKind {
     TimelinePropertiesChanged,
     SelectionPolicyChanged,
     Control,
+    TogglePlayerWindow,
     GetVolume,
     SetVolume,
     ToggleMute,
@@ -37,13 +38,14 @@ pub(super) enum WorkerMessageKind {
 }
 
 impl WorkerMessageKind {
-    const ALL: [Self; 14] = [
+    const ALL: [Self; 15] = [
         Self::ManagerChanged,
         Self::MediaPropertiesChanged,
         Self::PlaybackInfoChanged,
         Self::TimelinePropertiesChanged,
         Self::SelectionPolicyChanged,
         Self::Control,
+        Self::TogglePlayerWindow,
         Self::GetVolume,
         Self::SetVolume,
         Self::ToggleMute,
@@ -63,6 +65,7 @@ impl WorkerMessageKind {
             Self::TimelinePropertiesChanged => "timeline_properties_changed",
             Self::SelectionPolicyChanged => "selection_policy_changed",
             Self::Control => "control",
+            Self::TogglePlayerWindow => "toggle_player_window",
             Self::GetVolume => "get_volume",
             Self::SetVolume => "set_volume",
             Self::ToggleMute => "toggle_mute",
@@ -80,6 +83,7 @@ impl WorkerMessageKind {
             self,
             Self::SelectionPolicyChanged
                 | Self::Control
+                | Self::TogglePlayerWindow
                 | Self::GetVolume
                 | Self::SetVolume
                 | Self::ToggleMute
@@ -100,6 +104,7 @@ impl WorkerMessage {
             Self::EventsReady => unreachable!("事件 wake 不属于可靠 command 分类"),
             Self::SelectionPolicyChanged(_, _) => WorkerMessageKind::SelectionPolicyChanged,
             Self::Control(_, _) => WorkerMessageKind::Control,
+            Self::TogglePlayerWindow(_) => WorkerMessageKind::TogglePlayerWindow,
             Self::GetVolume(_) => WorkerMessageKind::GetVolume,
             Self::SetVolume(_, _) => WorkerMessageKind::SetVolume,
             Self::ToggleMute(_) => WorkerMessageKind::ToggleMute,

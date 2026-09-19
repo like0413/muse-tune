@@ -14,3 +14,38 @@ export const TASKBAR_OVERLAP_PRIORITIES = ['bar', 'taskbar'] as const
 
 export type TaskbarPlacement = (typeof TASKBAR_PLACEMENTS)[number]
 export type TaskbarOverlapPriority = (typeof TASKBAR_OVERLAP_PRIORITIES)[number]
+
+/** 托盘菜单项要求任务栏窗口执行的动作。 */
+export const TRAY_MENU_ACTIONS = ['normal-cover', 'lyrics-cover', 'lyrics', 'spectrum'] as const
+
+export type TrayMenuAction = (typeof TRAY_MENU_ACTIONS)[number]
+
+/** 托盘菜单文案，由任务栏窗口按当前界面语言提供。 */
+export interface TrayMenuLabels {
+  normalCover: string
+  lyricsCover: string
+  lyrics: string
+  spectrum: string
+  settings: string
+  restart: string
+  quit: string
+}
+
+/** 托盘菜单开关项的勾选状态。 */
+export interface TrayMenuChecked {
+  normalCover: boolean
+  lyricsCover: boolean
+  lyrics: boolean
+  spectrum: boolean
+}
+
+/** 托盘菜单完整展示状态；原生菜单只负责渲染。 */
+export interface TrayMenuPresentation {
+  labels: TrayMenuLabels
+  checked: TrayMenuChecked
+}
+
+/** 判断事件负载是否为受支持的托盘菜单动作。 */
+export function isTrayMenuAction(value: unknown): value is TrayMenuAction {
+  return TRAY_MENU_ACTIONS.some((action) => action === value)
+}

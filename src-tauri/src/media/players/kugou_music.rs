@@ -23,6 +23,11 @@ impl PlayerAdapter for KugouMusicAdapter {
         &["kugou.exe", "kgmusic.exe"]
     }
 
+    fn preferred_window_classes(&self) -> &'static [&'static str] {
+        // 酷狗的界面窗口共用类名；排除的是同进程的隐藏宿主窗口，主窗口再按标题与面积区分。
+        &["kugou_ui"]
+    }
+
     fn selection_hold_after_title_change(&self) -> Option<Duration> {
         Some(TRACK_CHANGE_SELECTION_HOLD)
     }

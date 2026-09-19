@@ -18,4 +18,9 @@ impl PlayerAdapter for QqMusicAdapter {
     fn executable_names(&self) -> &'static [&'static str] {
         &["qqmusic.exe"]
     }
+
+    fn preferred_window_classes(&self) -> &'static [&'static str] {
+        // QQ 音乐主界面类名与提示、队列等窗口相同，其余辅助窗口由属主、工具窗口和标题过滤排除。
+        &["TXGuiFoundation"]
+    }
 }

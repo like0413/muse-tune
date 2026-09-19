@@ -1,6 +1,13 @@
 import { invoke } from '@tauri-apps/api/core'
 
-import type { TaskbarDisplay, TaskbarOverlapPriority, TaskbarPlacement } from './contracts'
+import type {
+  TaskbarDisplay,
+  TaskbarOverlapPriority,
+  TaskbarPlacement,
+  TrayMenuPresentation,
+} from './contracts'
+
+export const TRAY_MENU_ACTION_EVENT = 'tray://taskbar-menu-action'
 
 /** 读取系统任务栏显示器列表。 */
 export function listTaskbarDisplays(): Promise<TaskbarDisplay[]> {
@@ -30,6 +37,11 @@ export function setTaskbarPlacement(placement: TaskbarPlacement): Promise<void> 
 /** 设置任务栏宽度。 */
 export function setTaskbarWidth(width: number): Promise<void> {
   return invoke('set_taskbar_width', { width })
+}
+
+/** 同步托盘菜单的文案与勾选状态。 */
+export function setTrayMenuState(presentation: TrayMenuPresentation): Promise<void> {
+  return invoke('set_tray_menu_state', { presentation })
 }
 
 /** 显示原生音量悬浮窗。 */

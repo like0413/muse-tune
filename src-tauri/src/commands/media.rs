@@ -23,6 +23,15 @@ pub async fn control_media_session(
         .map_err(|error| format!("等待媒体控制结果失败: {error}"))?
 }
 
+/// 开关当前媒体会话所属的播放器主窗口：已在前台时关闭，最小化或隐藏到托盘时还原或显示。
+#[tauri::command]
+pub async fn toggle_current_media_player(service: State<'_, MediaService>) -> Result<(), String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || service.toggle_player_window())
+        .await
+        .map_err(|error| format!("等待播放器窗口开关结果失败: {error}"))?
+}
+
 /// 更新多播放器会话选择策略，并在媒体线程内串行应用。
 #[tauri::command]
 pub async fn set_media_session_selection_policy(

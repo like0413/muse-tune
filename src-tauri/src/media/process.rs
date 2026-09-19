@@ -2,11 +2,11 @@
 
 use std::{
     collections::HashSet,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
 };
 
-use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 /// 复用的进程枚举器：避免每次查询都重建整张进程表。
 static PROCESS_SYSTEM: OnceLock<Mutex<System>> = OnceLock::new();
@@ -57,4 +57,30 @@ fn strip_exe(name: &str) -> Option<&str> {
         [head @ .., b'.', b'e' | b'E', b'x' | b'X', b'e' | b'E'] => name.get(..head.len()),
         _ => None,
     }
+}
+
+/// 优先读取进程树根节点的可执行文件，避免把多进程客户端的渲染子进程当作启动入口。
+pub(super) fn find_process_executable(process_ids: &HashSet<u32>) -> Option<PathBuf> {
+    if process_ids.is_empty() {
+        return None;
+    }
+
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing().with_exe(UpdateKind::OnlyIfNotSet),
+    );
+    process_ids
+        .iter()
+        .filter_map(|process_id| {
+            let process = system.process(Pid::from_u32(*process_id))?;
+            let executable = process.exe()?.to_path_buf();
+            let is_child = process
+                .parent()
+                .is_some_and(|parent| process_ids.contains(&parent.as_u32()));
+            Some((is_child, executable))
+        })
+        .min_by_key(|(is_child, executable)| (*is_child, executable.components().count()))
+        .map(|(_, executable)| executable)
 }

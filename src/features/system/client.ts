@@ -17,8 +17,3 @@ export function getSystemForegroundColor(): Promise<string> {
 export function listSystemFonts(): Promise<string[]> {
   return invoke<string[]>('list_system_fonts')
 }
-
-/** 请求应用按正常生命周期重启。 */
-export function restartApplication(): Promise<void> {
-  return invoke('restart_application')
-}

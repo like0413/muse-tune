@@ -9,6 +9,7 @@ import type { CSSProperties } from 'vue'
 
 import { useLyrics } from '@/features/lyrics/useLyrics'
 import { useTaskbarLyricsSettings } from '@/features/lyrics/useTaskbarLyricsSettings'
+import { toggleCurrentMediaPlayer } from '@/features/media/client'
 import { useMediaProgress } from '@/features/media/useMediaProgress'
 import { useMediaSession } from '@/features/media/useMediaSession'
 import { useMediaSessionSelectionPolicy } from '@/features/media/useMediaSessionSelectionPolicy'
@@ -20,7 +21,7 @@ import { type TaskbarElement } from '@/features/settings/element-order'
 import { useTaskbarAutoHide } from '@/features/taskbar/useTaskbarAutoHide'
 import { useTaskbarCoverAppearance } from '@/features/taskbar/useTaskbarCoverAppearance'
 import { useTaskbarDisplayedThumbnail } from '@/features/taskbar/useTaskbarDisplayedThumbnail'
-import { useTaskbarNativeMenu } from '@/features/taskbar/useTaskbarNativeMenu'
+import { useTaskbarTrayMenu } from '@/features/taskbar/useTaskbarTrayMenu'
 import { useTaskbarViewSettings } from '@/features/taskbar/useTaskbarViewSettings'
 import { useTaskbarForegroundColor } from '@/features/theme/useTaskbarForegroundColor'
 import { useTaskbarProgressColor } from '@/features/theme/useTaskbarProgressColor'
@@ -124,7 +125,12 @@ const normalCoverBounds = useElementBounding(normalCoverAnchor, { windowScroll: 
 const lyricsCoverBounds = useElementBounding(lyricsCoverAnchor, { windowScroll: false })
 useMediaSessionSelectionPolicy()
 useAutomaticUpdateMonitor()
-const { show: showNativeMenu } = useTaskbarNativeMenu()
+useTaskbarTrayMenu(() => ({
+  normalCover: isTaskbarCoverVisibleInMode(coverAppearance.value.visibility, 'normal'),
+  lyricsCover: isTaskbarCoverVisibleInMode(coverAppearance.value.visibility, 'lyrics'),
+  lyrics: lyricsSettings.value.enabled,
+  spectrum: spectrumSettings.value.visible,
+}))
 const thumbnailDataUrl = computed(() => mediaSession.value?.metadata.thumbnailDataUrl ?? null)
 /** 曲目身份键；用于复用封面主色提取结果，避免来回切歌时重复解码与像素遍历。 */
 const trackIdentity = computed(() => {
@@ -229,15 +235,13 @@ const progressBarPositionClass = computed(() =>
   progressPosition.value === 'top' ? 'top-0' : 'bottom-0',
 )
 
-/** 原生菜单关闭后纠正 WebView 可能遗漏 mouseleave 而残留的悬停状态。 */
-async function openNativeMenu() {
-  await showNativeMenu()
-  isTaskbarHovered.value = false
-}
-
-/** 菜单关闭时若指针仍在 bar 内，下一次移动立即恢复普通控制层。 */
-function restoreTaskbarHover() {
-  isTaskbarHovered.value = true
+/** 右键开关当前媒体会话所属的播放器窗口：已打开时关闭，最小化或隐藏时打开。 */
+async function togglePlayer() {
+  try {
+    await toggleCurrentMediaPlayer()
+  } catch (error) {
+    console.error('开关当前播放器窗口失败', error)
+  }
 }
 
 /** 用贴近任务栏背景的同色系渐变标示已播放区域，避免与歌词颜色混在一起。 */
@@ -257,8 +261,7 @@ onMounted(refreshCoverAnchors)
     ref="taskbarRoot"
     class="text-taskbar-foreground relative flex size-full items-center gap-2 overflow-hidden px-2 py-1 shadow-sm select-none"
     :style="rootStyle"
-    @contextmenu.prevent="openNativeMenu"
-    @mousemove="restoreTaskbarHover"
+    @contextmenu.prevent="togglePlayer"
   >
     <CoverBackgroundElement
       v-if="

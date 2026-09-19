@@ -20,6 +20,22 @@ trait PlayerAdapter: Sync {
     /// 返回传统桌面客户端可能使用的进程文件名。
     fn executable_names(&self) -> &'static [&'static str];
 
+    /// 返回唤醒播放器时优先选择的顶层窗口类名；只影响排序，不放宽唤醒条件。
+    fn preferred_window_classes(&self) -> &'static [&'static str] {
+        &[]
+    }
+
+    /// 返回会使重新启动入口失效的插件模块片段；进程加载了这些模块时改由外部直接显示主窗口。
+    fn relaunch_blocking_module_fragments(&self) -> &'static [&'static str] {
+        &[]
+    }
+
+    /// 返回播放器官方启动入口的文件名；可执行文件自身不是正确入口时需要（例如
+    /// 客户端运行在带版本号的子目录、必须由上层启动器转发）。
+    fn relaunch_entry_names(&self) -> &'static [&'static str] {
+        &[]
+    }
+
     /// 返回歌曲标题变化后保持当前会话的播放器专属稳定窗口。
     fn selection_hold_after_title_change(&self) -> Option<Duration> {
         None
@@ -43,6 +59,24 @@ impl IdentifiedPlayer {
     /// 返回当前播放器隔离维护的进程文件名。
     pub(super) fn executable_names(&self) -> &'static [&'static str] {
         self.adapter.map_or(&[], PlayerAdapter::executable_names)
+    }
+
+    /// 返回当前播放器主窗口的稳定类名。
+    pub(super) fn preferred_window_classes(&self) -> &'static [&'static str] {
+        self.adapter
+            .map_or(&[], PlayerAdapter::preferred_window_classes)
+    }
+
+    /// 返回会让重新启动入口失效的插件模块片段。
+    pub(super) fn relaunch_blocking_module_fragments(&self) -> &'static [&'static str] {
+        self.adapter
+            .map_or(&[], PlayerAdapter::relaunch_blocking_module_fragments)
+    }
+
+    /// 返回播放器官方启动入口的文件名。
+    pub(super) fn relaunch_entry_names(&self) -> &'static [&'static str] {
+        self.adapter
+            .map_or(&[], PlayerAdapter::relaunch_entry_names)
     }
 }
 

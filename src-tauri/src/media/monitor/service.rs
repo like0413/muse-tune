@@ -117,6 +117,15 @@ impl MediaService {
         )?
     }
 
+    /// 开关当前选中会话所属的播放器主窗口：已在前台时关闭，最小化或隐藏时还原或显示。
+    pub fn toggle_player_window(&self) -> Result<(), String> {
+        self.request(
+            WorkerMessage::TogglePlayerWindow,
+            WORKER_RESPONSE_TIMEOUT,
+            "媒体会话未返回播放器窗口开关结果",
+        )?
+    }
+
     /// 更新多播放器会话选择策略，并立即重新计算控制目标。
     pub fn set_selection_policy(&self, policy: MediaSessionSelectionPolicy) -> Result<(), String> {
         self.request(

@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+mod activation;
 mod model;
 mod monitor;
 mod players;
