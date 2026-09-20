@@ -5,6 +5,7 @@ use std::{
 };
 
 use regex::Regex;
+use reqwest::blocking::Client;
 
 use crate::media::MediaPlayer;
 
@@ -12,10 +13,13 @@ use super::super::{
     error::LyricsError,
     matcher::{SongCandidate, TrackMatchKey, accepted_score},
     model::{LyricsSource, LyricsSourceKind, ResolvedLyrics},
+    network::ResolutionDeadline,
     parser::parse_krc_lines,
     track::{TrackDescriptor, split_artists},
 };
 use super::file_index::DirectoryFileIndex;
+
+mod online;
 
 const MAX_KRC_BYTES: u64 = 2 * 1024 * 1024;
 static CACHE_FILE_SUFFIX: LazyLock<Result<Regex, regex::Error>> =
@@ -83,6 +87,15 @@ pub fn resolve(
         },
         lines,
     }))
+}
+
+/// 匿名搜索酷狗曲目并读取在线逐字 KRC 歌词。
+pub fn resolve_online(
+    track: &TrackDescriptor,
+    client: &Client,
+    deadline: &ResolutionDeadline,
+) -> Result<Option<ResolvedLyrics>, LyricsError> {
+    online::resolve(track, client, deadline)
 }
 
 /// 扫描一次酷狗 KRC 文件并缓存稳定的文件名元数据。

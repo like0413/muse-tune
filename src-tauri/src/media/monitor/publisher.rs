@@ -28,11 +28,11 @@ pub(super) fn publish_selected_snapshot<R: Runtime>(
     entries: &[SessionEntry],
     selected_id: Option<u64>,
 ) {
-    let next = entries
-        .iter()
-        .find(|entry| Some(entry.id) == selected_id)
-        .map(|entry| entry.snapshot.clone());
-    publish_snapshot(publisher, next);
+    let selected = entries.iter().find(|entry| Some(entry.id) == selected_id);
+    let timeline_confirmed =
+        selected.is_some_and(|entry| entry.pending_previous_position_ms.is_none());
+    let next = selected.map(|entry| entry.snapshot.clone());
+    publish_snapshot(publisher, next, timeline_confirmed);
 }
 
 /// 仅发布轻量时间线，避免播放器定期更新时间时重复序列化封面。
@@ -60,12 +60,23 @@ pub(super) fn publish_selected_timeline<R: Runtime>(
 fn publish_snapshot<R: Runtime>(
     publisher: &MediaSnapshotPublisher<'_, R>,
     next: Option<MediaSessionSnapshot>,
+    timeline_confirmed: bool,
 ) {
     if let Ok(mut current) = publisher.snapshot.write() {
         current.clone_from(&next);
     }
     emit_snapshot(publisher.app, &next);
-    (publisher.subscriber)(&next);
+    let Some(mut snapshot) = next else {
+        (publisher.subscriber)(&None);
+        return;
+    };
+    if !timeline_confirmed {
+        // 标题已换、时间线还没出现新曲边界：这条时间线属于上一首。界面照常显示，
+        // 但歌词层不能拿到它——解析会用时长判定候选，混用上一首的时长会让所有来源同时未命中。
+        // 去掉时间线后歌词层按“播放器未提供时长”处理：不解析，也不留下错误结论。
+        snapshot.timeline = None;
+    }
+    (publisher.subscriber)(&Some(snapshot));
 }
 
 /// 广播媒体快照；窗口未就绪时由前端初始 command 补取缓存。

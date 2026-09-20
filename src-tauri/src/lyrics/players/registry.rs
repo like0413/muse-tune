@@ -66,6 +66,16 @@ pub(super) struct LyricsAdapter {
 }
 
 impl LyricsAdapter {
+    /// 是否具备本地歌词读取能力。
+    pub fn has_local(&self) -> bool {
+        self.local.is_some()
+    }
+
+    /// 是否具备在线歌词读取能力。
+    pub fn has_online(&self) -> bool {
+        self.online.is_some()
+    }
+
     /// 执行本地能力，不支持时返回统一的 Unsupported。
     pub fn resolve_local(
         &self,
@@ -220,7 +230,9 @@ pub(super) const ADAPTERS: [LyricsAdapter; 4] = [
         local: Some(LocalLyricsCapability {
             resolve: resolve_kugou_local,
         }),
-        online: None,
+        online: Some(OnlineLyricsCapability {
+            resolve: resolve_kugou_online,
+        }),
         storage: LyricsStorageCapability {
             discover_cache_path: kugou_music::automatic_cache_path,
             additional_watch_paths: kugou_additional_watch_paths,
@@ -297,6 +309,15 @@ fn resolve_kugou_local(track: &TrackDescriptor, cache_path: Option<&Path>) -> Lo
     kugou_music::resolve(track, Some(cache_path)).map(completed_lookup)
 }
 
+fn resolve_kugou_online(
+    track: &TrackDescriptor,
+    _cache_path: Option<&Path>,
+    client: &Client,
+    deadline: &ResolutionDeadline,
+) -> LookupResult {
+    kugou_music::resolve_online(track, client, deadline).map(completed_lookup)
+}
+
 fn no_additional_watch_paths() -> Vec<PathBuf> {
     Vec::new()
 }
@@ -342,8 +363,8 @@ fn netease_changed_paths_affect_track(
 }
 
 fn soda_changed_paths_affect_track(
-    _track: &TrackDescriptor,
-    _cache_path: Option<&Path>,
+    track: &TrackDescriptor,
+    cache_path: Option<&Path>,
     paths: &[PathBuf],
     current_source: Option<&LyricsSource>,
     _current_has_word_timing: bool,
@@ -353,12 +374,17 @@ fn soda_changed_paths_affect_track(
             && source.kind == LyricsSourceKind::Online
             && source.song_id.is_some()
     });
-    !already_uses_soda
-        && paths.iter().any(|path| {
-            path.file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.eq_ignore_ascii_case("QueueCache"))
-        })
+    if already_uses_soda {
+        return false;
+    }
+    let queue_cache_changed = paths.iter().any(|path| {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.eq_ignore_ascii_case("QueueCache"))
+    });
+    // QueueCache 会被队列刷新与预加载频繁改写，只有它确实包含当前歌曲时才认为与本次事件相关。
+    queue_cache_changed
+        && cache_path.is_some_and(|cache_path| soda_music::queue_contains_track(track, cache_path))
 }
 
 fn kugou_changed_paths_affect_track(

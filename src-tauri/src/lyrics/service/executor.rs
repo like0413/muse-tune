@@ -6,9 +6,10 @@ use crate::lyrics::{
     network::ResolutionDeadline,
 };
 
+use super::pipeline::player_label;
 use super::{
-    LyricsCandidate, LyricsResolutionResult, LyricsService, TrackDescriptor, candidate_from_source,
-    is_plausible_timeline, players, summarize_resolution_result,
+    LyricsCandidate, LyricsParallelGroup, LyricsResolutionResult, LyricsService, TrackDescriptor,
+    candidate_from_source, players, summarize_resolution_result, timeline_rejection_reason,
 };
 use super::{plan::ResolutionAttempt, plan::ResolutionCapability, trace::duration_millis};
 
@@ -22,7 +23,10 @@ pub(super) struct AttemptExecution {
 /// 统一归类后的来源执行结果。
 pub(super) enum RecordedAttempt {
     Candidate(LyricsCandidate),
-    Continue,
+    /// 来源正常执行，但没有产出可用的歌词结论。
+    Missed,
+    /// 来源技术性失败（网络、超时、适配器错误）；与“确认没有歌词”必须区分开。
+    Failed,
     Cancelled,
 }
 
@@ -61,7 +65,7 @@ impl LyricsService {
         execution: AttemptExecution,
         track: &TrackDescriptor,
         generation: u64,
-        parallel_group: Option<&str>,
+        group: Option<LyricsParallelGroup>,
     ) -> RecordedAttempt {
         let AttemptExecution {
             attempt,
@@ -69,40 +73,59 @@ impl LyricsService {
             result,
         } = execution;
         if let Ok(LyricsLookupOutcome::Hit(resolved)) = &result
-            && !is_plausible_timeline(track, &resolved.lines)
+            && let Some(reason) = timeline_rejection_reason(track, &resolved.lines)
         {
             self.record_resolution_step_in_group(
                 generation,
-                parallel_group,
-                attempt.label,
+                group,
+                attempt.site,
                 LyricsResolutionOutcome::Error,
-                Some(format!("歌词时间轴超出歌曲有效范围 · {duration_ms} ms")),
+                Some(format!(
+                    "{} · {reason} · {duration_ms} ms",
+                    player_label(attempt.player)
+                )),
             );
-            return RecordedAttempt::Continue;
+            // 步骤本身是失败的，但这属于“来源给出的内容不可用”，不是网络或适配器故障，
+            // 因此不改变整首歌的结论方向。
+            return RecordedAttempt::Missed;
         }
 
         let (outcome, detail) = summarize_resolution_result(&result);
-        self.record_resolution_step_in_group(
-            generation,
-            parallel_group,
-            attempt.label,
-            outcome,
-            Some(detail.map_or_else(
+        // 命中步骤自带来源信息；未命中的步骤没有，带上平台名才能看出是哪个平台没给结果。
+        let detail = if matches!(outcome, LyricsResolutionOutcome::Hit) {
+            detail.map_or_else(
                 || format!("{duration_ms} ms"),
                 |detail| format!("{detail} · {duration_ms} ms"),
-            )),
+            )
+        } else {
+            detail.map_or_else(
+                || format!("{} · {duration_ms} ms", player_label(attempt.player)),
+                |detail| {
+                    format!(
+                        "{} · {detail} · {duration_ms} ms",
+                        player_label(attempt.player)
+                    )
+                },
+            )
+        };
+        self.record_resolution_step_in_group(
+            generation,
+            group,
+            attempt.site,
+            outcome,
+            Some(detail),
         );
         match result {
             Ok(LyricsLookupOutcome::Hit(resolved)) => {
                 RecordedAttempt::Candidate(candidate_from_source(resolved))
             }
             Ok(LyricsLookupOutcome::Unsupported | LyricsLookupOutcome::Miss(_)) => {
-                RecordedAttempt::Continue
+                RecordedAttempt::Missed
             }
             Err(LyricsError::Cancelled) => RecordedAttempt::Cancelled,
             Err(error) => {
-                log::warn!("{}失败: {error}", attempt.label);
-                RecordedAttempt::Continue
+                log::warn!("{:?} 歌词来源失败: {error}", attempt.site);
+                RecordedAttempt::Failed
             }
         }
     }

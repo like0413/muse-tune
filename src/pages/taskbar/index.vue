@@ -77,9 +77,17 @@ const isCompact = computed(
 const hasTimedLyrics = computed(
   () => lyrics.value.status === 'ready' && lyrics.value.lines.length > 0,
 )
-const hasLyricsContent = computed(
-  () => hasTimedLyrics.value || lyrics.value.status === 'instrumental',
+// 平台已给出结论、不需要歌词行的状态：纯音乐与“没有歌词”。
+const hasNoticeOnly = computed(
+  () => lyrics.value.status === 'instrumental' || lyrics.value.status === 'no_lyrics',
 )
+/** 结论型状态的提示文案；与 `hasNoticeOnly` 覆盖的状态一一对应。 */
+const lyricsNoticeText = computed(() =>
+  lyrics.value.status === 'no_lyrics'
+    ? t('taskbar.lyrics.noLyrics')
+    : t('taskbar.lyrics.instrumental'),
+)
+const hasLyricsContent = computed(() => hasTimedLyrics.value || hasNoticeOnly.value)
 /** 歌词是否需要持续推进时间轴；与刷新是否平滑无关。 */
 const needsLyricsTimeline = computed(
   () =>
@@ -341,10 +349,8 @@ onMounted(refreshCoverAnchors)
           :theme-color="progressColor"
         />
         <LyricsNoticeElement
-          v-else-if="
-            taskbarContentVisible && lyricsSettings.enabled && lyrics.status === 'instrumental'
-          "
-          :text="t('taskbar.lyrics.instrumental')"
+          v-else-if="taskbarContentVisible && lyricsSettings.enabled && hasNoticeOnly"
+          :text="lyricsNoticeText"
           :settings="lyricsSettings"
           :theme-color="progressColor"
         />

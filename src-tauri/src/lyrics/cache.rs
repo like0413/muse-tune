@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
@@ -20,13 +21,23 @@ use super::{
 
 const MAX_CACHE_ENTRY_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_CACHE_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
+/// 展示可信期：缓存可直接展示、无需阻塞式重新解析的期限。
+///
+/// 期限按结论的稳定性定：越确定的活得越久。逐字与纯音乐 30 天——逐字已是最精密的结果，
+/// 纯音乐是歌曲自身的属性；逐行与“没有歌词”7 天——前者仍可能被升级成逐字，后者可能被
+/// 之后补上的本地或在线歌词推翻。
 const WORD_REFRESH_INTERVAL: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 const LINE_REFRESH_INTERVAL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+const INSTRUMENTAL_REFRESH_INTERVAL: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+const NO_LYRICS_REFRESH_INTERVAL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
-/// 缓存命中及其是否仍处于免联网刷新期。
+/// 缓存命中及其时效状态。
 pub struct CacheLookup {
     pub snapshot: LyricsSnapshot,
+    /// 仍在展示可信期内：可以直接展示，不必阻塞式重解析。
     pub is_fresh: bool,
+    /// 命中的是逐行结果：本轮需要静默确认能否升级到逐字（升级成功后缓存变成长期结论）。
+    pub needs_revalidation: bool,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -36,10 +47,54 @@ struct CacheEntry {
     snapshot: LyricsSnapshot,
 }
 
+/// 把临时文件提交为目标文件，覆盖已有同名文件。
+///
+/// Windows 上 `fs::rename` 不能覆盖已存在的文件，原先的“先删除再改名”在两步之间被中断
+/// （进程被杀、断电）会让缓存条目直接消失——而此刻磁盘上的旧内容其实是完整的，崩溃发生在
+/// 提交之前，应该保留旧版本。`MoveFileExW` 把替换做成单次调用，不存在这个中间态。
+fn replace_file(source: &Path, target: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        use windows::Win32::Storage::FileSystem::{
+            MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+        };
+        use windows::core::PCWSTR;
+
+        let source = wide_null(source);
+        let target = wide_null(target);
+        // SAFETY: 两个指针都指向以 NUL 结尾的有效 UTF-16 缓冲区，生命周期覆盖整个调用。
+        unsafe {
+            MoveFileExW(
+                PCWSTR(source.as_ptr()),
+                PCWSTR(target.as_ptr()),
+                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+            )
+            .map_err(|error| std::io::Error::other(error.to_string()))
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        fs::rename(source, target)
+    }
+}
+
+/// 把路径编码为以 NUL 结尾的 UTF-16，供 Win32 宽字符接口使用。
+#[cfg(windows)]
+fn wide_null(path: &Path) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt;
+
+    path.as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
+}
+
 /// 版本化的解析后歌词文件缓存。
 pub struct ParsedLyricsCache {
     cache_path: PathBuf,
     diagnostics: Mutex<CacheDiagnosticsState>,
+    /// 每个键最近一次写入所属的解析代数，用于拒绝被取代的旧写入。
+    write_generations: Mutex<HashMap<String, u64>>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -76,6 +131,7 @@ impl ParsedLyricsCache {
         Ok(Self {
             cache_path,
             diagnostics: Mutex::new(CacheDiagnosticsState::default()),
+            write_generations: Mutex::new(HashMap::new()),
         })
     }
 
@@ -100,9 +156,11 @@ impl ParsedLyricsCache {
                 && is_cacheable_status(entry.snapshot.status)
         }) {
             let is_fresh = is_fresh(&entry);
+            let revalidate = is_fresh && needs_revalidation(&entry);
             self.record_current_entry(track_key, metadata.len(), &entry);
             return Some(CacheLookup {
                 is_fresh,
+                needs_revalidation: revalidate,
                 snapshot: entry.snapshot,
             });
         }
@@ -112,12 +170,19 @@ impl ParsedLyricsCache {
     }
 
     /// 写入本次解析结果和刷新时间；损坏缓存可在下次播放时自动重建。
-    pub fn store(&self, snapshot: &LyricsSnapshot) -> Result<(), LyricsError> {
+    ///
+    /// `generation` 用于排序：同一首歌可能有多轮解析在途（手动刷新、监听事件、切歌），
+    /// 代数较小的写入属于已被取代的那一轮，直接丢弃，避免它覆盖同键的较新结果——
+    /// 否则下次启动会读回旧内容，而内存里展示的是新内容。
+    pub fn store(&self, snapshot: &LyricsSnapshot, generation: u64) -> Result<(), LyricsError> {
         let Some(track_key) = snapshot.track_key.as_deref() else {
             return Ok(());
         };
-        // 瞬时未命中不持久化；真实歌词和已确认纯音乐都可跨播放复用。
+        // 瞬时未命中不持久化；真实歌词、纯音乐与“没有歌词”都可跨播放复用。
         if !is_cacheable_status(snapshot.status) {
+            return Ok(());
+        }
+        if !self.reserve_write(track_key, generation) {
             return Ok(());
         }
         self.ensure_directory_boundary()?;
@@ -160,13 +225,7 @@ impl ParsedLyricsCache {
             let _ = fs::remove_file(&temporary);
             return Err(error.into());
         }
-        if replaced_bytes.is_some()
-            && let Err(error) = fs::remove_file(&target)
-        {
-            let _ = fs::remove_file(&temporary);
-            return Err(error.into());
-        }
-        match fs::rename(&temporary, &target) {
+        match replace_file(&temporary, &target) {
             Ok(()) => match self.prune_after_write(&target, content_bytes, replaced_bytes) {
                 Ok(totals) => {
                     self.record_stored_entry(track_key, content_bytes, &cache_entry, totals);
@@ -213,12 +272,32 @@ impl ParsedLyricsCache {
         }
     }
 
+    /// 记录本次写入的代数；已有更大代数的写入时返回 false，表示本轮已被取代。
+    fn reserve_write(&self, track_key: &str, generation: u64) -> bool {
+        let Ok(mut generations) = self.write_generations.lock() else {
+            // 锁不可用时按允许写入处理：宁可偶发乱序，也不要静默丢掉歌词。
+            return true;
+        };
+        if generations
+            .get(track_key)
+            .is_some_and(|written| *written > generation)
+        {
+            return false;
+        }
+        generations.insert(track_key.to_owned(), generation);
+        true
+    }
+
     /// 清空全部规范化歌词缓存，同时保留版本目录供后续写入复用。
     pub fn clear(&self) -> Result<(), std::io::Error> {
         self.ensure_directory_boundary()?;
         for entry in fs::read_dir(&self.cache_path)? {
             let entry = entry?;
-            if filesystem::entry_metadata_without_reparse(&entry)?.is_file() {
+            // 云同步占位符等特殊条目取不到元数据：跳过它，不能让单个条目让整次清理失败。
+            let Ok(metadata) = filesystem::entry_metadata_without_reparse(&entry) else {
+                continue;
+            };
+            if metadata.is_file() {
                 fs::remove_file(entry.path())?;
             }
         }
@@ -232,7 +311,10 @@ impl ParsedLyricsCache {
             self.ensure_directory_boundary()?;
             for entry in fs::read_dir(&self.cache_path)? {
                 let entry = entry?;
-                if !filesystem::entry_metadata_without_reparse(&entry)?.is_file() {
+                let Ok(metadata) = filesystem::entry_metadata_without_reparse(&entry) else {
+                    continue;
+                };
+                if !metadata.is_file() {
                     continue;
                 }
                 let path = entry.path();
@@ -438,7 +520,11 @@ impl ParsedLyricsCache {
         let mut entries = Vec::new();
         for entry in fs::read_dir(&self.cache_path)? {
             let entry = entry?;
-            let metadata = filesystem::entry_metadata_without_reparse(&entry)?;
+            // 取不到元数据的条目（云同步占位符等）不计入容量，也不能让淘汰整体失败：
+            // 否则 prune 报错会让已成功写入的 store 返回错误，把“写成功”报成“写失败”。
+            let Ok(metadata) = filesystem::entry_metadata_without_reparse(&entry) else {
+                continue;
+            };
             if !metadata.is_file() {
                 continue;
             }
@@ -592,14 +678,29 @@ fn refresh_interval(entry: &CacheEntry) -> Option<Duration> {
         LyricsStatus::Ready if entry.snapshot.precision == Some(LyricsPrecision::Word) => {
             Some(WORD_REFRESH_INTERVAL)
         }
-        LyricsStatus::Ready | LyricsStatus::Instrumental => Some(LINE_REFRESH_INTERVAL),
+        LyricsStatus::Ready => Some(LINE_REFRESH_INTERVAL),
+        LyricsStatus::Instrumental => Some(INSTRUMENTAL_REFRESH_INTERVAL),
+        LyricsStatus::NoLyrics => Some(NO_LYRICS_REFRESH_INTERVAL),
         LyricsStatus::Loading | LyricsStatus::Unavailable | LyricsStatus::Error => None,
     }
 }
 
+/// 是否需要在线复核。
+///
+/// 只有逐行需要：它仍可能被升级成逐字，且升级只能靠在线来源，所以每次播放都静默确认一次。
+/// 逐字已是最精密的结论，复核不可能带来提升；纯音乐与无歌词只靠本地歌词复核（不联网），
+/// 那一步由 `should_check_local_upgrade` 决定，不经过这里。
+fn needs_revalidation(entry: &CacheEntry) -> bool {
+    entry.snapshot.status == LyricsStatus::Ready
+        && entry.snapshot.precision == Some(LyricsPrecision::Line)
+}
+
 /// 只允许可稳定复用的解析结论进入磁盘缓存。
 fn is_cacheable_status(status: LyricsStatus) -> bool {
-    matches!(status, LyricsStatus::Ready | LyricsStatus::Instrumental)
+    matches!(
+        status,
+        LyricsStatus::Ready | LyricsStatus::Instrumental | LyricsStatus::NoLyrics
+    )
 }
 
 fn now_seconds() -> u64 {

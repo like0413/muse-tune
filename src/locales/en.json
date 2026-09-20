@@ -386,7 +386,11 @@
   },
   "taskbar": {
     "player": "Muse Tune taskbar player",
-    "lyrics": { "current": "Current lyrics", "instrumental": "Instrumental — enjoy the music" },
+    "lyrics": {
+      "current": "Current lyrics",
+      "instrumental": "Instrumental — enjoy the music",
+      "noLyrics": "No lyrics available"
+    },
     "menu": {
       "normalCover": "Cover in normal mode",
       "lyricsCover": "Cover in lyrics mode",
@@ -401,7 +405,7 @@
   "diagnostics": {
     "notCollected": "Not collected yet",
     "autoRefresh": "Refreshes when media or lyrics change · {time}",
-    "copyReport": "Copy sanitized report",
+    "copyReport": "Copy diagnostics report",
     "readFailed": "Could not read diagnostics",
     "initializeFailed": "Could not initialize diagnostic listeners",
     "copyFailed": "Could not copy the diagnostic report",
@@ -426,6 +430,7 @@
       "resolving": "Resolving",
       "ready": "Ready",
       "instrumental": "Instrumental",
+      "noLyrics": "No lyrics",
       "unavailable": "Unavailable",
       "error": "Error",
       "applicationCache": "Muse Tune cache hit",
@@ -561,8 +566,23 @@
       "pendingFileEvents": "Pending file events",
       "coalescedFileEvents": "Coalesced file events",
       "coalescedValue": "{batches} batches · {callbacks} callbacks",
+      "resolutionTrack": "Track for this round",
+      "noDuration": "no duration",
       "resolutionChain": "Resolution chain",
       "parallelCount": "{count} concurrent",
+      "sites": {
+        "applicationCache": "Muse Tune cache",
+        "local": "Current player local",
+        "online": "Current player online",
+        "onlinePreferred": "Current player online (preferred)",
+        "onlineFallback": "Fallback player online",
+        "localUpgrade": "Background local upgrade"
+      },
+      "groups": {
+        "online": "Parallel online lookups",
+        "onlineFallback": "Parallel online fallbacks"
+      },
+      "recentResolution": "Previous resolution · {time} · {status}",
       "latestNote": "Latest note"
     }
   },

@@ -1,5 +1,11 @@
 import { translateGlobal } from '@/features/i18n'
-import type { LyricsPrecision, LyricsResolutionMethod, LyricsStatus } from '@/features/lyrics/types'
+import type {
+  LyricsParallelGroup,
+  LyricsPrecision,
+  LyricsResolutionMethod,
+  LyricsResolutionSite,
+  LyricsStatus,
+} from '@/features/lyrics/types'
 import type { MediaPlaybackStatus, MediaPlayer } from '@/features/media/types'
 
 const playerNames: Record<Exclude<MediaPlayer, 'other'>, string> = {
@@ -23,6 +29,7 @@ const lyricsStatusKeys: Record<LyricsStatus, string> = {
   loading: 'diagnostics.values.resolving',
   ready: 'diagnostics.values.ready',
   instrumental: 'diagnostics.values.instrumental',
+  no_lyrics: 'diagnostics.values.noLyrics',
   unavailable: 'diagnostics.values.unavailable',
   error: 'diagnostics.values.error',
 }
@@ -37,6 +44,20 @@ const resolutionMethodKeys: Record<LyricsResolutionMethod, string> = {
 const precisionKeys: Record<LyricsPrecision, string> = {
   word: 'diagnostics.values.wordPrecision',
   line: 'diagnostics.values.linePrecision',
+}
+
+const resolutionSiteKeys: Record<LyricsResolutionSite, string> = {
+  application_cache: 'diagnostics.lyrics.sites.applicationCache',
+  local: 'diagnostics.lyrics.sites.local',
+  online: 'diagnostics.lyrics.sites.online',
+  online_preferred: 'diagnostics.lyrics.sites.onlinePreferred',
+  online_fallback: 'diagnostics.lyrics.sites.onlineFallback',
+  local_upgrade: 'diagnostics.lyrics.sites.localUpgrade',
+}
+
+const parallelGroupKeys: Record<LyricsParallelGroup, string> = {
+  online: 'diagnostics.lyrics.groups.online',
+  online_fallback: 'diagnostics.lyrics.groups.onlineFallback',
 }
 
 /** 播放器品牌沿用产品原名，仅本地化兜底类别。 */
@@ -54,6 +75,10 @@ export const getResolutionMethodLabel = (method: LyricsResolutionMethod) =>
   translateGlobal(resolutionMethodKeys[method])
 export const getPrecisionLabel = (precision: LyricsPrecision) =>
   translateGlobal(precisionKeys[precision])
+export const getResolutionSiteLabel = (site: LyricsResolutionSite) =>
+  translateGlobal(resolutionSiteKeys[site])
+export const getParallelGroupLabel = (group: LyricsParallelGroup) =>
+  translateGlobal(parallelGroupKeys[group])
 
 export function formatDuration(milliseconds: number | null): string {
   if (milliseconds === null || milliseconds < 0) return translateGlobal('common.unavailable')

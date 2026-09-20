@@ -386,7 +386,7 @@
   },
   "taskbar": {
     "player": "Muse Tune 工作列播放器",
-    "lyrics": { "current": "目前歌詞", "instrumental": "純音樂，請欣賞" },
+    "lyrics": { "current": "目前歌詞", "instrumental": "純音樂，請欣賞", "noLyrics": "暫無歌詞" },
     "menu": {
       "normalCover": "一般模式封面",
       "lyricsCover": "歌詞模式封面",
@@ -401,7 +401,7 @@
   "diagnostics": {
     "notCollected": "尚未採集",
     "autoRefresh": "媒體與歌詞變化時自動重新整理 · {time}",
-    "copyReport": "複製去識別化報告",
+    "copyReport": "複製診斷報告",
     "readFailed": "讀取診斷失敗",
     "initializeFailed": "初始化診斷監聽失敗",
     "copyFailed": "複製診斷報告失敗",
@@ -426,6 +426,7 @@
       "resolving": "解析中",
       "ready": "已就緒",
       "instrumental": "純音樂",
+      "noLyrics": "沒有歌詞",
       "unavailable": "不可用",
       "error": "錯誤",
       "applicationCache": "Muse Tune 快取命中",
@@ -561,8 +562,23 @@
       "pendingFileEvents": "檔案事件待處理",
       "coalescedFileEvents": "檔案事件合併",
       "coalescedValue": "{batches} 批 · {callbacks} 次回呼",
+      "resolutionTrack": "本輪曲目",
+      "noDuration": "未提供時長",
       "resolutionChain": "解析鏈路",
       "parallelCount": "{count} 項並行",
+      "sites": {
+        "applicationCache": "Muse Tune 快取",
+        "local": "目前播放器本機",
+        "online": "目前播放器線上",
+        "onlinePreferred": "目前播放器線上優先",
+        "onlineFallback": "備用平台線上",
+        "localUpgrade": "背景本機歌詞升級"
+      },
+      "groups": {
+        "online": "並行線上查詢",
+        "onlineFallback": "並行線上備援"
+      },
+      "recentResolution": "上一輪解析 · {time} · {status}",
       "latestNote": "最近說明"
     }
   },

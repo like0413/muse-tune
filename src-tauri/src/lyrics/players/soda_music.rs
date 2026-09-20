@@ -122,6 +122,15 @@ fn matches_preview_duration(
         && playback_duration_ms.abs_diff(audition_duration_ms) <= 5_000
 }
 
+/// 判断汽水队列缓存里是否包含当前歌曲。
+///
+/// 汽水没有本地歌词，QueueCache 只是定位歌曲 ID 的入口；文件监听必须靠它判断事件是否
+/// 与当前歌曲相关，否则队列刷新、预加载都会触发一次清缓存与完整重解析。
+pub(super) fn queue_contains_track(track: &TrackDescriptor, cache_path: &Path) -> bool {
+    // 队列损坏或超限时按“不相关”处理：宁可漏一次刷新，也不要无谓地作废当前结果。
+    matches!(find_queue_song(track, cache_path), Ok(Some(_)))
+}
+
 fn find_queue_song(
     track: &TrackDescriptor,
     cache_path: &Path,

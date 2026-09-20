@@ -76,7 +76,7 @@ pub fn resolve_online(
             .send()?
             .error_for_status()?,
     )?;
-    let Some(song) = response
+    let mut candidates = response
         .data
         .song
         .list
@@ -97,12 +97,25 @@ pub fn resolve_online(
             )?;
             Some((score, song))
         })
-        .max_by_key(|(score, _)| *score)
-        .map(|(_, song)| song)
-    else {
-        return Ok(None);
-    };
+        .collect::<Vec<_>>();
+    // 按分数从高到低逐个尝试：最高分候选取不到歌词时继续试次优候选，
+    // 避免“搜索结果里就有有词的原版”却因为排名第一那条没词而整体判为未命中。
+    candidates.sort_by_key(|(score, _)| std::cmp::Reverse(*score));
 
+    for (_, song) in candidates {
+        if let Some(lyrics) = fetch_song_lyrics(client, &song, deadline)? {
+            return Ok(Some(lyrics));
+        }
+    }
+    Ok(None)
+}
+
+/// 读取单个候选曲目的歌词：优先逐字 QRC，接口缺失或格式变化时回退行级 LRC。
+fn fetch_song_lyrics(
+    client: &Client,
+    song: &QqSong,
+    deadline: &ResolutionDeadline,
+) -> Result<Option<ResolvedLyrics>, LyricsError> {
     // QQ 的新版匿名接口可返回加密 QRC。优先尝试真实逐字数据；接口缺失、
     // 格式变化或曲目本身没有 QRC 时，继续走下方已验证的行级 LRC 兜底。
     match online::fetch_word_lyrics(client, &song.song_mid, deadline) {
@@ -111,7 +124,7 @@ pub fn resolve_online(
                 source: LyricsSource {
                     player: MediaPlayer::QqMusic,
                     kind: LyricsSourceKind::Online,
-                    song_id: Some(song.song_mid),
+                    song_id: Some(song.song_mid.clone()),
                 },
                 lines,
             }));
@@ -151,7 +164,7 @@ pub fn resolve_online(
         source: LyricsSource {
             player: MediaPlayer::QqMusic,
             kind: LyricsSourceKind::Online,
-            song_id: Some(song.song_mid),
+            song_id: Some(song.song_mid.clone()),
         },
         lines,
     }))

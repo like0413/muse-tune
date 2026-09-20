@@ -386,7 +386,7 @@
   },
   "taskbar": {
     "player": "Muse Tune 任务栏播放器",
-    "lyrics": { "current": "当前歌词", "instrumental": "纯音乐，请欣赏" },
+    "lyrics": { "current": "当前歌词", "instrumental": "纯音乐，请欣赏", "noLyrics": "暂无歌词" },
     "menu": {
       "normalCover": "普通模式封面",
       "lyricsCover": "歌词模式封面",
@@ -401,7 +401,7 @@
   "diagnostics": {
     "notCollected": "尚未采集",
     "autoRefresh": "媒体与歌词变化时自动刷新 · {time}",
-    "copyReport": "复制脱敏报告",
+    "copyReport": "复制诊断报告",
     "readFailed": "读取诊断失败",
     "initializeFailed": "初始化诊断监听失败",
     "copyFailed": "复制诊断报告失败",
@@ -426,6 +426,7 @@
       "resolving": "解析中",
       "ready": "已就绪",
       "instrumental": "纯音乐",
+      "noLyrics": "没有歌词",
       "unavailable": "不可用",
       "error": "错误",
       "applicationCache": "Muse Tune 缓存命中",
@@ -561,8 +562,23 @@
       "pendingFileEvents": "文件事件待处理",
       "coalescedFileEvents": "文件事件合并",
       "coalescedValue": "{batches} 批 · {callbacks} 次回调",
+      "resolutionTrack": "本轮曲目",
+      "noDuration": "未提供时长",
       "resolutionChain": "解析链路",
       "parallelCount": "{count} 项并发",
+      "sites": {
+        "applicationCache": "Muse Tune 缓存",
+        "local": "当前播放器本地",
+        "online": "当前播放器在线",
+        "onlinePreferred": "当前播放器在线优先",
+        "onlineFallback": "备用平台在线",
+        "localUpgrade": "后台本地歌词升级"
+      },
+      "groups": {
+        "online": "并行在线查询",
+        "onlineFallback": "并行在线兜底"
+      },
+      "recentResolution": "上一轮解析 · {time} · {status}",
       "latestNote": "最近说明"
     }
   },

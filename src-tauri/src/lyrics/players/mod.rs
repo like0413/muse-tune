@@ -31,6 +31,16 @@ pub fn supported_players() -> impl Iterator<Item = MediaPlayer> {
     ADAPTERS.iter().map(|adapter| adapter.player)
 }
 
+/// 指定平台是否具备本地歌词能力；用于只生成真正能执行的解析尝试。
+pub fn has_local(player: MediaPlayer) -> bool {
+    adapter(player).is_some_and(|adapter| adapter.has_local())
+}
+
+/// 指定平台是否具备在线歌词能力；用于只生成真正能执行的解析尝试。
+pub fn has_online(player: MediaPlayer) -> bool {
+    adapter(player).is_some_and(|adapter| adapter.has_online())
+}
+
 /// 运行指定平台的在线能力，供 pipeline 组合跨平台兜底。
 pub fn resolve_online_for(
     player: MediaPlayer,

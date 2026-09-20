@@ -1,19 +1,35 @@
 import type { MediaPlayer } from '@/features/media/types'
 
-export type LyricsStatus = 'loading' | 'ready' | 'instrumental' | 'unavailable' | 'error'
+export type LyricsStatus =
+  | 'loading'
+  | 'ready'
+  | 'instrumental'
+  | 'no_lyrics'
+  | 'unavailable'
+  | 'error'
 export type LyricsPrecision = 'word' | 'line'
 export type LyricsSourceKind = 'local' | 'online'
 export type LyricsResolutionMethod = 'none' | 'application_cache' | 'player_local' | 'online'
 export type LyricsResolutionOutcome = 'hit' | 'miss' | 'error'
+/** 解析步骤的来源标识；展示文案由前端按当前语言组装。 */
+export type LyricsResolutionSite =
+  | 'application_cache'
+  | 'local'
+  | 'online'
+  | 'online_preferred'
+  | 'online_fallback'
+  | 'local_upgrade'
+/** 并发阶段标识；同一阶段的步骤同时执行。 */
+export type LyricsParallelGroup = 'online' | 'online_fallback'
 /** 前后端共同支持的在线歌词调度策略。 */
 export const LYRICS_ONLINE_STRATEGIES = ['parallel', 'current_player_first'] as const
 export type LyricsOnlineStrategy = (typeof LYRICS_ONLINE_STRATEGIES)[number]
 
 export interface LyricsResolutionStep {
-  label: string
+  site: LyricsResolutionSite
   outcome: LyricsResolutionOutcome
   detail: string | null
-  parallelGroup: string | null
+  group: LyricsParallelGroup | null
 }
 
 export interface LyricsCacheDiagnostics {
@@ -73,6 +89,25 @@ export interface LyricsSnapshotDiagnostics {
   errorReason: string | null
 }
 
+/** 一轮解析使用的曲目信息；用于判断媒体快照是否已经稳定。 */
+export interface LyricsResolutionTrack {
+  title: string
+  artists: string[]
+  durationMs: number | null
+}
+
+/** 一轮已结束的解析记录：尝试过哪些来源，以及最终结论。 */
+export interface LyricsResolutionRecord {
+  finishedAtSeconds: number | null
+  durationMs: number | null
+  track: LyricsResolutionTrack | null
+  steps: LyricsResolutionStep[]
+  status: LyricsStatus
+  source: LyricsSource | null
+  precision: LyricsPrecision | null
+  errorReason: string | null
+}
+
 export interface LyricsDiagnostics {
   snapshot: LyricsSnapshotDiagnostics
   currentPlayer: MediaPlayer | null
@@ -84,7 +119,11 @@ export interface LyricsDiagnostics {
   resolverRunning: boolean
   pendingResolution: boolean
   resolutionDurationMs: number | null
+  /** 本轮解析使用的曲目信息；切歌瞬间可能混搭上一首的字段。 */
+  resolutionTrack: LyricsResolutionTrack | null
   resolutionSteps: LyricsResolutionStep[]
+  /** 上一轮已完成的解析（只保留一条）。 */
+  recentResolutions: LyricsResolutionRecord[]
   cache: LyricsCacheDiagnostics
   adapters: LyricsAdapterDiagnostics[]
   watcher: {

@@ -1,6 +1,17 @@
 use crate::media::MediaPlayer;
 
-use super::LyricsOnlineStrategy;
+use super::players;
+use super::{LyricsOnlineStrategy, LyricsParallelGroup, LyricsResolutionSite};
+
+/// 在线歌词兜底来源的尝试顺序；当前播放器会被排除，其余按此顺序补齐。
+///
+/// 顺序集中在这里：原先逐个 `if current_player != ...` 写死，新增平台或调整优先级需要在多处
+/// 同步修改，容易漏掉某个平台或让它在不同阶段以不同顺序出现。
+const ONLINE_FALLBACK_ORDER: [MediaPlayer; 3] = [
+    MediaPlayer::QqMusic,
+    MediaPlayer::KugouMusic,
+    MediaPlayer::NeteaseCloudMusic,
+];
 
 /// 单次歌词来源尝试所调用的能力。
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -12,14 +23,14 @@ pub(super) enum ResolutionCapability {
 /// 一次可诊断的歌词来源尝试。
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct ResolutionAttempt {
-    pub(super) label: &'static str,
+    pub(super) site: LyricsResolutionSite,
     pub(super) player: MediaPlayer,
     pub(super) capability: ResolutionCapability,
 }
 
 /// 同一阶段中的尝试；多于一个来源时允许并行执行。
 pub(super) struct ResolutionStage {
-    pub(super) parallel_group: Option<&'static str>,
+    pub(super) group: Option<LyricsParallelGroup>,
     pub(super) attempts: Vec<ResolutionAttempt>,
 }
 
@@ -30,66 +41,67 @@ pub(super) struct ResolutionPlan {
 }
 
 impl ResolutionPlan {
-    /// 当前播放器先查本地，非 QQ 播放器再使用 QQ 本地缓存兜底。
+    /// 编译一次解析计划。
+    ///
+    /// 只生成真正能执行的尝试：本地歌词只查当前播放器（其他播放器的本地缓存与正在播放的这首
+    /// 歌没有确定关系），在线来源则按固定优先级补齐平台，并跳过当前播放器与没有在线能力的平台。
     pub(super) fn new(current_player: MediaPlayer, strategy: LyricsOnlineStrategy) -> Self {
-        let mut local_attempts = vec![ResolutionAttempt {
-            label: "当前播放器本地",
-            player: current_player,
-            capability: ResolutionCapability::Local,
-        }];
-        if current_player != MediaPlayer::QqMusic {
-            local_attempts.push(ResolutionAttempt {
-                label: "QQ 本地兜底",
-                player: MediaPlayer::QqMusic,
+        let local_attempts = if players::has_local(current_player) {
+            vec![ResolutionAttempt {
+                site: LyricsResolutionSite::Local,
+                player: current_player,
                 capability: ResolutionCapability::Local,
-            });
-        }
-
-        let current_label = match strategy {
-            LyricsOnlineStrategy::Parallel => "当前播放器在线",
-            LyricsOnlineStrategy::CurrentPlayerFirst => "当前播放器在线优先",
+            }]
+        } else {
+            Vec::new()
         };
-        let current = ResolutionAttempt {
-            label: current_label,
+
+        let current = players::has_online(current_player).then_some(ResolutionAttempt {
+            site: match strategy {
+                LyricsOnlineStrategy::Parallel => LyricsResolutionSite::Online,
+                LyricsOnlineStrategy::CurrentPlayerFirst => LyricsResolutionSite::OnlinePreferred,
+            },
             player: current_player,
             capability: ResolutionCapability::Online,
-        };
-        let mut fallbacks = Vec::with_capacity(2);
-        if current_player != MediaPlayer::QqMusic {
-            fallbacks.push(ResolutionAttempt {
-                label: "QQ 在线兜底",
-                player: MediaPlayer::QqMusic,
+        });
+        let fallbacks = ONLINE_FALLBACK_ORDER
+            .into_iter()
+            .filter(|player| *player != current_player && players::has_online(*player))
+            .map(|player| ResolutionAttempt {
+                site: LyricsResolutionSite::OnlineFallback,
+                player,
                 capability: ResolutionCapability::Online,
-            });
-        }
-        if current_player != MediaPlayer::NeteaseCloudMusic {
-            fallbacks.push(ResolutionAttempt {
-                label: "网易云在线兜底",
-                player: MediaPlayer::NeteaseCloudMusic,
-                capability: ResolutionCapability::Online,
-            });
-        }
+            })
+            .collect::<Vec<_>>();
 
         let online_stages = match strategy {
             LyricsOnlineStrategy::Parallel => {
-                let mut attempts = Vec::with_capacity(1 + fallbacks.len());
-                attempts.push(current);
-                attempts.extend(fallbacks);
-                vec![ResolutionStage {
-                    parallel_group: (attempts.len() > 1).then_some("并行在线查询"),
-                    attempts,
-                }]
+                let attempts = current.into_iter().chain(fallbacks).collect::<Vec<_>>();
+                if attempts.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![ResolutionStage {
+                        group: (attempts.len() > 1).then_some(LyricsParallelGroup::Online),
+                        attempts,
+                    }]
+                }
             }
-            LyricsOnlineStrategy::CurrentPlayerFirst => vec![
-                ResolutionStage {
-                    parallel_group: None,
-                    attempts: vec![current],
-                },
-                ResolutionStage {
-                    parallel_group: (fallbacks.len() > 1).then_some("并行在线兜底"),
-                    attempts: fallbacks,
-                },
-            ],
+            LyricsOnlineStrategy::CurrentPlayerFirst => {
+                let mut stages = Vec::with_capacity(2);
+                if let Some(current) = current {
+                    stages.push(ResolutionStage {
+                        group: None,
+                        attempts: vec![current],
+                    });
+                }
+                if !fallbacks.is_empty() {
+                    stages.push(ResolutionStage {
+                        group: (fallbacks.len() > 1).then_some(LyricsParallelGroup::OnlineFallback),
+                        attempts: fallbacks,
+                    });
+                }
+                stages
+            }
         };
 
         Self {

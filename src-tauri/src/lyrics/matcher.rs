@@ -63,15 +63,26 @@ impl<'a> TrackMatchKey<'a> {
             return None;
         }
         let title_similarity = normalized_levenshtein(track_title, &candidate_title);
+        // 只拒绝“候选引入了当前标题没有的版本语义”（例如当前是原版、候选是伴奏/现场版），
+        // 这样既挡住误匹配到其他发行版的风险，又不会因为平台侧漏标某个标记而丢掉正确歌词。
+        let track_markers = version_markers(&self.track.title);
+        let candidate_markers = version_markers(candidate.title);
         if title_similarity < REQUIRED_TITLE_SIMILARITY
-            || version_markers(&self.track.title) != version_markers(candidate.title)
+            || !candidate_markers.is_subset(&track_markers)
         {
             return None;
         }
+        // 候选缺少当前标题的标记时（如当前是现场版、平台标题未标注），版本语义依然不同：
+        // 单看标题无法与“另一个发行版”区分，但时长可以，因此后面只允许时长几乎一致。
+        let version_markers_match = candidate_markers == track_markers;
 
         let track_artists = normalized_artist_set(&self.track.artists);
         let candidate_artists = normalized_artist_set(candidate.artists);
-        let artist_score = if !track_artists.is_empty() && track_artists == candidate_artists {
+        let artist_score = if track_artists.is_empty() {
+            // 播放器未提供艺术家（本地文件、浏览器播放等）时不能凭此直接拒绝，
+            // 改由更严格的标题与时长要求承担判别。
+            0
+        } else if track_artists == candidate_artists {
             30
         } else if !track_artists.is_disjoint(&candidate_artists) {
             20
@@ -84,7 +95,8 @@ impl<'a> TrackMatchKey<'a> {
                 let difference = expected.abs_diff(actual);
                 if difference <= 2_000 {
                     20
-                } else if difference <= MAX_DURATION_DIFFERENCE_MS {
+                } else if difference <= MAX_DURATION_DIFFERENCE_MS && version_markers_match {
+                    // 放宽到 5 秒只适用于版本标记完全一致的候选；标记不一致时这一档被关掉。
                     15
                 } else {
                     return None;
@@ -93,11 +105,13 @@ impl<'a> TrackMatchKey<'a> {
             (None, None) | (None, Some(_)) | (Some(_), None) => 0,
         };
         let score = title_score + artist_score + duration_score;
+        // 没有艺术家分时满分只有 70，等价于要求标题几乎完全一致且时长相差不超过 2 秒。
+        let required_score = if track_artists.is_empty() { 70 } else { 90 };
         let exact_without_duration = duration_score == 0
             && title_similarity == 1.0
             && !track_artists.is_empty()
             && track_artists == candidate_artists;
-        (score >= 90 || exact_without_duration).then_some(score)
+        (score >= required_score || exact_without_duration).then_some(score)
     }
 }
 

@@ -177,6 +177,7 @@ fn collect_issues(
         LyricsStatus::Loading
         | LyricsStatus::Ready
         | LyricsStatus::Instrumental
+        | LyricsStatus::NoLyrics
         | LyricsStatus::Unavailable => {}
     }
     if lyrics.cache.total_bytes > lyrics.cache.limit_bytes {

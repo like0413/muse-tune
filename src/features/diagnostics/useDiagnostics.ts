@@ -7,7 +7,7 @@ import { LYRICS_DIAGNOSTICS_CHANGED_EVENT } from '@/features/lyrics/client'
 import { MEDIA_SESSION_CHANGED_EVENT } from '@/features/media/client'
 
 import { collectDiagnostics } from './client'
-import { createSanitizedDiagnosticsReport } from './report'
+import { createDiagnosticsReport } from './report'
 import type { DiagnosticsSnapshot } from './types'
 
 const DIAGNOSTICS_REFRESH_EVENTS = [
@@ -111,11 +111,11 @@ export function useDiagnostics() {
     refreshing.value = false
   }
 
-  /** 始终复制脱敏报告，避免无意带出歌曲、账号路径和进程标识。 */
+  /** 复制完整诊断报告。 */
   async function copyReport() {
     if (!diagnostics.value) return
     try {
-      await navigator.clipboard.writeText(createSanitizedDiagnosticsReport(diagnostics.value))
+      await navigator.clipboard.writeText(createDiagnosticsReport(diagnostics.value))
       reportCopied.value = true
       window.clearTimeout(reportCopiedTimer)
       reportCopiedTimer = window.setTimeout(() => (reportCopied.value = false), 2_000)

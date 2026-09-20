@@ -2,9 +2,11 @@ use super::{LyricsResolutionResult, LyricsService, MediaPlayer, ResolvedLyrics, 
 use crate::lyrics::model::{
     LyricLine, LyricsLookupMiss, LyricsLookupOutcome, LyricsResolutionMethod,
     LyricsResolutionOutcome, LyricsSnapshot, LyricsSourceKind, LyricsStatus, has_word_timing,
+    platform_notice,
 };
 
 /// 解析候选及其真实获取方式；候选只在流水线内流转，最终提交仍由协调器负责。
+#[derive(Clone)]
 pub(super) struct LyricsCandidate {
     pub(super) resolved: ResolvedLyrics,
     pub(super) resolution_method: LyricsResolutionMethod,
@@ -18,7 +20,29 @@ pub(super) enum TimelineValidation {
         latest_start_ms: u64,
         latest_end_ms: u64,
     },
-    Invalid,
+    /// 时间轴本身不可用。携带具体原因，避免诊断只能给出含糊的“超出歌曲有效范围”。
+    Invalid(TimelineInvalidReason),
+}
+
+/// 时间轴不可用的具体原因。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum TimelineInvalidReason {
+    MissingDuration,
+    EmptyLines,
+    OutOfOrderLines,
+    InvalidWordTiming,
+}
+
+impl TimelineInvalidReason {
+    /// 诊断文案。
+    pub(super) const fn detail(self) -> &'static str {
+        match self {
+            Self::MissingDuration => "播放器未提供有效时长",
+            Self::EmptyLines => "没有可用的歌词行",
+            Self::OutOfOrderLines => "歌词行时间倒退",
+            Self::InvalidWordTiming => "逐字时间非法",
+        }
+    }
 }
 
 impl LyricsService {
@@ -60,9 +84,14 @@ pub(super) fn select_best_candidate(
 ) -> Option<LyricsCandidate> {
     candidates
         .into_iter()
-        .filter(|candidate| is_plausible_timeline(track, &candidate.resolved.lines))
+        .filter(|candidate| is_acceptable_candidate(track, &candidate.resolved.lines))
         .max_by_key(|candidate| {
             (
+                // 平台占位文案（“纯音乐请欣赏”“该歌曲暂无歌词”）通常只有一行且起点为 0，
+                // 时间轴恒合法，若让它与真实歌词同台竞争，“当前平台”这一项就会让占位压过
+                // 其他平台的真歌词，整首歌被判成纯音乐或没有歌词。因此先按“是否携带真实歌词”
+                // 分层，其余维度只在同层内比较。
+                u8::from(platform_notice(&candidate.resolved.lines).is_none()),
                 u8::from(has_word_timing(&candidate.resolved.lines)),
                 u8::from(candidate.resolved.source.player == track.player),
                 u8::from(candidate.resolved.source.kind == LyricsSourceKind::Local),
@@ -163,19 +192,24 @@ pub(super) fn lookup_miss_detail(reason: LyricsLookupMiss) -> &'static str {
     }
 }
 
+/// 平台展示名，用于诊断文案。
+pub(super) const fn player_label(player: MediaPlayer) -> &'static str {
+    match player {
+        MediaPlayer::QqMusic => "QQ 音乐",
+        MediaPlayer::NeteaseCloudMusic => "网易云音乐",
+        MediaPlayer::SodaMusic => "汽水音乐",
+        MediaPlayer::KugouMusic => "酷狗音乐",
+        MediaPlayer::Other => "其他播放器",
+    }
+}
+
 pub(super) fn source_summary(resolved: &ResolvedLyrics) -> String {
     let precision = if has_word_timing(&resolved.lines) {
         "逐字"
     } else {
         "逐行"
     };
-    let player = match resolved.source.player {
-        MediaPlayer::QqMusic => "QQ 音乐",
-        MediaPlayer::NeteaseCloudMusic => "网易云音乐",
-        MediaPlayer::SodaMusic => "汽水音乐",
-        MediaPlayer::KugouMusic => "酷狗音乐",
-        MediaPlayer::Other => "其他播放器",
-    };
+    let player = player_label(resolved.source.player);
     let source_kind = match resolved.source.kind {
         LyricsSourceKind::Local => "本地",
         LyricsSourceKind::Online => "在线",
@@ -183,20 +217,22 @@ pub(super) fn source_summary(resolved: &ResolvedLyrics) -> String {
     format!("{player} · {source_kind} · {precision}")
 }
 
-/// 区分播放器暂时报短的时长与歌词数据损坏，供缓存展示和新候选校验采用不同策略。
+/// 区分播放器暂时报短的时长与歌词数据损坏：前者仍可展示，后者不可用。
 pub(super) fn validate_timeline(
     track: &TrackDescriptor,
     lines: &[LyricLine],
 ) -> TimelineValidation {
     let Some(duration_ms) = track.duration_ms else {
-        return TimelineValidation::Invalid;
+        return TimelineValidation::Invalid(TimelineInvalidReason::MissingDuration);
     };
-    if lines.is_empty()
-        || lines
-            .windows(2)
-            .any(|pair| pair[0].start_ms > pair[1].start_ms)
+    if lines.is_empty() {
+        return TimelineValidation::Invalid(TimelineInvalidReason::EmptyLines);
+    }
+    if lines
+        .windows(2)
+        .any(|pair| pair[0].start_ms > pair[1].start_ms)
     {
-        return TimelineValidation::Invalid;
+        return TimelineValidation::Invalid(TimelineInvalidReason::OutOfOrderLines);
     }
     let allowed_end = duration_ms.saturating_add(10_000);
     let mut latest_start_ms = 0;
@@ -208,7 +244,7 @@ pub(super) fn validate_timeline(
         exceeds_duration |= line.start_ms > allowed_end;
         for word in &line.words {
             if word.end_ms <= word.start_ms || word.start_ms < line.start_ms {
-                return TimelineValidation::Invalid;
+                return TimelineValidation::Invalid(TimelineInvalidReason::InvalidWordTiming);
             }
             latest_start_ms = latest_start_ms.max(word.start_ms);
             latest_end_ms = latest_end_ms.max(word.end_ms);
@@ -226,34 +262,43 @@ pub(super) fn validate_timeline(
     }
 }
 
-/// 已持久化的缓存只拒绝结构损坏，播放器暂时报短时长不影响立即展示。
-fn is_cached_timeline_displayable(validation: TimelineValidation) -> bool {
-    matches!(
-        validation,
-        TimelineValidation::Plausible | TimelineValidation::DurationMismatch { .. }
-    )
-}
-
-/// 纯音乐是无时间轴的可展示结论；普通歌词仍必须通过缓存时间轴结构校验。
+/// 纯音乐与“没有歌词”是无时间轴的可展示结论；普通歌词必须通过时间轴结构校验。
 pub(super) fn is_cached_snapshot_displayable(
     track: &TrackDescriptor,
     snapshot: &LyricsSnapshot,
 ) -> bool {
     match snapshot.status {
-        LyricsStatus::Instrumental => true,
-        LyricsStatus::Ready => {
-            is_cached_timeline_displayable(validate_timeline(track, &snapshot.lines))
-        }
+        LyricsStatus::Instrumental | LyricsStatus::NoLyrics => true,
+        LyricsStatus::Ready => is_acceptable_candidate(track, &snapshot.lines),
         LyricsStatus::Loading | LyricsStatus::Unavailable | LyricsStatus::Error => false,
     }
 }
 
-/// 拒绝明显超出歌曲时长或顺序倒退的解析结果，避免错误候选进入长期缓存。
-pub(super) fn is_plausible_timeline(track: &TrackDescriptor, lines: &[LyricLine]) -> bool {
-    matches!(
+/// 判断来源结果能否参与候选排序与展示。
+///
+/// 播放器在切歌初期可能报出偏短的时长，这时完整歌词会被 [`validate_timeline`] 判为
+/// `DurationMismatch`。这属于“时长暂时不可信”，不是数据问题：前端按播放器时间线取行，
+/// 超出时长的部分自然不会显示，所以这类结果一律接受，不再限定来源——纯音乐占位文案
+/// 已经在候选排序里被降到真实歌词之后（见 `select_best_candidate`）。
+///
+/// 只有 [`TimelineValidation::Invalid`]（缺时长、空歌词、行序倒退、逐字时间非法）才拒绝：
+/// 那是数据本身不可用。
+pub(super) fn is_acceptable_candidate(track: &TrackDescriptor, lines: &[LyricLine]) -> bool {
+    !matches!(
         validate_timeline(track, lines),
-        TimelineValidation::Plausible
+        TimelineValidation::Invalid(_)
     )
+}
+
+/// 候选不可用时的诊断文案；可用时返回 `None`。
+pub(super) fn timeline_rejection_reason(
+    track: &TrackDescriptor,
+    lines: &[LyricLine],
+) -> Option<&'static str> {
+    match validate_timeline(track, lines) {
+        TimelineValidation::Invalid(reason) => Some(reason.detail()),
+        TimelineValidation::Plausible | TimelineValidation::DurationMismatch { .. } => None,
+    }
 }
 
 /// 以诊断友好的秒数显示毫秒时间点。

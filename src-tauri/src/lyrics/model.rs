@@ -12,6 +12,8 @@ pub enum LyricsStatus {
     Ready,
     /// 平台已明确声明当前歌曲为纯音乐，不属于歌词时间轴。
     Instrumental,
+    /// 平台已明确声明当前歌曲没有歌词；与纯音乐、技术失败都是不同结论。
+    NoLyrics,
     #[default]
     Unavailable,
     Error,
@@ -64,14 +66,45 @@ pub enum LyricsOnlineStrategy {
     CurrentPlayerFirst,
 }
 
+/// 解析步骤的来源标识。
+///
+/// 这里只输出稳定的机器键，展示文案由前端按语言组装：Rust 直接产出中文会让界面文案无法
+/// 跟随语言设置，也让前端只能靠字符串相等来判断步骤含义，改动文案即静默失效。
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LyricsResolutionSite {
+    /// 应用自身的解析结果缓存。
+    ApplicationCache,
+    /// 当前播放器的本地歌词。
+    Local,
+    /// 当前播放器的在线歌词。
+    Online,
+    /// 当前播放器的在线歌词，且处于“当前播放器优先”策略的首轮。
+    OnlinePreferred,
+    /// 备用平台的在线歌词。
+    OnlineFallback,
+    /// 已有可展示缓存时在后台尝试的本地精度升级。
+    LocalUpgrade,
+}
+
+/// 并发阶段标识；同一阶段的步骤是同时执行的，不能显示成先后顺序。
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LyricsParallelGroup {
+    /// 所有在线来源并发查询。
+    Online,
+    /// 其他在线来源并发兜底。
+    OnlineFallback,
+}
+
 /// 最近一次解析的有界步骤记录，仅保留诊断所需摘要。
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LyricsResolutionStep {
-    pub label: String,
+    pub site: LyricsResolutionSite,
     pub outcome: LyricsResolutionOutcome,
     pub detail: Option<String>,
-    pub parallel_group: Option<String>,
+    pub group: Option<LyricsParallelGroup>,
 }
 
 /// Muse Tune 规范化歌词缓存的磁盘状态。
@@ -180,10 +213,39 @@ pub struct LyricsDiagnostics {
     pub resolver_running: bool,
     pub pending_resolution: bool,
     pub resolution_duration_ms: Option<u64>,
+    /// 本轮解析使用的曲目信息。切歌瞬间媒体会话可能给出混搭快照（标题已换、时长未换等），
+    /// 匹配是按标题、艺术家、时长做的，三处同时未命中时只能靠这一项定位。
+    pub resolution_track: Option<LyricsResolutionTrack>,
     pub resolution_steps: Vec<LyricsResolutionStep>,
+    /// 上一轮已完成的解析；有新一轮开始时归档，只保留一条。缓存命中那轮会短路整条链路，
+    /// 排障时需要它来对照上一条链路的变化。
+    pub recent_resolutions: Vec<LyricsResolutionRecord>,
     pub cache: LyricsCacheDiagnostics,
     pub adapters: Vec<LyricsAdapterDiagnostics>,
     pub watcher: LyricsWatcherDiagnostics,
+}
+
+/// 一次已结束解析的完整记录：尝试过哪些来源，以及最终结论。
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsResolutionRecord {
+    pub finished_at_seconds: Option<u64>,
+    pub duration_ms: Option<u64>,
+    pub track: Option<LyricsResolutionTrack>,
+    pub steps: Vec<LyricsResolutionStep>,
+    pub status: LyricsStatus,
+    pub source: Option<LyricsSource>,
+    pub precision: Option<LyricsPrecision>,
+    pub error_reason: Option<String>,
+}
+
+/// 一轮解析所使用的曲目标识字段；与来源匹配依据保持一致。
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsResolutionTrack {
+    pub title: String,
+    pub artists: Vec<String>,
+    pub duration_ms: Option<u64>,
 }
 
 /// 歌词目录 watcher 的累计背压指标，不包含任何实际路径或文件名。
@@ -219,13 +281,13 @@ impl LyricsSnapshot {
         }
     }
 
-    /// 创建已解析状态；平台纯音乐说明转换为不携带时间轴的语义状态。
+    /// 创建已解析状态；平台占位文案转换为不携带时间轴的语义状态。
     pub fn from_resolved(track_key: String, resolved: ResolvedLyrics) -> Self {
         let ResolvedLyrics { source, lines } = resolved;
-        if is_instrumental_notice(&lines) {
+        if let Some(notice) = platform_notice(&lines) {
             return Self {
                 track_key: Some(track_key),
-                status: LyricsStatus::Instrumental,
+                status: notice.status(),
                 source: Some(source),
                 ..Self::default()
             };
@@ -282,13 +344,63 @@ pub enum LyricsLookupMiss {
     NoReliableLyrics,
 }
 
-/// 仅识别已确认的平台固定文案，避免把普通歌词中的“纯音乐”误判为语义状态。
-fn is_instrumental_notice(lines: &[LyricLine]) -> bool {
-    let [line] = lines else {
-        return false;
-    };
-    matches!(
-        normalize_text(&line.text).as_str(),
-        "此歌曲为没有填词的纯音乐请您欣赏" | "此歌曲为没有填词的纯音乐请您欣" | "纯音乐请欣赏"
-    )
+/// 平台占位文案的长度上限；超过这个长度不可能是否认歌词的固定说明。
+const PLATFORM_NOTICE_MAX_CHARS: usize = 40;
+/// 平台占位文案的行数上限；真实歌词不会只有寥寥数行。
+const PLATFORM_NOTICE_MAX_LINES: usize = 3;
+/// 一句完整说明的常见主语，如“此歌曲为没有填词的纯音乐，请您欣赏”。
+const NOTICE_SUBJECTS: [&str; 4] = ["此歌曲", "该歌曲", "本歌曲", "这首歌"];
+
+/// 平台占位文案的类型；两者都不是歌词正文，但结论与有效期不同。
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlatformNotice {
+    Instrumental,
+    NoLyrics,
+}
+
+impl PlatformNotice {
+    /// 占位文案对应的歌曲状态。
+    pub(super) const fn status(self) -> LyricsStatus {
+        match self {
+            Self::Instrumental => LyricsStatus::Instrumental,
+            Self::NoLyrics => LyricsStatus::NoLyrics,
+        }
+    }
+}
+
+/// 识别平台给出的占位文案，并区分“纯音乐”与“没有歌词”。
+///
+/// 逐个枚举历史文案（“此歌曲为没有填词的纯音乐请您欣赏”“纯音乐请欣赏”……）必然漏判：
+/// 平台换一个说法就会被当成真实歌词并长期缓存。因此改为按形态与关键词识别，并同时限制
+/// 行数与长度，避免把普通歌词里出现的“纯音乐”“没有歌词”误判成语义状态。
+pub(super) fn platform_notice(lines: &[LyricLine]) -> Option<PlatformNotice> {
+    if lines.is_empty() || lines.len() > PLATFORM_NOTICE_MAX_LINES {
+        return None;
+    }
+    lines.iter().find_map(|line| notice_kind(&line.text))
+}
+
+fn notice_kind(text: &str) -> Option<PlatformNotice> {
+    let normalized = normalize_text(text);
+    if normalized.is_empty() || normalized.chars().count() > PLATFORM_NOTICE_MAX_CHARS {
+        return None;
+    }
+    // 形态一：直接以“纯音乐”开头，如“纯音乐请欣赏”“纯音乐，请您欣赏”。
+    if normalized.starts_with("纯音乐") {
+        return Some(PlatformNotice::Instrumental);
+    }
+    // 形态二：一句完整说明，如“此歌曲为没有填词的纯音乐，请您欣赏”“该歌曲暂无歌词”。
+    if !NOTICE_SUBJECTS
+        .iter()
+        .any(|subject| normalized.starts_with(subject))
+    {
+        return None;
+    }
+    if normalized.contains("纯音乐") {
+        return Some(PlatformNotice::Instrumental);
+    }
+    ["无歌词", "没有歌词", "暂无歌词"]
+        .iter()
+        .any(|marker| normalized.contains(marker))
+        .then_some(PlatformNotice::NoLyrics)
 }

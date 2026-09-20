@@ -238,6 +238,7 @@ fn run_worker<R: Runtime>(
                     } else {
                         MetadataRefresh::default()
                     };
+                    let pending_before = timeline_pending_new_track(&sessions, session_id);
                     let timeline_refresh = refresh_timeline(&mut sessions, session_id);
                     reset_stale_timeline_at_track_boundary(
                         &mut sessions,
@@ -245,9 +246,12 @@ fn run_worker<R: Runtime>(
                         metadata_refresh.track_boundary,
                         timeline_refresh.track_boundary,
                     );
+                    let track_confirmed =
+                        pending_before && !timeline_pending_new_track(&sessions, session_id);
                     if playback_changed
                         || metadata_refresh.changed
                         || timeline_refresh.availability_changed
+                        || track_confirmed
                     {
                         let selected_was_refreshed = selected.id == Some(session_id);
                         reconcile_selection_and_volume(
@@ -266,6 +270,7 @@ fn run_worker<R: Runtime>(
                 for session_id in events.timeline_properties_changed {
                     worker_metrics
                         .record_event_processed(WorkerMessageKind::TimelinePropertiesChanged);
+                    let pending_before = timeline_pending_new_track(&sessions, session_id);
                     let timeline_refresh = refresh_timeline(&mut sessions, session_id);
                     let metadata_refresh = if timeline_refresh.track_boundary {
                         refresh_metadata(&mut sessions, session_id)
@@ -278,9 +283,13 @@ fn run_worker<R: Runtime>(
                         metadata_refresh.track_boundary,
                         timeline_refresh.track_boundary,
                     );
+                    // 时间线刚确认新曲：必须重新发布一次完整快照，否则歌词层拿不到此前被推迟的通知。
+                    let track_confirmed =
+                        pending_before && !timeline_pending_new_track(&sessions, session_id);
                     if metadata_refresh.changed
                         || timeline_refresh.availability_changed
                         || timeline_refresh.track_boundary
+                        || track_confirmed
                     {
                         let selected_was_refreshed = selected.id == Some(session_id);
                         reconcile_selection_and_volume(
@@ -430,6 +439,7 @@ fn handle_media_properties_change<R: Runtime>(
     selection_policy: &MediaSessionSelectionPolicy,
     session_id: u64,
 ) {
+    let pending_before = timeline_pending_new_track(sessions, session_id);
     let metadata_refresh = refresh_metadata(sessions, session_id);
     let timeline_refresh = refresh_timeline(sessions, session_id);
     reset_stale_timeline_at_track_boundary(
@@ -438,7 +448,9 @@ fn handle_media_properties_change<R: Runtime>(
         metadata_refresh.track_boundary,
         timeline_refresh.track_boundary,
     );
-    if metadata_refresh.changed || timeline_refresh.availability_changed {
+    // 时间线刚确认新曲：必须重新发布一次完整快照，否则歌词层拿不到此前被推迟的通知。
+    let track_confirmed = pending_before && !timeline_pending_new_track(sessions, session_id);
+    if metadata_refresh.changed || timeline_refresh.availability_changed || track_confirmed {
         let selected_was_refreshed = selected.id == Some(session_id);
         reconcile_selection_and_volume(
             publisher,
@@ -633,6 +645,17 @@ fn refresh_metadata(entries: &mut [SessionEntry], session_id: u64) -> MetadataRe
         changed: true,
         track_boundary: title_changed,
     }
+}
+
+/// 该会话是否正处于“标题已换、时间线尚未确认新曲”的窗口。
+///
+/// 这个窗口里快照的时间线仍属于上一首，所以歌词层不会被通知
+/// （见 `publisher::publish_selected_snapshot`）。
+fn timeline_pending_new_track(entries: &[SessionEntry], session_id: u64) -> bool {
+    entries
+        .iter()
+        .find(|entry| entry.id == session_id)
+        .is_some_and(|entry| entry.pending_previous_position_ms.is_some())
 }
 
 /// 标题已切换而时间线未出现新曲边界时，不向上层泄漏上一首的大进度。

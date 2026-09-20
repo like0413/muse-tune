@@ -6,7 +6,7 @@ use crate::lyrics::{
     watcher,
 };
 
-use super::{LyricsService, MediaPlayer, is_plausible_timeline, lookup_hit, players};
+use super::{LyricsService, MediaPlayer, is_acceptable_candidate, lookup_hit, players};
 
 impl LyricsService {
     /// 按播放器分别重建非递归监听器，避免其他播放器的写入刷新当前歌词。
@@ -116,10 +116,16 @@ impl LyricsService {
         }
         let pending = self.prepare_player_resolution(player)?;
         self.refresh_watchers();
+        // 该播放器的本地结果已随配置变化作废；当前展示的正来自它时，缓存条目也会被一并清除。
+        let cache_cleared = self.inner.runtime_state.read().is_ok_and(|state| {
+            state.snapshot.source.as_ref().is_some_and(|source| {
+                source.player == player && source.kind == LyricsSourceKind::Local
+            })
+        });
         if let Err(error) = self.inner.cache.clear_local_source(player) {
             log::warn!("清理播放器旧本地歌词缓存失败: {error}");
         }
-        self.start_prepared_resolution(pending, true);
+        self.start_prepared_resolution(pending, true, cache_cleared);
         Ok(())
     }
 
@@ -203,7 +209,7 @@ impl LyricsService {
                 .and_then(|result| result.as_ref().ok())
                 .and_then(lookup_hit)
                 .is_some_and(|local| {
-                    is_plausible_timeline(&track, &local.lines) && has_word_timing(&local.lines)
+                    is_acceptable_candidate(&track, &local.lines) && has_word_timing(&local.lines)
                 });
             if !local_can_replace_word_timing {
                 return Ok(());
@@ -213,10 +219,22 @@ impl LyricsService {
         let Some((track, generation)) = pending else {
             return Ok(());
         };
-        if let Err(error) = self.inner.cache.remove(&track.key) {
-            log::warn!("清理当前歌曲解析缓存失败: {error}");
-        }
-        self.start_resolution(Some(track), generation, true);
+        // 只有缓存里可能存着这个播放器已经过期的本地内容（文件刚变，旧本地结果作废），或当前已是
+        // 逐字、需要拿本地结果重新比较时，才丢弃缓存做完整重解析。缓存来自其他来源时保留它，
+        // 让本轮走“缓存命中 + 后台本地升级”：既不打断当前展示，也不必重新联网。
+        let drop_cache = current_uses_player_local || current_has_word_timing;
+        let cache_cleared = if drop_cache {
+            match self.inner.cache.remove(&track.key) {
+                Ok(()) => true,
+                Err(error) => {
+                    log::warn!("清理当前歌曲解析缓存失败: {error}");
+                    false
+                }
+            }
+        } else {
+            false
+        };
+        self.start_resolution(Some(track), generation, true, cache_cleared);
         Ok(())
     }
 

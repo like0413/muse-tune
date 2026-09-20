@@ -23,9 +23,10 @@ use super::{
     matcher::MAX_DURATION_DIFFERENCE_MS,
     model::{
         LyricsAdapterDiagnostics, LyricsCacheDiagnostics, LyricsDiagnostics, LyricsLookupOutcome,
-        LyricsOnlineStrategy, LyricsResolutionMethod, LyricsResolutionOutcome,
-        LyricsResolutionStep, LyricsSnapshot, LyricsSnapshotDiagnostics, LyricsStatus,
-        ResolvedLyrics, has_word_timing,
+        LyricsOnlineStrategy, LyricsParallelGroup, LyricsPrecision, LyricsResolutionMethod,
+        LyricsResolutionOutcome, LyricsResolutionRecord, LyricsResolutionSite,
+        LyricsResolutionStep, LyricsResolutionTrack, LyricsSnapshot, LyricsSnapshotDiagnostics,
+        LyricsStatus, ResolvedLyrics, has_word_timing,
     },
     network::ResolutionDeadline,
     players,
@@ -44,8 +45,9 @@ mod watch_coordinator;
 use executor::RecordedAttempt;
 use pipeline::{
     LyricsCandidate, TimelineValidation, candidate_from_source, format_milliseconds,
-    is_cached_snapshot_displayable, is_plausible_timeline, lookup_hit, lookup_miss_detail,
-    select_best_candidate, summarize_resolution_result, validate_timeline,
+    is_acceptable_candidate, is_cached_snapshot_displayable, lookup_hit, lookup_miss_detail,
+    select_best_candidate, summarize_resolution_result, timeline_rejection_reason,
+    validate_timeline,
 };
 use plan::ResolutionPlan;
 use trace::duration_millis;
@@ -53,11 +55,17 @@ use trace::duration_millis;
 const LYRICS_CHANGED_EVENT: &str = "lyrics://changed";
 const LYRICS_DIAGNOSTICS_CHANGED_EVENT: &str = "lyrics://diagnostics-changed";
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(8);
-const ALLOWED_HTTPS_HOSTS: [&str; 4] = [
+/// 全部来源未命中时，结论先挂起这么久的窗口，用来等媒体把切歌瞬间的时间线补齐。
+const CONCLUSION_SETTLE_TIMEOUT: Duration = Duration::from_millis(500);
+/// 挂起期间检查"是否已有新一轮解析"的间隔；也是它对新请求的最大延迟。
+const CONCLUSION_SETTLE_POLL: Duration = Duration::from_millis(20);
+const ALLOWED_HTTPS_HOSTS: [&str; 6] = [
     "c.y.qq.com",
     "u.y.qq.com",
     "music.163.com",
     "beta-luna.douyin.com",
+    "krcs.kugou.com",
+    "lyrics2.kugou.com",
 ];
 
 type SnapshotPublisher = dyn Fn(&LyricsSnapshot) + Send + Sync;
@@ -119,6 +127,8 @@ struct ResolutionRequest {
     generation: u64,
     cancellation: Arc<AtomicBool>,
     cached: Option<CacheLookup>,
+    /// 起轮时没有缓存是否因为本次流程主动清除了它；只影响诊断文案。
+    cache_cleared: bool,
 }
 
 #[derive(Default)]
@@ -129,6 +139,9 @@ struct LyricsRuntimeState {
     resolution_started_at: Option<Instant>,
     resolution_duration_ms: Option<u64>,
     resolution_steps: Vec<LyricsResolutionStep>,
+    resolution_track: Option<LyricsResolutionTrack>,
+    resolution_finished_at_seconds: Option<u64>,
+    recent_resolutions: Vec<LyricsResolutionRecord>,
 }
 
 impl LyricsService {
@@ -223,31 +236,41 @@ impl LyricsService {
             .map_or((false, false), |resolver| {
                 (resolver.running, resolver.pending.is_some())
             });
-        let (snapshot, resolution_method, resolution_duration_ms, resolution_steps) =
-            self.inner.runtime_state.read().map_or_else(
-                |_| {
-                    (
-                        LyricsSnapshotDiagnostics::default(),
-                        LyricsResolutionMethod::None,
-                        None,
-                        Vec::new(),
-                    )
-                },
-                |state| {
-                    (
-                        LyricsSnapshotDiagnostics {
-                            status: state.snapshot.status,
-                            source: state.snapshot.source.clone(),
-                            precision: state.snapshot.precision,
-                            line_count: state.snapshot.lines.len(),
-                            error_reason: state.snapshot.error_reason.clone(),
-                        },
-                        state.resolution_method,
-                        state.resolution_duration_ms,
-                        state.resolution_steps.clone(),
-                    )
-                },
-            );
+        let (
+            snapshot,
+            resolution_method,
+            resolution_duration_ms,
+            resolution_track,
+            resolution_steps,
+            recent_resolutions,
+        ) = self.inner.runtime_state.read().map_or_else(
+            |_| {
+                (
+                    LyricsSnapshotDiagnostics::default(),
+                    LyricsResolutionMethod::None,
+                    None,
+                    None,
+                    Vec::new(),
+                    Vec::new(),
+                )
+            },
+            |state| {
+                (
+                    LyricsSnapshotDiagnostics {
+                        status: state.snapshot.status,
+                        source: state.snapshot.source.clone(),
+                        precision: state.snapshot.precision,
+                        line_count: state.snapshot.lines.len(),
+                        error_reason: state.snapshot.error_reason.clone(),
+                    },
+                    state.resolution_method,
+                    state.resolution_duration_ms,
+                    state.resolution_track.clone(),
+                    state.resolution_steps.clone(),
+                    state.recent_resolutions.clone(),
+                )
+            },
+        );
         let active_watchers = self
             .inner
             .watchers
@@ -297,7 +320,9 @@ impl LyricsService {
             resolver_running,
             pending_resolution,
             resolution_duration_ms,
+            resolution_track,
             resolution_steps,
+            recent_resolutions,
             cache: self
                 .inner
                 .cache
@@ -336,7 +361,14 @@ impl LyricsService {
     }
 
     /// 清空应用管理的歌词缓存，并通知诊断页刷新缓存状态。
+    ///
+    /// 与 `clear_current_cache` 一样在歌曲锁内提升解析代数并取消在途任务：否则正在运行的
+    /// 解析会在清理之后把结果写回，用户看到的是“刚清空又立刻出现条目”。
     pub fn clear_cache(&self) -> Result<(), io::Error> {
+        if let Ok(_guard) = self.inner.current_track.lock() {
+            self.inner.generation.fetch_add(1, Ordering::AcqRel);
+        }
+        self.cancel_resolution();
         self.inner.cache.clear()?;
         (self.inner.diagnostics_notifier)();
         Ok(())
@@ -363,7 +395,7 @@ impl LyricsService {
             .remove(&track.key)
             .map_err(|error| format!("清理当前歌曲缓存失败: {error}"))?;
         (self.inner.diagnostics_notifier)();
-        self.start_resolution(Some(track), generation, false);
+        self.start_resolution(Some(track), generation, false, true);
         Ok(())
     }
 
@@ -408,6 +440,7 @@ impl LyricsService {
         };
         let enabled_changed = previous.enabled != enabled;
         let online_changed = previous.allow_online != allow_online;
+        let strategy_changed = previous.online_strategy != online_strategy;
         if !enabled {
             let (track_key, generation) = {
                 let current = self
@@ -432,8 +465,19 @@ impl LyricsService {
             self.refresh_watchers();
             self.start_registry_watcher();
         }
-        if enabled_changed || online_changed {
-            self.force_resolve_current(online_changed && allow_online)
+        let cache_cleared = if strategy_changed {
+            match self.clear_current_cache() {
+                Ok(()) => true,
+                Err(error) => {
+                    log::debug!("切换在线调度策略时清理当前歌词缓存失败: {error}");
+                    false
+                }
+            }
+        } else {
+            false
+        };
+        if enabled_changed || online_changed || strategy_changed {
+            self.force_resolve_current(online_changed && allow_online, cache_cleared)
         } else {
             (self.inner.diagnostics_notifier)();
             Ok(())
@@ -478,7 +522,7 @@ impl LyricsService {
             // 让旧歌曲获得更新的代数并覆盖刚切换的新歌曲。
             self.inner.generation.fetch_add(1, Ordering::AcqRel) + 1
         };
-        self.start_resolution(track, generation, preserve_ready);
+        self.start_resolution(track, generation, preserve_ready, false);
     }
 
     /// 对已经登记为当前歌曲的描述启动一次解析，不再反向修改歌曲身份。
@@ -487,11 +531,14 @@ impl LyricsService {
         track: Option<TrackDescriptor>,
         generation: u64,
         preserve_ready: bool,
+        cache_cleared: bool,
     ) {
-        self.reset_resolution_trace(generation);
+        // 先确认代数仍然有效再重置链路：否则过期调用会把 trace_generation 改成旧值，
+        // 让正在运行的新代数后续所有步骤都因代数不符而被丢弃。
         if !self.is_current_generation(generation) {
             return;
         }
+        self.reset_resolution_trace(generation);
         let Some(track) = track else {
             self.cancel_resolution();
             self.publish_if_current(
@@ -509,11 +556,12 @@ impl LyricsService {
             return;
         }
         if track.duration_ms.is_none() {
+            // 无时长有两种来源：播放器真的没给出时间线，或媒体层为了等时间线同步而先剥离了它
+            // （切歌瞬间 SMTC 的标题与时间线可能不同步）。两者都无法解析，但都不能下结论——
+            // 正常情况下确认过的快照马上就到，报“不可用”只会让每次切歌都多一条问题上报。
+            log::debug!("当前曲目缺少有效时长，等待时间线确认: {}", track.key);
             self.cancel_resolution();
-            self.publish_if_current(
-                LyricsSnapshot::unavailable(Some(track.key), "当前播放器未提供有效播放时间线"),
-                generation,
-            );
+            self.publish_if_current(LyricsSnapshot::loading(track.key), generation);
             return;
         }
         let is_preview =
@@ -532,14 +580,15 @@ impl LyricsService {
             && self.inner.runtime_state.read().is_ok_and(|state| {
                 matches!(
                     state.snapshot.status,
-                    LyricsStatus::Ready | LyricsStatus::Instrumental
+                    LyricsStatus::Ready | LyricsStatus::Instrumental | LyricsStatus::NoLyrics
                 ) && state.snapshot.track_key.as_ref() == Some(&track.key)
             });
-        // 有效歌词或纯音乐结论直接展示，避免重复解析造成内容层闪烁。
+        // 有任何可展示的缓存就先展示，过期与否都一样：重新解析期间让用户继续看上一版结果，
+        // 比先空白再补上更稳。它同时仍作为本轮候选，拿到更好的来源会被正常替换。
         let cached = self.inner.cache.load(&track.key);
-        let displayable_cache = cached.as_ref().filter(|cached| {
-            cached.is_fresh && is_cached_snapshot_displayable(&track, &cached.snapshot)
-        });
+        let displayable_cache = cached
+            .as_ref()
+            .filter(|cached| is_cached_snapshot_displayable(&track, &cached.snapshot));
         if let Some(cached) = displayable_cache {
             self.publish_if_current_with_method(
                 cached.snapshot.clone(),
@@ -549,7 +598,7 @@ impl LyricsService {
         } else if !keeps_current_content {
             self.publish_if_current(LyricsSnapshot::loading(track.key.clone()), generation);
         }
-        self.enqueue_resolution(track, generation, cached);
+        self.enqueue_resolution(track, generation, cached, cache_cleared);
     }
 
     /// 合并解析期间到达的新请求，始终只保留最新歌曲且最多运行一个主解析线程。
@@ -558,6 +607,7 @@ impl LyricsService {
         track: TrackDescriptor,
         generation: u64,
         cached: Option<CacheLookup>,
+        cache_cleared: bool,
     ) {
         let track_key = track.key.clone();
         let cancellation = Arc::new(AtomicBool::new(false));
@@ -576,6 +626,7 @@ impl LyricsService {
                 generation,
                 cancellation,
                 cached,
+                cache_cleared,
             });
             if resolver.running {
                 false
@@ -648,6 +699,7 @@ impl LyricsService {
                 request.generation,
                 request.cancellation,
                 request.cached,
+                request.cache_cleared,
             );
         }
     }
@@ -659,11 +711,12 @@ impl LyricsService {
         generation: u64,
         cancellation: Arc<AtomicBool>,
         cached: Option<CacheLookup>,
+        cache_cleared: bool,
     ) {
         let track_key = track.key.clone();
-        self.begin_resolution_trace(generation);
+        self.begin_resolution_trace(generation, &track);
         let panicked = catch_unwind(AssertUnwindSafe(|| {
-            self.resolve_track(track, generation, cancellation, cached)
+            self.resolve_track(track, generation, cancellation, cached, cache_cleared)
         }))
         .is_err();
         self.finish_resolution_trace(generation);
@@ -680,12 +733,47 @@ impl LyricsService {
         }
     }
 
+    /// 本轮使用的时长是否仍然属于当前曲目。
+    ///
+    /// 切歌瞬间 SMTC 的媒体属性与时间线是两条独立通道：标题可能已经换成新歌，时间线还留在上一首。
+    /// 用这种时长去匹配，所有来源都会被时长这一关否掉，于是一首有词的歌被判成“没有歌词”。
+    /// 判据与 `update_track` 保持一致：只有超过匹配容差的变化才算换歌，小幅修正不该让结论失效。
+    fn round_duration_is_current(&self, track: &TrackDescriptor) -> bool {
+        let Ok(current) = self.inner.current_track.lock() else {
+            return true;
+        };
+        let Some(current) = current.as_ref().filter(|current| current.key == track.key) else {
+            return true;
+        };
+        match (current.duration_ms, track.duration_ms) {
+            (Some(current), Some(round)) => current.abs_diff(round) <= MAX_DURATION_DIFFERENCE_MS,
+            (None, None) => true,
+            _ => false,
+        }
+    }
+
+    /// 在“没有歌词 / 获取失败”这类结论发布前留出的等待窗口。
+    ///
+    /// 混搭快照只有等到时间线补齐才会暴露：修正后的描述符会触发新一轮解析（代数变化），
+    /// 所以这里只需确认本轮仍是当前代数。返回 `true` 表示已有新一轮接手，本次结论作废。
+    fn superseded_before_conclusion(&self, generation: u64) -> bool {
+        let started_at = Instant::now();
+        while started_at.elapsed() < CONCLUSION_SETTLE_TIMEOUT {
+            if !self.is_current_generation(generation) {
+                return true;
+            }
+            thread::sleep(CONCLUSION_SETTLE_POLL);
+        }
+        false
+    }
+
     fn resolve_track(
         &self,
         track: TrackDescriptor,
         generation: u64,
         cancellation: Arc<AtomicBool>,
         cached: Option<CacheLookup>,
+        cache_cleared: bool,
     ) {
         let deadline = ResolutionDeadline::new(cancellation);
         let preferences = self.preferences();
@@ -700,46 +788,45 @@ impl LyricsService {
             .is_some_and(|cached| is_cached_snapshot_displayable(&track, &cached.snapshot));
         self.record_resolution_step(
             generation,
-            "Muse Tune 缓存",
+            LyricsResolutionSite::ApplicationCache,
             if cached.is_some() {
                 LyricsResolutionOutcome::Hit
             } else {
                 LyricsResolutionOutcome::Miss
             },
             Some(cached.as_ref().map_or_else(
-                || "解析开始时无应用缓存".to_owned(),
-                |cached| match (cached.snapshot.status, cache_timeline_validation) {
-                    (LyricsStatus::Instrumental, _) if cached.is_fresh => {
-                        "已确认纯音乐，有效期内".to_owned()
-                    }
-                    (LyricsStatus::Instrumental, _) => "已确认纯音乐，已过期，重新确认".to_owned(),
-                    (_, Some(TimelineValidation::Plausible)) if cached.is_fresh => {
-                        "有效期内".to_owned()
-                    }
-                    (_, Some(TimelineValidation::Plausible)) => "已过期，作为兜底候选".to_owned(),
-                    (
-                        _,
-                        Some(TimelineValidation::DurationMismatch {
-                            track_duration_ms,
-                            latest_start_ms,
-                            latest_end_ms,
-                        }),
-                    ) => format!(
-                        "已读取；播放器时长 {}，歌词末行开始 {}、结束 {}；采用有效缓存",
-                        format_milliseconds(track_duration_ms),
-                        format_milliseconds(latest_start_ms),
-                        format_milliseconds(latest_end_ms),
-                    ),
-                    (_, Some(TimelineValidation::Invalid) | None) => {
-                        "已读取，但缓存状态或时间轴结构无效".to_owned()
-                    }
-                },
+                || cache_miss_detail(cache_cleared),
+                |cached| describe_cache_step(cached, cache_timeline_validation),
             )),
         );
+        // 过期的语义结论（纯音乐 / 没有歌词）不携带歌词行，无法参与候选排序，但保留为最终兜底：
+        // 否则“曾经确认过纯音乐”会在所有来源未命中时退化成“没有找到可靠歌词”。
+        let stale_notice = cached
+            .as_ref()
+            .filter(|cached| {
+                !cached.is_fresh
+                    && matches!(
+                        cached.snapshot.status,
+                        LyricsStatus::Instrumental | LyricsStatus::NoLyrics
+                    )
+            })
+            .map(|cached| cached.snapshot.clone());
+
+        // 缓存里已有可展示的逐行结果：先展示它，本轮在线只用于升级到逐字，不再降级替换。
+        let cached_line_displayed = cached.as_ref().is_some_and(|cached| {
+            cached.is_fresh
+                && cached.snapshot.status == LyricsStatus::Ready
+                && cached.snapshot.precision == Some(LyricsPrecision::Line)
+        });
+
+        // 缓存分支可能已经解析过当前播放器的本地来源（新鲜逐行的升级判定），此时本地阶段不必重复。
+        let mut local_source_resolved = false;
         if let Some(cached) = cached {
             if cached_snapshot_displayable && cached.is_fresh {
-                let should_check_local = cached.snapshot.status == LyricsStatus::Ready
-                    && cache_policy::should_check_local_upgrade(&cached.snapshot);
+                // 逐行与纯音乐都要顺手查一次本地（判据见 `should_check_local_upgrade`）。
+                let should_check_local = cache_policy::should_check_local_upgrade(&cached.snapshot);
+                // 在线复核只为把逐行升级成逐字；纯音乐不联网，联网也推不翻它。
+                let should_revalidate = cached.needs_revalidation && preferences.allow_online;
                 self.publish_if_current_with_method(
                     cached.snapshot.clone(),
                     generation,
@@ -750,15 +837,17 @@ impl LyricsService {
                 }
 
                 // 已有缓存必须先展示；本地精度升级属于增强路径，不能阻塞首屏歌词。
+                let mut upgraded_locally = false;
                 let upgrade_started_at = Instant::now();
+                local_source_resolved = true;
                 match players::resolve_current_local(&track, self.cache_path(track.player)) {
                     Ok(LyricsLookupOutcome::Hit(local))
-                        if is_plausible_timeline(&track, &local.lines)
+                        if is_acceptable_candidate(&track, &local.lines)
                             && cache_policy::local_result_is_upgrade(&cached.snapshot, &local) =>
                     {
                         self.record_resolution_step(
                             generation,
-                            "后台本地歌词升级",
+                            LyricsResolutionSite::LocalUpgrade,
                             LyricsResolutionOutcome::Hit,
                             Some(format!(
                                 "发现更高精度或辅助内容更完整的本地歌词 · {} ms",
@@ -766,23 +855,26 @@ impl LyricsService {
                             )),
                         );
                         self.publish_resolution(&track, local, generation);
+                        upgraded_locally = true;
                     }
                     Ok(LyricsLookupOutcome::Hit(local))
-                        if !is_plausible_timeline(&track, &local.lines) =>
+                        if !is_acceptable_candidate(&track, &local.lines) =>
                     {
                         self.record_resolution_step(
                             generation,
-                            "后台本地歌词升级",
+                            LyricsResolutionSite::LocalUpgrade,
                             LyricsResolutionOutcome::Error,
                             Some(format!(
-                                "结果时间轴超出歌曲有效范围 · {} ms",
+                                "{} · {} ms",
+                                timeline_rejection_reason(&track, &local.lines)
+                                    .unwrap_or("歌词时间轴不可用"),
                                 duration_millis(upgrade_started_at.elapsed()),
                             )),
                         );
                     }
                     Ok(LyricsLookupOutcome::Hit(_)) => self.record_resolution_step(
                         generation,
-                        "后台本地歌词升级",
+                        LyricsResolutionSite::LocalUpgrade,
                         LyricsResolutionOutcome::Miss,
                         Some(format!(
                             "本地歌词未提供更高精度或更多辅助内容 · {} ms",
@@ -791,7 +883,7 @@ impl LyricsService {
                     ),
                     Ok(LyricsLookupOutcome::Miss(reason)) => self.record_resolution_step(
                         generation,
-                        "后台本地歌词升级",
+                        LyricsResolutionSite::LocalUpgrade,
                         LyricsResolutionOutcome::Miss,
                         Some(format!(
                             "{} · {} ms",
@@ -801,7 +893,7 @@ impl LyricsService {
                     ),
                     Ok(LyricsLookupOutcome::Unsupported) => self.record_resolution_step(
                         generation,
-                        "后台本地歌词升级",
+                        LyricsResolutionSite::LocalUpgrade,
                         LyricsResolutionOutcome::Miss,
                         Some(format!(
                             "当前播放器不支持本地歌词 · {} ms",
@@ -812,7 +904,7 @@ impl LyricsService {
                     Err(error) => {
                         self.record_resolution_step(
                             generation,
-                            "后台本地歌词升级",
+                            LyricsResolutionSite::LocalUpgrade,
                             LyricsResolutionOutcome::Error,
                             Some(format!(
                                 "{error} · {} ms",
@@ -822,8 +914,13 @@ impl LyricsService {
                         log::debug!("检查播放器本地歌词升级失败: {error}");
                     }
                 }
-                return;
+                // 本地升级没有结果时，只有逐行缓存继续走在线阶段尝试升级到逐字。
+                if !should_revalidate || upgraded_locally {
+                    return;
+                }
             }
+            // 可参与比较的缓存：过期但仍可展示的快照，或需要升级复核的新鲜逐行快照
+            // （逐行只接受逐字替换，见 `improves_displayed`）。
             if cached.snapshot.status == LyricsStatus::Ready
                 && cached_snapshot_displayable
                 && let Some(source) = cached.snapshot.source
@@ -838,7 +935,17 @@ impl LyricsService {
             }
         }
 
-        for attempt in &plan.local_attempts {
+        // 是否有来源技术性失败。用于把“来源暂时不可用”与“确认这首歌没有歌词”分开上报。
+        let mut source_failed = false;
+        // 已经展示了可用的逐行结果（缓存命中或本地命中）时，本轮在线只用于升级到逐字：
+        // 换成另一个逐行只会让用户看到歌词无意义地跳一次，精度并没有提高。
+        let mut upgrade_to_word_only = cached_line_displayed;
+
+        let local_attempts = plan
+            .local_attempts
+            .iter()
+            .filter(|attempt| !(local_source_resolved && attempt.player == track.player));
+        for attempt in local_attempts {
             let execution = self.execute_attempt(*attempt, &track, &deadline);
             match self.record_attempt(execution, &track, generation, None) {
                 RecordedAttempt::Candidate(candidate)
@@ -848,8 +955,19 @@ impl LyricsService {
                     self.publish_candidate(&track, candidate, generation);
                     return;
                 }
-                RecordedAttempt::Candidate(candidate) => candidates.push(candidate),
-                RecordedAttempt::Continue => {}
+                RecordedAttempt::Candidate(candidate) => {
+                    // 本地逐行先发布：用户不必等在线阶段跑完才看到歌词，升级在后台继续。
+                    // 但已展示逐行时（新鲜缓存）只有真正的提升才值得替换，否则歌词会无意义地跳一次。
+                    if candidate.resolved.source.player == track.player
+                        && improves_displayed(cached_line_displayed, &candidate)
+                    {
+                        upgrade_to_word_only = true;
+                        self.publish_candidate(&track, candidate.clone(), generation);
+                    }
+                    candidates.push(candidate);
+                }
+                RecordedAttempt::Missed => {}
+                RecordedAttempt::Failed => source_failed = true,
                 RecordedAttempt::Cancelled => return,
             }
             if !self.is_current_generation(generation) {
@@ -858,17 +976,35 @@ impl LyricsService {
         }
 
         if !preferences.allow_online {
-            if let Some(candidate) = select_best_candidate(&track, candidates) {
-                self.publish_candidate(&track, candidate, generation);
-            } else {
-                self.store_and_publish_if_current(
-                    LyricsSnapshot::unavailable(
-                        Some(track.key.clone()),
-                        "联网策略仅允许本地与缓存",
-                    ),
-                    generation,
-                    LyricsResolutionMethod::None,
-                );
+            match select_best_candidate(&track, candidates) {
+                Some(candidate) if improves_displayed(upgrade_to_word_only, &candidate) => {
+                    self.publish_candidate(&track, candidate, generation);
+                }
+                Some(_) => {}
+                None => {
+                    // 混搭快照（新标题 + 上一首时间线）会让所有来源同时未命中，此时下结论是错的：
+                    // 先确认时长仍属于本曲，再留一个等待窗口，等修正后的描述符触发新一轮解析。
+                    if !self.round_duration_is_current(&track)
+                        || self.superseded_before_conclusion(generation)
+                    {
+                        log::debug!("本轮解析的输入可能已过期，放弃本次结论");
+                    } else if let Some(snapshot) = stale_notice {
+                        // 联网被策略禁止时，过期缓存仍是手上最有把握的结论。
+                        self.store_and_publish_if_current(
+                            snapshot,
+                            generation,
+                            LyricsResolutionMethod::ApplicationCache,
+                        );
+                    } else {
+                        self.publish_no_lyrics(
+                            &track.key,
+                            generation,
+                            source_failed,
+                            "联网策略仅允许本地与缓存",
+                            "本地与缓存歌词来源暂时不可用",
+                        );
+                    }
+                }
             }
             return;
         }
@@ -899,7 +1035,7 @@ impl LyricsService {
                 })
             };
             for execution in executions {
-                match self.record_attempt(execution, &track, generation, stage.parallel_group) {
+                match self.record_attempt(execution, &track, generation, stage.group) {
                     RecordedAttempt::Candidate(candidate)
                         if preferences.online_strategy
                             == LyricsOnlineStrategy::CurrentPlayerFirst
@@ -910,7 +1046,8 @@ impl LyricsService {
                         return;
                     }
                     RecordedAttempt::Candidate(candidate) => candidates.push(candidate),
-                    RecordedAttempt::Continue => {}
+                    RecordedAttempt::Missed => {}
+                    RecordedAttempt::Failed => source_failed = true,
                     RecordedAttempt::Cancelled => return,
                 }
             }
@@ -918,15 +1055,62 @@ impl LyricsService {
                 return;
             }
         }
-        if let Some(candidate) = select_best_candidate(&track, candidates) {
-            self.publish_candidate(&track, candidate, generation);
-        } else {
-            self.store_and_publish_if_current(
-                LyricsSnapshot::unavailable(Some(track.key.clone()), "没有找到可靠歌词"),
-                generation,
-                LyricsResolutionMethod::None,
-            );
+        match select_best_candidate(&track, candidates) {
+            Some(candidate) if improves_displayed(upgrade_to_word_only, &candidate) => {
+                self.publish_candidate(&track, candidate, generation);
+            }
+            // 只升级不降级：已经展示的逐行保持不变，也不要让过期结论覆盖它。
+            Some(_) => {}
+            None => {
+                // 同前：混搭快照下所有来源都会未命中，先把结论挂起，等修正后的新一轮接手。
+                if !self.round_duration_is_current(&track)
+                    || self.superseded_before_conclusion(generation)
+                {
+                    log::debug!("本轮解析的输入可能已过期，放弃本次结论");
+                } else if let Some(snapshot) = stale_notice {
+                    // 沿用上次的语义结论；顺带写回缓存以刷新时间戳，避免它成为永不更新的僵死条目。
+                    self.store_and_publish_if_current(
+                        snapshot,
+                        generation,
+                        LyricsResolutionMethod::ApplicationCache,
+                    );
+                } else {
+                    self.publish_no_lyrics(
+                        &track.key,
+                        generation,
+                        source_failed,
+                        "没有找到可靠歌词",
+                        "歌词来源暂时不可用，请检查网络连接",
+                    );
+                }
+            }
         }
+    }
+
+    /// 发布“本次没有拿到歌词”的收尾结论。
+    ///
+    /// 只有所有来源都正常执行并返回“没找到”时才说这首歌没有歌词；只要有来源技术性失败，
+    /// 就按错误上报——两者在界面上都表现为没有歌词可显示，但前者重试无意义，后者往往只是
+    /// 网络或平台暂时不可用，混为一谈会让用户以为这首歌根本没有歌词。
+    fn publish_no_lyrics(
+        &self,
+        track_key: &str,
+        generation: u64,
+        source_failed: bool,
+        miss_reason: &str,
+        failure_reason: &str,
+    ) {
+        let snapshot = if source_failed {
+            LyricsSnapshot {
+                track_key: Some(track_key.to_owned()),
+                status: LyricsStatus::Error,
+                error_reason: Some(failure_reason.to_owned()),
+                ..LyricsSnapshot::default()
+            }
+        } else {
+            LyricsSnapshot::unavailable(Some(track_key.to_owned()), miss_reason)
+        };
+        self.store_and_publish_if_current(snapshot, generation, LyricsResolutionMethod::None);
     }
 
     /// 持久化解析结果，并仅在请求仍对应当前歌曲时发布，避免慢请求覆盖新歌曲。
@@ -941,7 +1125,7 @@ impl LyricsService {
             return;
         }
         // 磁盘写入是本流程最慢的一步，移出歌曲身份锁，避免阻塞媒体监控线程更新当前歌曲。
-        if let Err(error) = self.inner.cache.store(&snapshot) {
+        if let Err(error) = self.inner.cache.store(&snapshot, generation) {
             log::warn!("保存解析后歌词缓存失败: {error}");
         }
         // 写入期间可能已经切歌，发布前重新校验，避免把过期结果广播出去。
@@ -1059,14 +1243,19 @@ impl LyricsService {
         &self,
         pending: Option<(TrackDescriptor, u64)>,
         preserve_ready: bool,
+        cache_cleared: bool,
     ) {
         if let Some((track, generation)) = pending {
-            self.start_resolution(Some(track), generation, preserve_ready);
+            self.start_resolution(Some(track), generation, preserve_ready, cache_cleared);
         }
     }
 
     /// 保留当前歌曲身份并重新解析；缓存刷新可在解析期间继续显示已就绪歌词。
-    fn force_resolve_current(&self, preserve_ready: bool) -> Result<(), String> {
+    fn force_resolve_current(
+        &self,
+        preserve_ready: bool,
+        cache_cleared: bool,
+    ) -> Result<(), String> {
         let (current, generation) = {
             let current = self
                 .inner
@@ -1076,7 +1265,7 @@ impl LyricsService {
             let generation = self.inner.generation.fetch_add(1, Ordering::AcqRel) + 1;
             (current.clone(), generation)
         };
-        self.start_resolution(current, generation, preserve_ready);
+        self.start_resolution(current, generation, preserve_ready, cache_cleared);
         Ok(())
     }
 }
@@ -1086,6 +1275,72 @@ fn is_allowed_url(url: &Url) -> bool {
         && url
             .host_str()
             .is_some_and(|host| ALLOWED_HTTPS_HOSTS.contains(&host))
+}
+
+/// 起轮时没有缓存的原因文案，区分“本来就没有”与“本次流程刚清除”。
+///
+/// 手动刷新、切换联网策略和本地歌词升级都会先删掉缓存再重新解析，笼统写成“无应用缓存”
+/// 会让人以为这首歌从未有过缓存。
+fn cache_miss_detail(cleared: bool) -> String {
+    if cleared {
+        "已由本次流程清除，重新完整解析".to_owned()
+    } else {
+        "解析开始时无应用缓存".to_owned()
+    }
+}
+
+/// 候选是否可以替换当前已展示的结果。
+///
+/// 已经展示逐行时只接受逐字：在线阶段拿到的另一个逐行精度并没有提高，替换只会让用户
+/// 看到歌词无意义地跳一次。
+fn improves_displayed(upgrade_to_word_only: bool, candidate: &LyricsCandidate) -> bool {
+    !upgrade_to_word_only || has_word_timing(&candidate.resolved.lines)
+}
+
+/// 缓存命中步骤的诊断文案；区分语义结论、逐字、逐行与时间轴异常。
+fn describe_cache_step(cached: &CacheLookup, validation: Option<TimelineValidation>) -> String {
+    if let Some(label) = notice_status_label(cached.snapshot.status) {
+        return if cached.is_fresh {
+            format!("已确认{label}，有效期内")
+        } else {
+            format!("已确认{label}，已过期，重新确认")
+        };
+    }
+    match validation {
+        Some(TimelineValidation::Plausible) if cached.is_fresh => {
+            if cached.needs_revalidation {
+                "有效期内，继续确认能否升级到逐字".to_owned()
+            } else {
+                "有效期内".to_owned()
+            }
+        }
+        Some(TimelineValidation::Plausible) => "已过期，作为兜底候选".to_owned(),
+        Some(TimelineValidation::DurationMismatch {
+            track_duration_ms,
+            latest_start_ms,
+            latest_end_ms,
+        }) => format!(
+            "已读取；播放器时长 {}，歌词末行开始 {}、结束 {}；采用有效缓存",
+            format_milliseconds(track_duration_ms),
+            format_milliseconds(latest_start_ms),
+            format_milliseconds(latest_end_ms),
+        ),
+        Some(TimelineValidation::Invalid(_)) | None => {
+            "已读取，但缓存状态或时间轴结构无效".to_owned()
+        }
+    }
+}
+
+/// 语义结论的中文名；真歌词与其他状态返回 `None`。
+fn notice_status_label(status: LyricsStatus) -> Option<&'static str> {
+    match status {
+        LyricsStatus::Instrumental => Some("纯音乐"),
+        LyricsStatus::NoLyrics => Some("没有歌词"),
+        LyricsStatus::Loading
+        | LyricsStatus::Ready
+        | LyricsStatus::Unavailable
+        | LyricsStatus::Error => None,
+    }
 }
 
 fn display_path(path: &std::path::Path) -> String {

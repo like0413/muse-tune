@@ -9,6 +9,12 @@ use super::{
 };
 
 const DEFAULT_LINE_DURATION_MS: u64 = 5_000;
+
+/// 回填 `end_ms` 时的时长上限。行间隔常常包含间奏，直接取下一行起点会把逐字渐变与横向
+/// 滚动拉长到整段间隔；超过上限即按上限收尾。行的激活仍由下一行起点决定，所以间奏期间
+/// 该行继续显示，只是行内进度不再被拖满。
+const MAX_ESTIMATED_LINE_DURATION_MS: u64 = 8_000;
+
 const AUXILIARY_TIME_TOLERANCE_MS: u64 = 150;
 
 /// 安全解析 LRC，并规避上游解析器对结尾空行的整数下溢。
@@ -59,13 +65,20 @@ pub fn normalize_parsed_lines(data: LyricsData) -> Vec<LyricLine> {
         if lines[index].end_ms > lines[index].start_ms {
             continue;
         }
-        lines[index].end_ms = lines.get(index + 1).map_or_else(
+        let estimated_end_ms = lines.get(index + 1).map_or_else(
             || {
                 lines[index]
                     .start_ms
                     .saturating_add(DEFAULT_LINE_DURATION_MS)
             },
             |next| next.start_ms.max(lines[index].start_ms.saturating_add(1)),
+        );
+        // 行间隔常常包含间奏：直接取下一行起点会让逐字渐变与横向滚动被拉长到整段间隔。
+        // 超过上限时按上限收尾；行的激活仍由下一行起点决定，所以间奏期间它继续显示。
+        lines[index].end_ms = estimated_end_ms.min(
+            lines[index]
+                .start_ms
+                .saturating_add(MAX_ESTIMATED_LINE_DURATION_MS),
         );
     }
     lines
