@@ -1,12 +1,13 @@
 use std::{
     collections::HashMap,
     fs::{self, OpenOptions},
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
     sync::Mutex,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use flate2::{Compression, read::DeflateDecoder, write::DeflateEncoder};
 use serde::{Deserialize, Serialize};
 
 use crate::{filesystem, media::MediaPlayer};
@@ -23,6 +24,7 @@ mod migration;
 use freshness::{is_cacheable_status, is_fresh, needs_revalidation, now_seconds, refresh_interval};
 use migration::{migrate_legacy_entries_directory, remove_obsolete_schema_directories};
 
+/// 解压后的单条缓存上限；压缩只是落盘手段，容量约束始终按规范化歌词本体计算。
 const MAX_CACHE_ENTRY_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_CACHE_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
 
@@ -40,6 +42,37 @@ pub struct CacheLookup {
 struct CacheEntry {
     refreshed_at_seconds: u64,
     snapshot: LyricsSnapshot,
+}
+
+/// 把条目编码为落盘字节：deflate 压缩的 JSON。
+///
+/// 逐字歌词把每个字写成一个对象，明文里绝大部分字节都是重复的键名和 `null` 占位，
+/// 因此压缩比极高而解压开销相对读盘可忽略。只影响磁盘格式，内存与 IPC 结构不变。
+fn encode_entry(entry: &CacheEntry) -> Result<Vec<u8>, LyricsError> {
+    let json = serde_json::to_vec(entry)?;
+    // 上限约束的是规范化歌词本体，压缩后的字节数比它小得多，不能拿它当判据。
+    if json.len() as u64 > MAX_CACHE_ENTRY_BYTES {
+        return Err(LyricsError::InvalidData(
+            "规范化歌词超过缓存大小上限".to_owned(),
+        ));
+    }
+    let mut encoder = DeflateEncoder::new(Vec::new(), Compression::default());
+    encoder.write_all(&json)?;
+    Ok(encoder.finish()?)
+}
+
+/// 解压单个条目；内容损坏或解压后超过上限时返回 `None`，由调用方按未命中处理。
+fn decode_entry(content: &[u8]) -> Option<CacheEntry> {
+    let mut json = Vec::new();
+    // 压缩流可以声称解压出任意大小：先按上限截断，避免单个损坏文件把内存吃满。
+    DeflateDecoder::new(content)
+        .take(MAX_CACHE_ENTRY_BYTES + 1)
+        .read_to_end(&mut json)
+        .ok()?;
+    if json.len() as u64 > MAX_CACHE_ENTRY_BYTES {
+        return None;
+    }
+    serde_json::from_slice(&json).ok()
 }
 
 /// 把临时文件提交为目标文件，覆盖已有同名文件。
@@ -145,7 +178,7 @@ impl ParsedLyricsCache {
             return None;
         }
         let content = fs::read(&path).ok()?;
-        let entry = serde_json::from_slice::<CacheEntry>(&content).ok();
+        let entry = decode_entry(&content);
         if let Some(entry) = entry.filter(|entry| {
             entry.snapshot.track_key.as_deref() == Some(track_key)
                 && is_cacheable_status(entry.snapshot.status)
@@ -193,12 +226,7 @@ impl ParsedLyricsCache {
             refreshed_at_seconds: now_seconds(),
             snapshot: snapshot.clone(),
         };
-        let content = serde_json::to_vec(&cache_entry)?;
-        if content.len() as u64 > MAX_CACHE_ENTRY_BYTES {
-            return Err(LyricsError::InvalidData(
-                "规范化歌词超过缓存大小上限".to_owned(),
-            ));
-        }
+        let content = encode_entry(&cache_entry)?;
         let replaced_bytes = match filesystem::metadata_if_exists(&target)? {
             Some(metadata) if metadata.is_file() => Some(metadata.len()),
             Some(_) => {
@@ -315,7 +343,7 @@ impl ParsedLyricsCache {
                 let path = entry.path();
                 let should_remove = fs::read(&path)
                     .ok()
-                    .and_then(|content| serde_json::from_slice::<CacheEntry>(&content).ok())
+                    .and_then(|content| decode_entry(&content))
                     .is_some_and(|entry| {
                         entry.snapshot.source.is_some_and(|source| {
                             source.player == player && source.kind == LyricsSourceKind::Local
@@ -405,7 +433,7 @@ impl ParsedLyricsCache {
         let metadata = fs::metadata(&path).ok()?;
         let entry = fs::read(path)
             .ok()
-            .and_then(|content| serde_json::from_slice::<CacheEntry>(&content).ok())?;
+            .and_then(|content| decode_entry(&content))?;
         Some(CurrentCacheEntry {
             bytes: metadata.len(),
             refreshed_at_seconds: entry.refreshed_at_seconds,
@@ -468,7 +496,7 @@ impl ParsedLyricsCache {
     }
 
     fn entry_path(&self, track_key: &str) -> PathBuf {
-        self.cache_path.join(format!("{track_key}.json"))
+        self.cache_path.join(format!("{track_key}.bin"))
     }
 
     /// 写入后的容量维护：已知总量仍在上限内时用增量记账代替整目录扫描。
