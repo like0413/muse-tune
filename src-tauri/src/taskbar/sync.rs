@@ -2,18 +2,16 @@
 
 use std::{
     sync::{
-        Arc, LazyLock,
-        atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering},
+        Arc,
+        atomic::{AtomicBool, Ordering},
     },
     time::{Duration, Instant},
 };
 
 use windows::Win32::Foundation::HWND;
 
-use crate::native_defaults;
-
 use super::{
-    RECOVERY_RETRY_DELAY, TaskbarOverlapPriority, TaskbarWidthMode, content_visible,
+    RECOVERY_RETRY_DELAY, TaskbarOverlapPriority, TaskbarWidthMode,
     elements::TaskbarElements,
     events::{TaskbarChange, WinEventHooks, wait_for_taskbar_change},
     geometry::{
@@ -28,32 +26,16 @@ use super::{
         redraw_bar, shell_reports_fullscreen_activity, show_bar, taskbar_auto_hide_enabled,
         taskbar_buttons_center_aligned, window_dpi,
     },
+    settings::{
+        content_visible, content_width, min_content_width, needs_taskbar_elements,
+        overlap_priority, placement, width_mode,
+    },
 };
 
 const FULLSCREEN_STATE_CHECK_INTERVAL: Duration = Duration::from_millis(250);
 /// 全屏轮询被跳过（系统自动隐藏已开启）时的等待上限；WinEvent 仍可随时唤醒循环。
 const IDLE_WAIT_TIMEOUT: Duration = Duration::from_secs(60);
 const UIA_RECOVERY_QUERY_INTERVAL: Duration = Duration::from_secs(1);
-// 下列静态值的初值即共享默认值（见 `native-defaults.json`）。`restore_native_settings` 会在
-// 创建任务栏窗口之前用已持久化的设置覆盖它们，因此默认值只在共享文件中定义一次。
-static TASKBAR_PLACEMENT: LazyLock<AtomicU8> =
-    LazyLock::new(|| AtomicU8::new(native_defaults::shared().taskbar.placement as u8));
-static TASKBAR_OVERLAP_PRIORITY: LazyLock<AtomicU8> =
-    LazyLock::new(|| AtomicU8::new(native_defaults::shared().taskbar.overlap_priority as u8));
-static TASKBAR_CONTENT_WIDTH_DIP: LazyLock<AtomicI32> =
-    LazyLock::new(|| AtomicI32::new(native_defaults::shared().taskbar.width));
-static TASKBAR_WIDTH_MODE: LazyLock<AtomicU8> =
-    LazyLock::new(|| AtomicU8::new(native_defaults::shared().taskbar.width_mode as u8));
-
-/// bar 基准宽度的可调下限，与前端共用同一份取值。
-fn min_content_width() -> i32 {
-    native_defaults::shared().taskbar.width_min
-}
-
-/// bar 基准宽度的可调上限，与前端共用同一份取值。
-fn max_content_width() -> i32 {
-    native_defaults::shared().taskbar.width_max
-}
 
 /// 隔离 Shell 未提供事件的全屏状态查询，状态未变化时不唤醒完整同步流程。
 struct FullscreenStateMonitor {
@@ -93,74 +75,9 @@ impl FullscreenStateMonitor {
     }
 }
 
-/// 跨线程更新定位偏好；仅在值变化时唤醒同步循环。
-pub(super) fn set_placement(placement: TaskbarPlacement) {
-    if TASKBAR_PLACEMENT.swap(placement as u8, Ordering::AcqRel) != placement as u8 {
-        super::events::request_all_layout_updates();
-    }
-}
-
-/// 跨线程更新元素遮挡优先级；仅在值变化时唤醒同步循环。
-pub(super) fn set_overlap_priority(priority: TaskbarOverlapPriority) {
-    if TASKBAR_OVERLAP_PRIORITY.swap(priority as u8, Ordering::AcqRel) != priority as u8 {
-        super::events::request_all_layout_updates();
-    }
-}
-
-/// 跨线程更新 bar 基准宽度；仅在值变化时唤醒全部同步线程。
-pub(super) fn set_content_width(width: i32) {
-    let width = width.clamp(min_content_width(), max_content_width());
-    if TASKBAR_CONTENT_WIDTH_DIP.swap(width, Ordering::AcqRel) != width {
-        super::events::request_all_layout_updates();
-    }
-}
-
-/// 跨线程更新宽度模式；仅在值变化时唤醒全部同步线程。
-pub(super) fn set_width_mode(mode: TaskbarWidthMode) {
-    if TASKBAR_WIDTH_MODE.swap(mode as u8, Ordering::AcqRel) != mode as u8 {
-        super::events::request_all_layout_updates();
-    }
-}
-
-/// 读取已经规范化的 bar 基准宽度。
-fn content_width() -> i32 {
-    TASKBAR_CONTENT_WIDTH_DIP.load(Ordering::Acquire)
-}
-
-/// 读取当前宽度模式。
-fn width_mode() -> TaskbarWidthMode {
-    TaskbarWidthMode::from_stored(TASKBAR_WIDTH_MODE.load(Ordering::Acquire))
-}
-
-/// 判断是否需要任务栏元素矩形：避让任务栏元素要用于裁剪，自适应宽度要用于计算空白。
-const fn needs_taskbar_elements(priority: TaskbarOverlapPriority, mode: TaskbarWidthMode) -> bool {
-    matches!(priority, TaskbarOverlapPriority::TaskbarElements)
-        || matches!(mode, TaskbarWidthMode::Auto)
-}
-
-/// 读取当前遮挡优先级。
-fn overlap_priority() -> TaskbarOverlapPriority {
-    TaskbarOverlapPriority::from_stored(TASKBAR_OVERLAP_PRIORITY.load(Ordering::Acquire))
-}
-
-/// 返回当前生效的定位、遮挡优先级与逻辑宽度。
-pub(super) fn diagnostic_settings() -> (
-    TaskbarPlacement,
-    TaskbarOverlapPriority,
-    TaskbarWidthMode,
-    i32,
-) {
-    (
-        TaskbarPlacement::from_stored(TASKBAR_PLACEMENT.load(Ordering::Acquire)),
-        overlap_priority(),
-        width_mode(),
-        content_width(),
-    )
-}
-
 /// 将用户偏好和系统任务栏对齐方式解析为实际停靠侧。
 fn resolve_taskbar_side() -> TaskbarSide {
-    match TaskbarPlacement::from_stored(TASKBAR_PLACEMENT.load(Ordering::Acquire)) {
+    match placement() {
         TaskbarPlacement::Auto if taskbar_buttons_center_aligned() => TaskbarSide::Left,
         TaskbarPlacement::Auto => TaskbarSide::Right,
         TaskbarPlacement::Left => TaskbarSide::Left,

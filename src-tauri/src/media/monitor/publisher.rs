@@ -2,7 +2,9 @@ use std::sync::RwLock;
 
 use tauri::{AppHandle, Emitter, Runtime};
 
-use super::{MediaSessionSnapshot, MediaSnapshotSubscriber, MediaVolumeSnapshot, SessionEntry};
+use crate::media::{MediaSessionSnapshot, MediaSnapshotSubscriber, MediaVolumeSnapshot};
+
+use super::SessionEntry;
 
 const MEDIA_SESSION_CHANGED_EVENT: &str = "media://session-changed";
 const MEDIA_TIMELINE_CHANGED_EVENT: &str = "media://timeline-changed";

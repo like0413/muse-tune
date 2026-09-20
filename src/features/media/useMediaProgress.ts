@@ -1,6 +1,7 @@
 import { useIntervalFn, useRafFn } from '@vueuse/core'
 import type { DeepReadonly } from 'vue'
 
+import { computeProgressPercent, extrapolatePosition } from './progress'
 import type { MediaPlaybackStatus, MediaTimeline } from './types'
 
 /**
@@ -17,17 +18,13 @@ export function useMediaProgress(
   let anchorPositionMs = 0
   let anchorTime = performance.now()
 
-  /** 依据当前锚点和播放器倍速计算位置，并限制在有效时间线内。 */
+  /** 依据当前锚点和播放器倍速计算位置；外推与钳制规则见 `progress.ts`。 */
   function updatePosition(now = performance.now(), isPlaying = playbackStatus.value === 'playing') {
-    const value = timeline.value
-    if (!value) {
-      positionMs.value = 0
-      return
-    }
-    const elapsed = isPlaying ? now - anchorTime : 0
-    positionMs.value = Math.min(
-      value.endTimeMs,
-      Math.max(value.startTimeMs, anchorPositionMs + elapsed * value.playbackRate),
+    positionMs.value = extrapolatePosition(
+      timeline.value,
+      anchorPositionMs,
+      now - anchorTime,
+      isPlaying,
     )
   }
 
@@ -109,13 +106,7 @@ export function useMediaProgress(
     { immediate: true },
   )
 
-  const progress = computed(() => {
-    const value = timeline.value
-    if (!value) return 0
-    const duration = value.endTimeMs - value.startTimeMs
-    if (duration <= 0) return 0
-    return Math.min(100, Math.max(0, ((positionMs.value - value.startTimeMs) / duration) * 100))
-  })
+  const progress = computed(() => computeProgressPercent(positionMs.value, timeline.value))
 
   return {
     positionMs: readonly(positionMs),

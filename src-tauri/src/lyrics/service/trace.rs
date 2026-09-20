@@ -1,10 +1,14 @@
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use super::{
-    LyricsParallelGroup, LyricsResolutionOutcome, LyricsResolutionRecord, LyricsResolutionSite,
-    LyricsResolutionStep, LyricsResolutionTrack, LyricsRuntimeState, LyricsService,
-    TrackDescriptor,
+use crate::lyrics::{
+    model::{
+        LyricsParallelGroup, LyricsResolutionOutcome, LyricsResolutionRecord, LyricsResolutionSite,
+        LyricsResolutionStep, LyricsResolutionTrack,
+    },
+    track::TrackDescriptor,
 };
+
+use super::{LyricsRuntimeState, LyricsService};
 
 /// 单轮解析最多保留的诊断步骤数；并行在线阶段有多个来源，过小会静默截断关键证据。
 const RESOLUTION_STEP_LIMIT: usize = 16;

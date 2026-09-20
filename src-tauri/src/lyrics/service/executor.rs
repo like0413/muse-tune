@@ -2,16 +2,21 @@ use std::time::Instant;
 
 use crate::lyrics::{
     error::LyricsError,
-    model::{LyricsLookupOutcome, LyricsResolutionOutcome},
+    model::{LyricsLookupOutcome, LyricsParallelGroup, LyricsResolutionOutcome},
     network::ResolutionDeadline,
+    players,
+    track::TrackDescriptor,
 };
 
-use super::pipeline::player_label;
 use super::{
-    LyricsCandidate, LyricsParallelGroup, LyricsResolutionResult, LyricsService, TrackDescriptor,
-    candidate_from_source, players, summarize_resolution_result, timeline_rejection_reason,
+    LyricsResolutionResult, LyricsService,
+    pipeline::{
+        LyricsCandidate, candidate_from_source, player_label, summarize_resolution_result,
+        timeline_rejection_reason,
+    },
+    plan::{ResolutionAttempt, ResolutionCapability},
+    trace::duration_millis,
 };
-use super::{plan::ResolutionAttempt, plan::ResolutionCapability, trace::duration_millis};
 
 /// 单次来源调用及其耗时，允许并发完成后仍按计划顺序记录诊断。
 pub(super) struct AttemptExecution {

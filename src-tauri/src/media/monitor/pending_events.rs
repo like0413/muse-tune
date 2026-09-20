@@ -98,3 +98,93 @@ pub(super) struct WorkerEventBatch {
     pub(super) volume_changed: HashSet<u64>,
     pub(super) volume_sessions_changed: HashSet<u64>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    /// 首次投递不算合并，重复投递同一逻辑目标才算——调用方靠返回值决定是否需要再次唤醒 worker。
+    #[test]
+    fn duplicate_events_report_coalescing() {
+        let mut pending = PendingWorkerEvents::default();
+
+        assert!(!pending.merge(WorkerEvent::PlaybackInfo(1)));
+        assert!(pending.merge(WorkerEvent::PlaybackInfo(1)));
+        assert!(!pending.merge(WorkerEvent::PlaybackInfo(2)));
+        assert!(!pending.merge(WorkerEvent::Manager));
+        assert!(pending.merge(WorkerEvent::Manager));
+    }
+
+    /// 媒体属性事件必须保留最新观测时间：旧时间戳覆盖新时间戳会让元数据稳定刷新提前触发。
+    #[test]
+    fn media_properties_keep_latest_observation() {
+        let mut pending = PendingWorkerEvents::default();
+        let base = Instant::now();
+        let latest = base + Duration::from_millis(200);
+
+        assert!(!pending.merge(WorkerEvent::MediaProperties {
+            session_id: 1,
+            observed_at: latest,
+        }));
+        assert!(pending.merge(WorkerEvent::MediaProperties {
+            session_id: 1,
+            observed_at: base + Duration::from_millis(50),
+        }));
+
+        let batch = pending.take_batch();
+        assert_eq!(batch.media_properties_changed.get(&1), Some(&latest));
+    }
+
+    /// 取走批次后必须清空，否则同一事件会被反复处理。
+    #[test]
+    fn taking_a_batch_drains_every_channel() {
+        let mut pending = PendingWorkerEvents::default();
+        let now = Instant::now();
+        pending.merge(WorkerEvent::Manager);
+        pending.merge(WorkerEvent::MediaProperties {
+            session_id: 9,
+            observed_at: now,
+        });
+        pending.merge(WorkerEvent::PlaybackInfo(1));
+        pending.merge(WorkerEvent::TimelineProperties(1));
+        pending.merge(WorkerEvent::Volume(3));
+        pending.merge(WorkerEvent::VolumeSessions(3));
+        pending.wake_enqueued = true;
+
+        let batch = pending.take_batch();
+        assert!(batch.manager_changed);
+        assert_eq!(batch.media_properties_changed.len(), 1);
+        assert_eq!(batch.playback_info_changed.len(), 1);
+        assert_eq!(batch.timeline_properties_changed.len(), 1);
+        assert_eq!(batch.volume_changed.len(), 1);
+        assert_eq!(batch.volume_sessions_changed.len(), 1);
+        assert!(!pending.wake_enqueued);
+
+        let drained = pending.take_batch();
+        assert!(!drained.manager_changed);
+        assert!(drained.media_properties_changed.is_empty());
+        assert!(drained.playback_info_changed.is_empty());
+        assert!(drained.timeline_properties_changed.is_empty());
+        assert!(drained.volume_changed.is_empty());
+        assert!(drained.volume_sessions_changed.is_empty());
+    }
+
+    /// 不同会话的同类事件互不合并，否则多播放器并存时会漏掉其中一个的变化。
+    #[test]
+    fn sessions_are_tracked_independently() {
+        let mut pending = PendingWorkerEvents::default();
+        let now = Instant::now();
+
+        assert!(!pending.merge(WorkerEvent::MediaProperties {
+            session_id: 1,
+            observed_at: now,
+        }));
+        assert!(!pending.merge(WorkerEvent::MediaProperties {
+            session_id: 2,
+            observed_at: now,
+        }));
+
+        assert_eq!(pending.take_batch().media_properties_changed.len(), 2);
+    }
+}

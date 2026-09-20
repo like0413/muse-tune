@@ -158,3 +158,169 @@ fn version_markers(value: &str) -> BTreeSet<&'static str> {
         .map(|(marker, _)| marker)
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::media::MediaPlayer;
+
+    fn track(title: &str, artists: &[&str], duration_ms: Option<u64>) -> TrackDescriptor {
+        TrackDescriptor {
+            key: "track-key".to_owned(),
+            player: MediaPlayer::QqMusic,
+            title: title.to_owned(),
+            artists: artists.iter().map(|value| (*value).to_owned()).collect(),
+            duration_ms,
+        }
+    }
+
+    /// 打分入口只关心候选的展示字段，播放器不参与匹配。
+    fn score(
+        track: &TrackDescriptor,
+        title: &str,
+        artists: &[&str],
+        duration_ms: Option<u64>,
+    ) -> Option<u8> {
+        let artists = artists
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect::<Vec<_>>();
+        accepted_score(
+            track,
+            SongCandidate {
+                title,
+                artists: &artists,
+                duration_ms,
+            },
+        )
+    }
+
+    #[test]
+    fn exact_match_scores_full_marks() {
+        let current = track("夜曲", &["周杰伦"], Some(200_000));
+        assert_eq!(
+            score(&current, "夜曲", &["周杰伦"], Some(200_000)),
+            Some(100)
+        );
+    }
+
+    /// 候选引入当前标题没有的版本语义时（原版 vs 伴奏）必须拒绝，
+    /// 否则会把另一发行版的歌词当成同一首歌。
+    #[test]
+    fn candidate_introducing_version_marker_is_rejected() {
+        let current = track("夜曲", &["周杰伦"], Some(200_000));
+        assert_eq!(
+            score(&current, "夜曲 (伴奏)", &["周杰伦"], Some(200_000)),
+            None
+        );
+        assert_eq!(
+            score(&current, "夜曲 Live", &["周杰伦"], Some(200_000)),
+            None
+        );
+    }
+
+    /// 当前标题带版本标记而候选漏标时必须拒绝：两者是不同发行版，不能共用歌词。
+    /// 标记文本本身就在标题里，标题相似度会随之一起下降。
+    #[test]
+    fn missing_version_marker_is_rejected() {
+        let current = track("夜曲 (Live)", &["周杰伦"], Some(200_000));
+        assert_eq!(score(&current, "夜曲", &["周杰伦"], Some(200_000)), None);
+    }
+
+    /// 5 秒内的时长放宽只适用于版本标记完全一致的候选，标记不一致时该分档被关闭。
+    ///
+    /// 用足够长的标题让"漏标标记"只造成轻微相似度下降，才能真正走到分档判定这一步；
+    /// 短标题会先被相似度门槛拒绝，测不到这里。
+    #[test]
+    fn five_second_drift_requires_matching_version_markers() {
+        let long_title = "a".repeat(45);
+        let current = track(&format!("{long_title} Live"), &["周杰伦"], Some(200_000));
+
+        // 标记不一致：3 秒差异落在被关闭的 15 分档上，直接拒绝。
+        assert_eq!(
+            score(&current, &long_title, &["周杰伦"], Some(203_000)),
+            None
+        );
+        // 时长几乎一致：仍然接受。
+        assert!(score(&current, &long_title, &["周杰伦"], Some(200_000)).is_some());
+    }
+
+    /// 版本标记完全一致时，5 秒内的时长差仍然接受。
+    #[test]
+    fn matching_version_markers_allow_five_second_drift() {
+        let current = track("夜曲", &["周杰伦"], Some(200_000));
+        assert!(score(&current, "夜曲", &["周杰伦"], Some(203_000)).is_some());
+        // 超过 5 秒直接出局。
+        assert_eq!(score(&current, "夜曲", &["周杰伦"], Some(210_000)), None);
+    }
+
+    #[test]
+    fn disjoint_artists_are_rejected() {
+        let current = track("夜曲", &["周杰伦"], Some(200_000));
+        assert_eq!(score(&current, "夜曲", &["林俊杰"], Some(200_000)), None);
+    }
+
+    /// 联合歌手里有一个重合即可通过，避免平台侧漏标某位歌手就丢掉正确歌词。
+    #[test]
+    fn partially_overlapping_artists_are_accepted() {
+        let current = track("因为爱情", &["陈奕迅", "王菲"], Some(200_000));
+        assert!(score(&current, "因为爱情", &["王菲"], Some(200_000)).is_some());
+    }
+
+    /// 播放器未提供艺术家时不能凭此拒绝，改由更严格的标题与时长要求承担判别。
+    #[test]
+    fn missing_track_artists_raises_the_required_score() {
+        let current = track("夜曲", &[], Some(200_000));
+        // 标题完全一致且时长准确：刚好达到 70 分下限。
+        assert_eq!(score(&current, "夜曲", &[], Some(200_000)), Some(70));
+        // 缺时长时只剩标题分，达不到 70 分下限。
+        assert_eq!(score(&current, "夜曲", &[], None), None);
+    }
+
+    /// 双方都没有时长时，标题与歌手完全一致仍然接受。
+    #[test]
+    fn exact_title_and_artists_survive_missing_duration() {
+        let current = track("夜曲", &["周杰伦"], None);
+        assert!(score(&current, "夜曲", &["周杰伦"], None).is_some());
+    }
+
+    #[test]
+    fn length_prescreen_rejects_hopeless_candidates() {
+        assert!(could_reach_title_similarity(10, 11));
+        assert!(!could_reach_title_similarity(5, 12));
+    }
+
+    #[test]
+    fn empty_titles_never_match() {
+        assert_eq!(
+            score(&track("", &["周杰伦"], None), "夜曲", &["周杰伦"], None),
+            None
+        );
+        assert_eq!(
+            score(&track("夜曲", &["周杰伦"], None), "", &["周杰伦"], None),
+            None
+        );
+    }
+
+    /// NFKC 归一化让全角与半角、大小写差异不会造成缓存或匹配上的重复。
+    #[test]
+    fn normalization_folds_width_and_case() {
+        assert_eq!(normalize_text("ＡＢＣ"), normalize_text("abc"));
+        assert_eq!(normalize_text("夜曲 (Live)"), "夜曲live");
+        assert_eq!(normalize_text("  "), "");
+    }
+
+    /// 国内播放器常见的联合歌手分隔符都要拆分，否则艺术家集合比对会整体失配。
+    #[test]
+    fn artist_splitting_handles_domestic_separators() {
+        assert_eq!(
+            split_artists("周杰伦/费玉清"),
+            vec!["周杰伦".to_owned(), "费玉清".to_owned()]
+        );
+        assert_eq!(
+            split_artists("陈奕迅、王菲"),
+            vec!["陈奕迅".to_owned(), "王菲".to_owned()]
+        );
+        assert!(split_artists("   ").is_empty());
+    }
+}

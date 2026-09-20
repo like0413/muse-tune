@@ -1,9 +1,14 @@
-use super::{LyricsResolutionResult, LyricsService, MediaPlayer, ResolvedLyrics, TrackDescriptor};
-use crate::lyrics::model::{
-    LyricLine, LyricsLookupMiss, LyricsLookupOutcome, LyricsResolutionMethod,
-    LyricsResolutionOutcome, LyricsSnapshot, LyricsSourceKind, LyricsStatus, has_word_timing,
-    platform_notice,
+use crate::lyrics::{
+    model::{
+        LyricLine, LyricsLookupMiss, LyricsLookupOutcome, LyricsResolutionMethod,
+        LyricsResolutionOutcome, LyricsSnapshot, LyricsSourceKind, LyricsStatus, ResolvedLyrics,
+        has_word_timing, platform_notice,
+    },
+    track::TrackDescriptor,
 };
+use crate::media::MediaPlayer;
+
+use super::{LyricsResolutionResult, LyricsService};
 
 /// 解析候选及其真实获取方式；候选只在流水线内流转，最终提交仍由协调器负责。
 #[derive(Clone)]
@@ -12,7 +17,7 @@ pub(super) struct LyricsCandidate {
     pub(super) resolution_method: LyricsResolutionMethod,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum TimelineValidation {
     Plausible,
     DurationMismatch {
@@ -314,5 +319,383 @@ fn source_priority(player: MediaPlayer) -> u8 {
         MediaPlayer::SodaMusic => 2,
         MediaPlayer::KugouMusic => 1,
         MediaPlayer::Other => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lyrics::model::{LyricWord, LyricsSource, LyricsSourceKind};
+    use crate::lyrics::track::TrackDescriptor;
+    use crate::media::MediaPlayer;
+
+    /// 时间轴校验与候选排序只关心播放器、时长这两个匹配字段。
+    fn track(player: MediaPlayer, duration_ms: Option<u64>) -> TrackDescriptor {
+        TrackDescriptor {
+            key: "track-key".to_owned(),
+            player,
+            title: "标题".to_owned(),
+            artists: vec!["歌手".to_owned()],
+            duration_ms,
+        }
+    }
+
+    /// 不带逐字的逐行歌词。
+    fn line(start_ms: u64, end_ms: u64, text: &str) -> LyricLine {
+        LyricLine {
+            start_ms,
+            end_ms,
+            text: text.to_owned(),
+            translation: None,
+            romanization: None,
+            words: Vec::new(),
+        }
+    }
+
+    /// 单词时间与整行一致，构成完整逐字覆盖。
+    fn word_line(start_ms: u64, end_ms: u64, text: &str) -> LyricLine {
+        LyricLine {
+            words: vec![LyricWord {
+                start_ms,
+                end_ms,
+                text: text.to_owned(),
+            }],
+            ..line(start_ms, end_ms, text)
+        }
+    }
+
+    fn candidate(
+        player: MediaPlayer,
+        kind: LyricsSourceKind,
+        lines: Vec<LyricLine>,
+    ) -> LyricsCandidate {
+        candidate_from_source(ResolvedLyrics {
+            source: LyricsSource {
+                player,
+                kind,
+                song_id: None,
+            },
+            lines,
+        })
+    }
+
+    fn with_translation(mut target: LyricLine, translation: &str) -> LyricLine {
+        target.translation = Some(translation.to_owned());
+        target
+    }
+
+    #[test]
+    fn validate_timeline_rejects_missing_duration() {
+        assert_eq!(
+            validate_timeline(&track(MediaPlayer::QqMusic, None), &[line(0, 1_000, "a")]),
+            TimelineValidation::Invalid(TimelineInvalidReason::MissingDuration)
+        );
+    }
+
+    #[test]
+    fn validate_timeline_rejects_empty_lines() {
+        assert_eq!(
+            validate_timeline(&track(MediaPlayer::QqMusic, Some(1_000)), &[]),
+            TimelineValidation::Invalid(TimelineInvalidReason::EmptyLines)
+        );
+    }
+
+    #[test]
+    fn validate_timeline_rejects_out_of_order_lines() {
+        assert_eq!(
+            validate_timeline(
+                &track(MediaPlayer::QqMusic, Some(10_000)),
+                &[line(3_000, 4_000, "a"), line(1_000, 2_000, "b")],
+            ),
+            TimelineValidation::Invalid(TimelineInvalidReason::OutOfOrderLines)
+        );
+    }
+
+    /// 逐字区间反向或早于整行起点都会让前端无法定位高亮位置，必须判为数据不可用。
+    #[test]
+    fn validate_timeline_rejects_invalid_word_timing() {
+        let reversed = LyricLine {
+            words: vec![LyricWord {
+                start_ms: 900,
+                end_ms: 900,
+                text: "a".to_owned(),
+            }],
+            ..line(0, 1_000, "a")
+        };
+        assert_eq!(
+            validate_timeline(&track(MediaPlayer::QqMusic, Some(10_000)), &[reversed]),
+            TimelineValidation::Invalid(TimelineInvalidReason::InvalidWordTiming)
+        );
+
+        let before_line_start = LyricLine {
+            words: vec![LyricWord {
+                start_ms: 10,
+                end_ms: 500,
+                text: "a".to_owned(),
+            }],
+            ..line(500, 1_000, "a")
+        };
+        assert_eq!(
+            validate_timeline(
+                &track(MediaPlayer::QqMusic, Some(10_000)),
+                &[before_line_start]
+            ),
+            TimelineValidation::Invalid(TimelineInvalidReason::InvalidWordTiming)
+        );
+    }
+
+    /// 播放器在切歌初期常报偏短时长，10 秒容差内的超出必须仍然视为可用。
+    #[test]
+    fn validate_timeline_tolerates_overshoot_within_slack() {
+        assert_eq!(
+            validate_timeline(
+                &track(MediaPlayer::QqMusic, Some(60_000)),
+                &[line(0, 1_000, "a"), line(69_000, 70_000, "b")],
+            ),
+            TimelineValidation::Plausible
+        );
+    }
+
+    /// 超出容差时要带出实际越界位置，诊断才能区分"报短"与"数据错"。
+    #[test]
+    fn validate_timeline_reports_duration_mismatch_beyond_slack() {
+        let validation = validate_timeline(
+            &track(MediaPlayer::QqMusic, Some(60_000)),
+            &[line(0, 1_000, "a"), line(80_000, 81_000, "b")],
+        );
+        assert_eq!(
+            validation,
+            TimelineValidation::DurationMismatch {
+                track_duration_ms: 60_000,
+                latest_start_ms: 80_000,
+                latest_end_ms: 81_000,
+            }
+        );
+    }
+
+    /// 逐字时间也要参与越界判定，否则只有单词超界的歌词会被误判为可用。
+    #[test]
+    fn validate_timeline_counts_word_timing_towards_bounds() {
+        let over = LyricLine {
+            words: vec![LyricWord {
+                start_ms: 90_000,
+                end_ms: 91_000,
+                text: "a".to_owned(),
+            }],
+            ..line(0, 1_000, "a")
+        };
+        assert!(matches!(
+            validate_timeline(&track(MediaPlayer::QqMusic, Some(60_000)), &[over]),
+            TimelineValidation::DurationMismatch {
+                latest_start_ms: 90_000,
+                latest_end_ms: 91_000,
+                ..
+            }
+        ));
+    }
+
+    /// 时长不匹配属于"时长暂时不可信"而非数据损坏，不能因此丢掉整首歌的歌词。
+    #[test]
+    fn duration_mismatch_is_still_acceptable() {
+        let mismatched = [line(0, 1_000, "a"), line(80_000, 81_000, "b")];
+        assert!(is_acceptable_candidate(
+            &track(MediaPlayer::QqMusic, Some(60_000)),
+            &mismatched
+        ));
+    }
+
+    #[test]
+    fn invalid_timeline_is_not_acceptable() {
+        assert!(!is_acceptable_candidate(
+            &track(MediaPlayer::QqMusic, None),
+            &[line(0, 1_000, "a")]
+        ));
+        assert!(!is_acceptable_candidate(
+            &track(MediaPlayer::QqMusic, Some(10_000)),
+            &[]
+        ));
+    }
+
+    /// 诊断文案只在数据真的不可用时给出，轻微时长偏差不应产生误报。
+    #[test]
+    fn rejection_reason_only_reported_for_invalid_data() {
+        let track = track(MediaPlayer::QqMusic, Some(60_000));
+        assert_eq!(
+            timeline_rejection_reason(&track, &[line(0, 1_000, "a"), line(80_000, 81_000, "b")]),
+            None
+        );
+        assert_eq!(
+            timeline_rejection_reason(&track, &[]),
+            Some(TimelineInvalidReason::EmptyLines.detail())
+        );
+    }
+
+    /// 平台占位文案（"纯音乐请欣赏"）时间轴恒合法，若按"当前平台优先"参与排序会压过
+    /// 其他平台的真歌词，把整首歌判成纯音乐。真实歌词必须优先。
+    #[test]
+    fn real_lyrics_beat_platform_notice() {
+        let notice = candidate(
+            MediaPlayer::QqMusic,
+            LyricsSourceKind::Online,
+            vec![line(0, 5_000, "纯音乐，请您欣赏")],
+        );
+        let real = candidate(
+            MediaPlayer::KugouMusic,
+            LyricsSourceKind::Online,
+            vec![line(0, 5_000, "第一句"), line(5_000, 10_000, "第二句")],
+        );
+        let selected = select_best_candidate(
+            &track(MediaPlayer::QqMusic, Some(200_000)),
+            vec![notice, real],
+        )
+        .expect("真歌词应当被选中");
+        assert_eq!(selected.resolved.source.player, MediaPlayer::KugouMusic);
+    }
+
+    #[test]
+    fn word_timing_beats_line_precision() {
+        let lined = candidate(
+            MediaPlayer::QqMusic,
+            LyricsSourceKind::Local,
+            vec![line(0, 5_000, "第一句"), line(5_000, 10_000, "第二句")],
+        );
+        let worded = candidate(
+            MediaPlayer::KugouMusic,
+            LyricsSourceKind::Online,
+            vec![
+                word_line(0, 5_000, "第一句"),
+                word_line(5_000, 10_000, "第二句"),
+            ],
+        );
+        let selected = select_best_candidate(
+            &track(MediaPlayer::QqMusic, Some(200_000)),
+            vec![lined, worded],
+        )
+        .expect("逐字歌词应当胜出");
+        assert_eq!(selected.resolved.source.player, MediaPlayer::KugouMusic);
+    }
+
+    /// 同精度层内，当前播放器的来源优于其他平台——这是"当前平台优先"策略的落点。
+    #[test]
+    fn current_player_wins_within_same_layer() {
+        let other_player = candidate(
+            MediaPlayer::KugouMusic,
+            LyricsSourceKind::Online,
+            vec![line(0, 5_000, "第一句"), line(5_000, 10_000, "第二句")],
+        );
+        let current_player = candidate(
+            MediaPlayer::QqMusic,
+            LyricsSourceKind::Online,
+            vec![line(0, 5_000, "甲"), line(5_000, 10_000, "乙")],
+        );
+        let selected = select_best_candidate(
+            &track(MediaPlayer::QqMusic, Some(200_000)),
+            vec![other_player, current_player],
+        )
+        .expect("应当有候选胜出");
+        assert_eq!(selected.resolved.source.player, MediaPlayer::QqMusic);
+    }
+
+    /// 平台、精度、来源类型都相同时，辅助内容覆盖率打破平局。
+    #[test]
+    fn auxiliary_coverage_breaks_ties() {
+        let bare = candidate(
+            MediaPlayer::QqMusic,
+            LyricsSourceKind::Online,
+            vec![line(0, 5_000, "第一句"), line(5_000, 10_000, "第二句")],
+        );
+        let translated = candidate(
+            MediaPlayer::QqMusic,
+            LyricsSourceKind::Online,
+            vec![
+                with_translation(line(0, 5_000, "第一句"), "first"),
+                with_translation(line(5_000, 10_000, "第二句"), "second"),
+            ],
+        );
+        let selected = select_best_candidate(
+            &track(MediaPlayer::QqMusic, Some(200_000)),
+            vec![bare, translated],
+        )
+        .expect("应当有候选胜出");
+        assert!(selected.resolved.lines[0].translation.is_some());
+    }
+
+    #[test]
+    fn unacceptable_candidates_are_dropped() {
+        let no_duration = candidate(
+            MediaPlayer::QqMusic,
+            LyricsSourceKind::Online,
+            vec![line(0, 5_000, "第一句")],
+        );
+        assert!(
+            select_best_candidate(&track(MediaPlayer::QqMusic, None), vec![no_duration]).is_none()
+        );
+    }
+
+    #[test]
+    fn empty_candidates_yield_none() {
+        assert!(
+            select_best_candidate(&track(MediaPlayer::QqMusic, Some(200_000)), Vec::new())
+                .is_none()
+        );
+    }
+
+    /// 空文本与"与原文等价"的占位译文都不算有效辅助内容，否则覆盖率会被虚高抬高。
+    #[test]
+    fn auxiliary_quality_ignores_empty_and_duplicate_text() {
+        let quality = auxiliary_content_quality(&[
+            with_translation(line(0, 1_000, "第一句"), "first"),
+            with_translation(line(1_000, 2_000, "第二句"), "第二句"),
+            with_translation(line(2_000, 3_000, "第三句"), "   "),
+        ]);
+        assert_eq!(
+            quality,
+            AuxiliaryContentQuality {
+                translation_coverage: 33,
+                romanization_coverage: 0,
+            }
+        );
+    }
+
+    /// 纯音乐与"没有歌词"不携带歌词行，仍然是可以展示的结论。
+    #[test]
+    fn cached_semantic_states_are_displayable_without_timeline() {
+        let track = track(MediaPlayer::QqMusic, Some(200_000));
+        for status in [LyricsStatus::Instrumental, LyricsStatus::NoLyrics] {
+            let snapshot = LyricsSnapshot {
+                status,
+                ..LyricsSnapshot::default()
+            };
+            assert!(is_cached_snapshot_displayable(&track, &snapshot));
+        }
+    }
+
+    #[test]
+    fn cached_loading_and_error_are_not_displayable() {
+        let track = track(MediaPlayer::QqMusic, Some(200_000));
+        for status in [
+            LyricsStatus::Loading,
+            LyricsStatus::Unavailable,
+            LyricsStatus::Error,
+        ] {
+            let snapshot = LyricsSnapshot {
+                status,
+                ..LyricsSnapshot::default()
+            };
+            assert!(!is_cached_snapshot_displayable(&track, &snapshot));
+        }
+    }
+
+    #[test]
+    fn source_summary_distinguishes_precision_and_origin() {
+        let local_word = ResolvedLyrics {
+            source: LyricsSource {
+                player: MediaPlayer::KugouMusic,
+                kind: LyricsSourceKind::Local,
+                song_id: None,
+            },
+            lines: vec![word_line(0, 1_000, "a")],
+        };
+        assert_eq!(source_summary(&local_word), "酷狗音乐 · 本地 · 逐字");
     }
 }

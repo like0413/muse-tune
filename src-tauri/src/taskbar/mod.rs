@@ -6,6 +6,7 @@ mod events;
 mod geometry;
 mod layout;
 mod platform;
+mod settings;
 mod sync;
 mod volume_popup;
 
@@ -35,7 +36,6 @@ const WIDTH_KEY: &str = "taskbar.width";
 const WIDTH_MODE_KEY: &str = "taskbar.widthMode";
 const PLACEMENT_KEY: &str = "taskbar.placement";
 const OVERLAP_PRIORITY_KEY: &str = "taskbar.overlapPriority";
-static TASKBAR_CONTENT_VISIBLE: AtomicBool = AtomicBool::new(true);
 
 struct DisplayTargetState {
     value: String,
@@ -160,34 +160,32 @@ impl TaskbarWidthMode {
 
 /// 更新播放器定位偏好，并通知监控线程立即重新计算位置。
 pub fn set_placement(placement: TaskbarPlacement) {
-    sync::set_placement(placement);
+    settings::set_placement(placement);
 }
 
 /// 更新任务栏元素与播放器的遮挡优先级，并通知监控线程重新计算可见区域。
 pub fn set_overlap_priority(priority: TaskbarOverlapPriority) {
-    sync::set_overlap_priority(priority);
+    settings::set_overlap_priority(priority);
 }
 
 /// 更新 bar 基准宽度，并通知监控线程立即重新计算位置与裁剪区域。
 pub fn set_content_width(width: i32) {
-    sync::set_content_width(width);
+    settings::set_content_width(width);
 }
 
 /// 更新 bar 宽度模式（固定宽度或自适应），并通知监控线程重新计算布局。
 pub fn set_width_mode(mode: TaskbarWidthMode) {
-    sync::set_width_mode(mode);
+    settings::set_width_mode(mode);
 }
 
 /// 更新 bar 内容可见性；值变化时立即唤醒全部同步线程。
 pub fn set_content_visibility(visible: bool) {
-    if TASKBAR_CONTENT_VISIBLE.swap(visible, Ordering::AcqRel) != visible {
-        events::request_all_layout_updates();
-    }
+    settings::set_content_visibility(visible);
 }
 
 /// 读取媒体状态计算出的 bar 内容可见性。
 pub(crate) fn content_visible() -> bool {
-    TASKBAR_CONTENT_VISIBLE.load(Ordering::Acquire)
+    settings::content_visible()
 }
 
 /// 返回当前拥有 Windows 任务栏的显示器。
@@ -204,7 +202,7 @@ pub(crate) fn diagnostic_settings() -> (
     i32,
 ) {
     let target = display_target_snapshot().0;
-    let (placement, overlap_priority, width_mode, width) = sync::diagnostic_settings();
+    let (placement, overlap_priority, width_mode, width) = settings::diagnostic_settings();
     (target, placement, overlap_priority, width_mode, width)
 }
 

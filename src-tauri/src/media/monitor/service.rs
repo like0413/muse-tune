@@ -10,10 +10,10 @@ use std::{
 
 use tauri::{AppHandle, Runtime};
 
-use super::{MediaSnapshotSubscriber, WorkerMessage, metrics, metrics::WorkerSender, run_worker};
+use super::{WorkerMessage, metrics, metrics::WorkerSender, worker::run_worker};
 use crate::media::{
     MediaControlAction, MediaRuntimeDiagnostics, MediaSessionSelectionPolicy, MediaSessionSnapshot,
-    MediaSnapshotDiagnostics, MediaVolumeSnapshot,
+    MediaSnapshotDiagnostics, MediaSnapshotSubscriber, MediaVolumeSnapshot,
 };
 
 const WORKER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);

@@ -90,3 +90,36 @@ pub fn split_artists(value: &str) -> Vec<String> {
         .map(str::to_owned)
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 缓存身份由"归一化标题 + 归一化歌手"决定，因此全角、大小写与标点差异不能产生新条目，
+    /// 否则同一首歌会在不同播放器或不同标题写法下反复重新解析。
+    #[test]
+    fn normalization_collapses_cosmetic_title_differences() {
+        assert_eq!(normalize_text("夜曲"), normalize_text("夜曲"));
+        assert_eq!(normalize_text("ＡＢＣ"), normalize_text("abc"));
+        assert_eq!(normalize_text("夜曲 (Live)"), normalize_text("夜曲live"));
+        assert_eq!(normalize_text("Hello, World!"), "helloworld");
+    }
+
+    #[test]
+    fn normalization_drops_whitespace_only_titles() {
+        assert!(normalize_text("   ").is_empty());
+    }
+
+    /// 联合歌手必须先拆分再归一化，否则"周杰伦/费玉清"与"周杰伦、费玉清"会得到不同身份。
+    #[test]
+    fn artist_splitting_is_separator_agnostic() {
+        assert_eq!(
+            split_artists("周杰伦/费玉清"),
+            split_artists("周杰伦、费玉清")
+        );
+        assert_eq!(
+            split_artists("周杰伦/费玉清"),
+            split_artists("周杰伦，费玉清")
+        );
+    }
+}

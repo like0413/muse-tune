@@ -404,3 +404,125 @@ fn notice_kind(text: &str) -> Option<PlatformNotice> {
         .any(|marker| normalized.contains(marker))
         .then_some(PlatformNotice::NoLyrics)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn line(text: &str) -> LyricLine {
+        LyricLine {
+            start_ms: 0,
+            end_ms: 1_000,
+            text: text.to_owned(),
+            translation: None,
+            romanization: None,
+            words: Vec::new(),
+        }
+    }
+
+    fn word_line(text: &str) -> LyricLine {
+        LyricLine {
+            words: vec![LyricWord {
+                start_ms: 0,
+                end_ms: 1_000,
+                text: text.to_owned(),
+            }],
+            ..line(text)
+        }
+    }
+
+    /// 平台换一种说法就会被当成真实歌词并长期缓存，所以识别必须按形态而不是枚举历史文案。
+    #[test]
+    fn platform_notice_recognizes_both_conclusions() {
+        assert_eq!(
+            platform_notice(&[line("纯音乐请欣赏")]),
+            Some(PlatformNotice::Instrumental)
+        );
+        assert_eq!(
+            platform_notice(&[line("此歌曲为没有填词的纯音乐，请您欣赏")]),
+            Some(PlatformNotice::Instrumental)
+        );
+        assert_eq!(
+            platform_notice(&[line("该歌曲暂无歌词")]),
+            Some(PlatformNotice::NoLyrics)
+        );
+        assert_eq!(
+            platform_notice(&[line("这首歌没有歌词")]),
+            Some(PlatformNotice::NoLyrics)
+        );
+    }
+
+    #[test]
+    fn platform_notice_maps_to_matching_status() {
+        assert_eq!(
+            PlatformNotice::Instrumental.status(),
+            LyricsStatus::Instrumental
+        );
+        assert_eq!(PlatformNotice::NoLyrics.status(), LyricsStatus::NoLyrics);
+    }
+
+    /// 真实歌词里出现"纯音乐"三个字不应被误判：占位文案必须同时满足主语形态与长度限制。
+    #[test]
+    fn notice_detection_requires_notice_shape() {
+        assert_eq!(platform_notice(&[line("我喜欢这首纯音乐作品")]), None);
+        assert_eq!(platform_notice(&[line("此歌曲很好听")]), None);
+    }
+
+    #[test]
+    fn notice_detection_rejects_long_and_numerous_lines() {
+        let long = format!("纯音乐{}", "啊".repeat(PLATFORM_NOTICE_MAX_CHARS));
+        assert_eq!(platform_notice(&[line(&long)]), None);
+
+        let many = vec![line("纯音乐"); PLATFORM_NOTICE_MAX_LINES + 1];
+        assert_eq!(platform_notice(&many), None);
+    }
+
+    #[test]
+    fn notice_detection_ignores_empty_input() {
+        assert_eq!(platform_notice(&[]), None);
+    }
+
+    /// 只有绝大多数行都有完整逐字覆盖才算逐字歌词，否则前端高亮会大面积缺失。
+    #[test]
+    fn word_timing_requires_high_coverage() {
+        assert!(has_word_timing(&[word_line("第一句"), word_line("第二句")]));
+
+        // 5 行中 4 行有逐字 = 80%，正好达到阈值。
+        assert!(has_word_timing(&[
+            word_line("第一句"),
+            word_line("第二句"),
+            word_line("第三句"),
+            word_line("第四句"),
+            line("第五句"),
+        ]));
+
+        assert!(!has_word_timing(&[
+            word_line("第一句"),
+            word_line("第二句"),
+            word_line("第三句"),
+            line("第四句"),
+            line("第五句"),
+        ]));
+    }
+
+    #[test]
+    fn word_timing_ignores_empty_lines() {
+        // 空文本行不计入分母，否则间奏多的歌词永远达不到阈值。
+        assert!(has_word_timing(&[word_line("第一句"), line("   ")]));
+        assert!(!has_word_timing(&[]));
+    }
+
+    /// 单词文本拼起来与整行不一致时不算覆盖，避免错位的逐字数据被当成逐字歌词。
+    #[test]
+    fn word_timing_requires_matching_text() {
+        let mismatched = LyricLine {
+            words: vec![LyricWord {
+                start_ms: 0,
+                end_ms: 1_000,
+                text: "别的".to_owned(),
+            }],
+            ..line("第一句")
+        };
+        assert!(!has_word_timing(&[mismatched]));
+    }
+}

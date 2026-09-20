@@ -2,18 +2,19 @@
 import type { CSSProperties, DeepReadonly } from 'vue'
 
 import { resolveTaskbarLyricsAppearance } from '@/features/lyrics/appearance'
+import {
+  LINE_TRANSITION_DURATION_MS,
+  resolveCurrentLineIndex,
+  resolveLayoutMetrics,
+  resolveTransitionLeadMs,
+  selectSecondaryContent,
+  type SecondaryContent,
+} from '@/features/lyrics/line-window'
 import type { LyricLine, LyricsSnapshot } from '@/features/lyrics/types'
 import { useReducedMotionPreference } from '@/features/motion/useReducedMotionPreference'
 import type { TaskbarLyricsSettings } from '@/features/settings/lyrics'
 
 import LyricLineElement from './lyrics/LyricLineElement.vue'
-
-const AVAILABLE_HEIGHT_PX = 40
-const TRACK_INFO_TITLE_LINE_HEIGHT_PX = 17.5
-const TRACK_INFO_ARTIST_LINE_HEIGHT_PX = 15
-const LINE_TRANSITION_DURATION_MS = 300
-// 300ms 动画加 30ms 刷新余量，使切换在人声时间戳前完成。
-const LINE_TRANSITION_LEAD_MS = LINE_TRANSITION_DURATION_MS + 30
 
 const props = defineProps<{
   lyrics: DeepReadonly<LyricsSnapshot>
@@ -38,27 +39,14 @@ interface DisplayLine {
   rowTop: number
 }
 
-/** 使用二分查找定位当前行；启用动画时把切行触发点整体提前。 */
-const currentLineIndex = computed(() => {
-  const lines = props.lyrics.lines
-  if (lines.length === 0) return -1
-  const transitionLeadMs =
-    lyricsAnimationEnabled.value && props.settings.animationPreRoll ? LINE_TRANSITION_LEAD_MS : 0
-  let left = 0
-  let right = lines.length - 1
-  let matched = -1
-  while (left <= right) {
-    const middle = Math.floor((left + right) / 2)
-    if (lines[middle]!.startMs <= props.positionMs + transitionLeadMs) {
-      matched = middle
-      left = middle + 1
-    } else {
-      right = middle - 1
-    }
-  }
-  // 前奏阶段提前展示第一句未播放歌词，避免歌词层已经启用却完全空白。
-  return Math.max(0, matched)
-})
+/** 二分定位当前行；换行触发点的提前规则见 `line-window.ts`。 */
+const currentLineIndex = computed(() =>
+  resolveCurrentLineIndex(
+    props.lyrics.lines,
+    props.positionMs,
+    resolveTransitionLeadMs(lyricsAnimationEnabled.value, props.settings.animationPreRoll),
+  ),
+)
 
 /**
  * 只在行号真正变化时更新。
@@ -74,50 +62,27 @@ watch(
   { immediate: true },
 )
 
-/** 判断当前内容是否确实存在第二行，末句无翻译和下一句时恢复单行居中。 */
-const hasSecondaryLine = computed(() => {
-  if (props.settings.lineMode !== 'double') return false
-  const index = activeLineIndex.value
+/** 按当前设置挑出第二行内容；选择与回退规则见 `selectSecondaryContent`。 */
+function currentSecondaryContent(index: number): SecondaryContent | undefined {
   const current = props.lyrics.lines[index]
-  return Boolean(current && selectSecondaryContent(current, props.lyrics.lines[index + 1]))
-})
-
-/** 按设置选择第二行内容，只有“翻译优先”会在缺失时回退下一句。 */
-function selectSecondaryContent(
-  current: DeepReadonly<LyricLine>,
-  next: DeepReadonly<LyricLine> | undefined,
-) {
-  const translation = current.translation
-    ? { kind: 'translation' as const, line: current, text: current.translation }
-    : undefined
-  const nextLine = next ? { kind: 'next' as const, line: next, text: next.text } : undefined
-  switch (props.settings.secondaryLine) {
-    case 'translation_only':
-      return translation
-    case 'next':
-      return nextLine
-    case 'translation_or_next':
-      return translation ?? nextLine
-  }
+  if (!current) return undefined
+  return selectSecondaryContent(
+    props.settings.secondaryLine,
+    current,
+    props.lyrics.lines[index + 1],
+  )
 }
 
-/** 14px 严格复用普通歌曲信息的两种行高，其余字号采用紧凑且不会裁切的行高。 */
-const layoutMetrics = computed(() => {
-  const usesTwoLines = hasSecondaryLine.value
-  const secondaryFontSize = Math.max(10, props.settings.fontSize - 2)
-  const primaryLineHeight =
-    props.settings.fontSize === 14 ? TRACK_INFO_TITLE_LINE_HEIGHT_PX : props.settings.fontSize + 2
-  const secondaryLineHeight =
-    props.settings.fontSize === 14 ? TRACK_INFO_ARTIST_LINE_HEIGHT_PX : secondaryFontSize + 2
-  const blockHeight = usesTwoLines ? primaryLineHeight + secondaryLineHeight : primaryLineHeight
-  return {
-    primaryLineHeight,
-    secondaryLineHeight,
-    transitionStep: primaryLineHeight,
-    blockHeight,
-    blockTop: (AVAILABLE_HEIGHT_PX - blockHeight) / 2,
-  }
-})
+/** 判断当前内容是否确实存在第二行，末句无翻译和下一句时恢复单行居中。 */
+const hasSecondaryLine = computed(
+  () =>
+    props.settings.lineMode === 'double' && Boolean(currentSecondaryContent(activeLineIndex.value)),
+)
+
+/** 行高、字号与居中偏移；推导规则见 `resolveLayoutMetrics`。 */
+const layoutMetrics = computed(() =>
+  resolveLayoutMetrics(props.settings.fontSize, hasSecondaryLine.value),
+)
 
 /** 生成最多两行稳定标识的数据，使下一句能够准确移动到第一行槽位。 */
 const displayLines = computed<DisplayLine[]>(() => {
@@ -138,8 +103,7 @@ const displayLines = computed<DisplayLine[]>(() => {
   ]
   if (props.settings.lineMode === 'single') return lines
 
-  const next = props.lyrics.lines[index + 1]
-  const secondary = selectSecondaryContent(current, next)
+  const secondary = currentSecondaryContent(index)
   if (secondary) {
     lines.push({
       key:
@@ -149,7 +113,7 @@ const displayLines = computed<DisplayLine[]>(() => {
       line: secondary.line,
       text: secondary.text,
       primary: false,
-      fontSize: Math.max(10, props.settings.fontSize - 2),
+      fontSize: layoutMetrics.value.secondaryFontSize,
       lineHeight: layoutMetrics.value.secondaryLineHeight,
       rowTop: layoutMetrics.value.blockTop + layoutMetrics.value.primaryLineHeight,
     })

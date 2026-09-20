@@ -1,7 +1,7 @@
 use crate::media::MediaPlayer;
 
 use super::players;
-use super::{LyricsOnlineStrategy, LyricsParallelGroup, LyricsResolutionSite};
+use crate::lyrics::model::{LyricsOnlineStrategy, LyricsParallelGroup, LyricsResolutionSite};
 
 /// 在线歌词兜底来源的尝试顺序；当前播放器会被排除，其余按此顺序补齐。
 ///
@@ -108,5 +108,155 @@ impl ResolutionPlan {
             local_attempts,
             online_stages,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 只保留站点顺序，便于直接断言计划形状。
+    fn sites(attempts: &[ResolutionAttempt]) -> Vec<(LyricsResolutionSite, MediaPlayer)> {
+        attempts
+            .iter()
+            .map(|attempt| (attempt.site, attempt.player))
+            .collect()
+    }
+
+    /// 并发策略把当前播放器与全部兜底来源放进同一阶段。
+    #[test]
+    fn parallel_plan_merges_online_sources_into_one_stage() {
+        let plan = ResolutionPlan::new(MediaPlayer::QqMusic, LyricsOnlineStrategy::Parallel);
+
+        assert_eq!(
+            sites(&plan.local_attempts),
+            vec![(LyricsResolutionSite::Local, MediaPlayer::QqMusic)]
+        );
+        assert_eq!(plan.online_stages.len(), 1);
+        assert_eq!(
+            plan.online_stages[0].group,
+            Some(LyricsParallelGroup::Online)
+        );
+        assert_eq!(
+            sites(&plan.online_stages[0].attempts),
+            vec![
+                (LyricsResolutionSite::Online, MediaPlayer::QqMusic),
+                (
+                    LyricsResolutionSite::OnlineFallback,
+                    MediaPlayer::KugouMusic
+                ),
+                (
+                    LyricsResolutionSite::OnlineFallback,
+                    MediaPlayer::NeteaseCloudMusic
+                ),
+            ]
+        );
+    }
+
+    /// "当前播放器优先"必须把当前播放器单独放第一阶段，否则并行就失去了优先级含义。
+    #[test]
+    fn current_player_first_splits_online_into_two_stages() {
+        let plan = ResolutionPlan::new(
+            MediaPlayer::QqMusic,
+            LyricsOnlineStrategy::CurrentPlayerFirst,
+        );
+
+        assert_eq!(plan.online_stages.len(), 2);
+        assert_eq!(plan.online_stages[0].group, None);
+        assert_eq!(
+            sites(&plan.online_stages[0].attempts),
+            vec![(LyricsResolutionSite::OnlinePreferred, MediaPlayer::QqMusic)]
+        );
+        assert_eq!(
+            plan.online_stages[1].group,
+            Some(LyricsParallelGroup::OnlineFallback)
+        );
+        assert_eq!(
+            sites(&plan.online_stages[1].attempts),
+            vec![
+                (
+                    LyricsResolutionSite::OnlineFallback,
+                    MediaPlayer::KugouMusic
+                ),
+                (
+                    LyricsResolutionSite::OnlineFallback,
+                    MediaPlayer::NeteaseCloudMusic
+                ),
+            ]
+        );
+    }
+
+    /// 汽水音乐没有本地歌词能力，不能为它生成一条永远返回 Unsupported 的尝试。
+    #[test]
+    fn player_without_local_capability_has_no_local_attempt() {
+        let plan = ResolutionPlan::new(MediaPlayer::SodaMusic, LyricsOnlineStrategy::Parallel);
+
+        assert!(plan.local_attempts.is_empty());
+        assert_eq!(plan.online_stages.len(), 1);
+        assert_eq!(
+            sites(&plan.online_stages[0].attempts),
+            vec![
+                (LyricsResolutionSite::Online, MediaPlayer::SodaMusic),
+                (LyricsResolutionSite::OnlineFallback, MediaPlayer::QqMusic),
+                (
+                    LyricsResolutionSite::OnlineFallback,
+                    MediaPlayer::KugouMusic
+                ),
+                (
+                    LyricsResolutionSite::OnlineFallback,
+                    MediaPlayer::NeteaseCloudMusic
+                ),
+            ]
+        );
+    }
+
+    /// 未识别播放器没有任何适配器，只能靠其他平台兜底。
+    #[test]
+    fn unsupported_player_falls_back_to_all_online_sources() {
+        let plan = ResolutionPlan::new(MediaPlayer::Other, LyricsOnlineStrategy::Parallel);
+
+        assert!(plan.local_attempts.is_empty());
+        assert_eq!(plan.online_stages.len(), 1);
+        assert_eq!(
+            sites(&plan.online_stages[0].attempts),
+            vec![
+                (LyricsResolutionSite::OnlineFallback, MediaPlayer::QqMusic),
+                (
+                    LyricsResolutionSite::OnlineFallback,
+                    MediaPlayer::KugouMusic
+                ),
+                (
+                    LyricsResolutionSite::OnlineFallback,
+                    MediaPlayer::NeteaseCloudMusic
+                ),
+            ]
+        );
+    }
+
+    /// 当前播放器没有在线能力时，第一阶段不该存在——空阶段会让调度器空转一轮。
+    #[test]
+    fn current_player_first_without_online_capability_yields_only_fallback_stage() {
+        let plan =
+            ResolutionPlan::new(MediaPlayer::Other, LyricsOnlineStrategy::CurrentPlayerFirst);
+
+        assert_eq!(plan.online_stages.len(), 1);
+        assert_eq!(
+            plan.online_stages[0].group,
+            Some(LyricsParallelGroup::OnlineFallback)
+        );
+        assert_eq!(
+            sites(&plan.online_stages[0].attempts),
+            vec![
+                (LyricsResolutionSite::OnlineFallback, MediaPlayer::QqMusic),
+                (
+                    LyricsResolutionSite::OnlineFallback,
+                    MediaPlayer::KugouMusic
+                ),
+                (
+                    LyricsResolutionSite::OnlineFallback,
+                    MediaPlayer::NeteaseCloudMusic
+                ),
+            ]
+        );
     }
 }

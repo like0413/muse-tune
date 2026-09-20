@@ -1,12 +1,13 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { confirm } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { check } from '@tauri-apps/plugin-updater'
 import type { DownloadEvent, Update } from '@tauri-apps/plugin-updater'
+import { check } from '@tauri-apps/plugin-updater'
 
 import { getErrorMessage } from '@/features/feedback/errors'
 import { PROJECT_RELEASES_URL } from '@/features/project/metadata'
 
+import { createDownloadProgressTracker } from './download-progress'
 import {
   DEFAULT_UPDATE_CHECK_FREQUENCY,
   getAutomaticUpdateCheck,
@@ -39,10 +40,9 @@ export function useApplicationUpdater() {
   let disposed = false
   let resultRevision = 0
   let unlistenResult: UnlistenFn | undefined
-  let downloadedBytes = 0
-  let downloadTotalBytes: number | undefined
   let activeCheck: Promise<Update | null> | null = null
   let installRequestActive = false
+  const trackDownloadProgress = createDownloadProgressTracker()
 
   const statusLabel = computed(() => {
     switch (status.value) {
@@ -136,22 +136,9 @@ export function useApplicationUpdater() {
     }
   }
 
-  /** 汇总下载事件为稳定的百分比状态。 */
+  /** 汇总下载事件为稳定的百分比状态；内容长度未知时显示不确定进度。 */
   function handleDownloadEvent(event: DownloadEvent) {
-    if (event.event === 'Started') {
-      downloadedBytes = 0
-      downloadTotalBytes = event.data.contentLength
-      downloadProgress.value = downloadTotalBytes ? 0 : null
-      return
-    }
-    if (event.event === 'Progress') {
-      downloadedBytes += event.data.chunkLength
-      if (downloadTotalBytes) {
-        downloadProgress.value = Math.min(100, (downloadedBytes / downloadTotalBytes) * 100)
-      }
-      return
-    }
-    if (downloadTotalBytes) downloadProgress.value = 100
+    downloadProgress.value = trackDownloadProgress(event)
   }
 
   /** 确认后下载并安装；Windows 安装器启动成功后会接管退出和重启。 */

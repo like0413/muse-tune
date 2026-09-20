@@ -109,3 +109,82 @@ impl WorkerDeadlines {
         tasks
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 同一会话的重复事件把稳定刷新推迟到最后一次观测之后，而不是每次新建一个截止时间。
+    #[test]
+    fn metadata_settle_coalesces_to_latest_observation() {
+        let mut deadlines = WorkerDeadlines::default();
+        let base = Instant::now();
+
+        assert!(!deadlines.schedule_metadata_settle(1, base));
+        assert!(deadlines.schedule_metadata_settle(1, base + Duration::from_millis(100)));
+        assert_eq!(deadlines.metadata_settle_pending_count(), 1);
+
+        // 到期时间为"最后一次观测 + 稳定延迟"。
+        let due_at = base + Duration::from_millis(100) + METADATA_SETTLE_DELAY;
+        assert!(
+            deadlines
+                .take_due(due_at - Duration::from_millis(1))
+                .is_empty()
+        );
+        let due = deadlines.take_due(due_at);
+        assert_eq!(due.len(), 1);
+        assert!(matches!(due[0], ScheduledWorkerTask::MetadataSettle(1)));
+        assert_eq!(deadlines.metadata_settle_pending_count(), 0);
+    }
+
+    /// 到期任务必须被取走，否则 worker 会反复执行同一次刷新。
+    #[test]
+    fn due_tasks_are_removed_after_being_taken() {
+        let mut deadlines = WorkerDeadlines::default();
+        let base = Instant::now();
+        deadlines.schedule_metadata_settle(1, base);
+        let due_at = base + METADATA_SETTLE_DELAY;
+
+        assert_eq!(deadlines.take_due(due_at).len(), 1);
+        assert!(deadlines.take_due(due_at).is_empty());
+        assert!(deadlines.next_timeout(due_at).is_none());
+    }
+
+    /// 重绑退避表是有限的：越界后不再安排任务，避免对已经失效的目标无限重试。
+    #[test]
+    fn volume_rebind_backoff_table_is_bounded() {
+        let mut deadlines = WorkerDeadlines::default();
+
+        deadlines.schedule_volume_rebind(7, 0);
+        assert!(deadlines.next_timeout(Instant::now()).is_some());
+
+        deadlines.schedule_volume_rebind(7, INITIAL_VOLUME_REBIND_DELAYS.len());
+        assert!(deadlines.next_timeout(Instant::now()).is_none());
+    }
+
+    /// 刚安排的退避任务不应立刻到期，worker 必须继续等待消息。
+    #[test]
+    fn freshly_scheduled_rebind_is_not_due_yet() {
+        let mut deadlines = WorkerDeadlines::default();
+        deadlines.schedule_volume_rebind(7, 0);
+        assert!(deadlines.take_due(Instant::now()).is_empty());
+    }
+
+    /// 切换音量目标时覆盖旧任务，避免为已经失效的目标做重试。
+    #[test]
+    fn canceling_volume_rebind_drops_the_deadline() {
+        let mut deadlines = WorkerDeadlines::default();
+        deadlines.schedule_volume_rebind(7, 0);
+        deadlines.cancel_volume_rebind();
+        assert!(deadlines.next_timeout(Instant::now()).is_none());
+    }
+
+    #[test]
+    fn empty_deadlines_never_time_out() {
+        assert!(
+            WorkerDeadlines::default()
+                .next_timeout(Instant::now())
+                .is_none()
+        );
+    }
+}

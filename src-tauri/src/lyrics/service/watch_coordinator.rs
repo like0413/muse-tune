@@ -3,10 +3,14 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use crate::lyrics::{
     model::{LyricsSourceKind, ResolvedLyrics, has_word_timing},
-    watcher,
+    players, watcher,
 };
+use crate::media::MediaPlayer;
 
-use super::{LyricsService, MediaPlayer, is_acceptable_candidate, lookup_hit, players};
+use super::{
+    LyricsService,
+    pipeline::{is_acceptable_candidate, lookup_hit},
+};
 
 impl LyricsService {
     /// 按播放器分别重建非递归监听器，避免其他播放器的写入刷新当前歌词。

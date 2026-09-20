@@ -32,3 +32,130 @@ pub(super) fn local_result_is_upgrade(cached: &LyricsSnapshot, local: &ResolvedL
     has_word_timing(&local.lines)
         || auxiliary_content_quality(&local.lines) > auxiliary_content_quality(&cached.lines)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lyrics::model::{LyricLine, LyricWord, LyricsSource, LyricsSourceKind};
+    use crate::media::MediaPlayer;
+
+    fn line(start_ms: u64, end_ms: u64, text: &str) -> LyricLine {
+        LyricLine {
+            start_ms,
+            end_ms,
+            text: text.to_owned(),
+            translation: None,
+            romanization: None,
+            words: Vec::new(),
+        }
+    }
+
+    fn word_line(start_ms: u64, end_ms: u64, text: &str) -> LyricLine {
+        LyricLine {
+            words: vec![LyricWord {
+                start_ms,
+                end_ms,
+                text: text.to_owned(),
+            }],
+            ..line(start_ms, end_ms, text)
+        }
+    }
+
+    fn snapshot(status: LyricsStatus, precision: Option<LyricsPrecision>) -> LyricsSnapshot {
+        LyricsSnapshot {
+            status,
+            precision,
+            ..LyricsSnapshot::default()
+        }
+    }
+
+    fn local(lines: Vec<LyricLine>) -> ResolvedLyrics {
+        ResolvedLyrics {
+            source: LyricsSource {
+                player: MediaPlayer::QqMusic,
+                kind: LyricsSourceKind::Local,
+                song_id: None,
+            },
+            lines,
+        }
+    }
+
+    /// 逐字缓存已是最精密结果，再查本地不可能有提升；纯音乐与"没有歌词"则相反，
+    /// 平台会误判且本地歌词常常写入更晚，必须保留推翻机会。
+    #[test]
+    fn local_upgrade_check_targets_only_improvable_states() {
+        assert!(should_check_local_upgrade(&snapshot(
+            LyricsStatus::Ready,
+            Some(LyricsPrecision::Line)
+        )));
+        assert!(should_check_local_upgrade(&snapshot(
+            LyricsStatus::Instrumental,
+            None
+        )));
+        assert!(should_check_local_upgrade(&snapshot(
+            LyricsStatus::NoLyrics,
+            None
+        )));
+
+        assert!(!should_check_local_upgrade(&snapshot(
+            LyricsStatus::Ready,
+            Some(LyricsPrecision::Word)
+        )));
+        assert!(!should_check_local_upgrade(&snapshot(
+            LyricsStatus::Loading,
+            None
+        )));
+        assert!(!should_check_local_upgrade(&snapshot(
+            LyricsStatus::Unavailable,
+            None
+        )));
+    }
+
+    /// 语义结论不携带歌词行，本地只要产出可展示歌词就是升级——这是推翻误判的唯一机会。
+    #[test]
+    fn local_lyrics_override_semantic_conclusions() {
+        let instrumental = snapshot(LyricsStatus::Instrumental, None);
+        assert!(local_result_is_upgrade(
+            &instrumental,
+            &local(vec![line(0, 1_000, "第一句")])
+        ));
+        assert!(!local_result_is_upgrade(&instrumental, &local(Vec::new())));
+    }
+
+    /// 已展示逐行时，本地逐字构成升级。
+    #[test]
+    fn word_timing_counts_as_local_upgrade() {
+        let lined = snapshot(LyricsStatus::Ready, Some(LyricsPrecision::Line));
+        assert!(local_result_is_upgrade(
+            &lined,
+            &local(vec![word_line(0, 1_000, "第一句")])
+        ));
+    }
+
+    /// 本地逐行且辅助内容不更完整时不得替换，否则用户会看到歌词无意义地跳一次。
+    #[test]
+    fn equal_local_precision_is_not_an_upgrade() {
+        let lined = LyricsSnapshot {
+            lines: vec![line(0, 1_000, "第一句")],
+            ..snapshot(LyricsStatus::Ready, Some(LyricsPrecision::Line))
+        };
+        assert!(!local_result_is_upgrade(
+            &lined,
+            &local(vec![line(0, 1_000, "别的歌词")])
+        ));
+    }
+
+    /// 辅助内容覆盖率更高时视为升级。
+    #[test]
+    fn better_auxiliary_coverage_is_an_upgrade() {
+        let lined = LyricsSnapshot {
+            lines: vec![line(0, 1_000, "第一句")],
+            ..snapshot(LyricsStatus::Ready, Some(LyricsPrecision::Line))
+        };
+        let richer = local(vec![LyricLine {
+            translation: Some("first".to_owned()),
+            ..line(0, 1_000, "第一句")
+        }]);
+        assert!(local_result_is_upgrade(&lined, &richer));
+    }
+}

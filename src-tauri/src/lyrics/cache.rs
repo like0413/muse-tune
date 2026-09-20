@@ -13,23 +13,18 @@ use crate::{filesystem, media::MediaPlayer};
 
 use super::{
     error::LyricsError,
-    model::{
-        LyricsCacheDiagnostics, LyricsPrecision, LyricsSnapshot, LyricsSourceKind, LyricsStatus,
-    },
-    schema::{LYRICS_CACHE_SCHEMA_VERSION, lyrics_cache_schema_label},
+    model::{LyricsCacheDiagnostics, LyricsSnapshot, LyricsSourceKind},
+    schema::lyrics_cache_schema_label,
 };
+
+mod freshness;
+mod migration;
+
+use freshness::{is_cacheable_status, is_fresh, needs_revalidation, now_seconds, refresh_interval};
+use migration::{migrate_legacy_entries_directory, remove_obsolete_schema_directories};
 
 const MAX_CACHE_ENTRY_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_CACHE_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
-/// 展示可信期：缓存可直接展示、无需阻塞式重新解析的期限。
-///
-/// 期限按结论的稳定性定：越确定的活得越久。逐字与纯音乐 30 天——逐字已是最精密的结果，
-/// 纯音乐是歌曲自身的属性；逐行与“没有歌词”7 天——前者仍可能被升级成逐字，后者可能被
-/// 之后补上的本地或在线歌词推翻。
-const WORD_REFRESH_INTERVAL: Duration = Duration::from_secs(30 * 24 * 60 * 60);
-const LINE_REFRESH_INTERVAL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
-const INSTRUMENTAL_REFRESH_INTERVAL: Duration = Duration::from_secs(30 * 24 * 60 * 60);
-const NO_LYRICS_REFRESH_INTERVAL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 /// 缓存命中及其时效状态。
 pub struct CacheLookup {
@@ -572,140 +567,4 @@ impl ParsedLyricsCache {
         filesystem::ensure_directory(lyrics_path)?;
         filesystem::ensure_directory(&self.cache_path)
     }
-}
-
-/// 将旧的 `vN/entries/*.json` 原地迁移到版本目录，失败时保留旧目录供下次重试。
-fn migrate_legacy_entries_directory(cache_path: &Path) {
-    let legacy_path = cache_path.join("entries");
-    let Ok(legacy_metadata) = filesystem::metadata_without_reparse(&legacy_path) else {
-        return;
-    };
-    if !legacy_metadata.is_dir() {
-        return;
-    }
-    let Ok(entries) = fs::read_dir(&legacy_path) else {
-        return;
-    };
-    let mut migration_failed = false;
-    for entry in entries {
-        let Ok(entry) = entry else {
-            migration_failed = true;
-            continue;
-        };
-        let Ok(metadata) = filesystem::entry_metadata_without_reparse(&entry) else {
-            migration_failed = true;
-            continue;
-        };
-        if !metadata.is_file() {
-            continue;
-        }
-        let source = entry.path();
-        if source.extension().and_then(|value| value.to_str()) != Some("json") {
-            continue;
-        }
-        let target = cache_path.join(entry.file_name());
-        let result = match filesystem::metadata_without_reparse(&target) {
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                fs::rename(&source, &target)
-            }
-            Ok(metadata) if metadata.is_file() => fs::remove_file(&source),
-            Ok(_) => {
-                log::warn!("迁移歌词缓存时目标路径不是普通文件: {}", target.display());
-                migration_failed = true;
-                continue;
-            }
-            Err(error) => Err(error),
-        };
-        if let Err(error) = result {
-            log::warn!("迁移旧版歌词缓存 {} 失败: {error}", source.display());
-            migration_failed = true;
-        }
-    }
-    if !migration_failed && let Err(error) = fs::remove_dir_all(&legacy_path) {
-        log::warn!("删除已迁移的歌词 entries 目录失败: {error}");
-    }
-}
-
-/// 启动时仅清理旧版目录；未知目录和更高版本需保留，以支持安全回退。
-fn remove_obsolete_schema_directories(lyrics_path: &Path) {
-    if let Err(error) = filesystem::ensure_directory(lyrics_path) {
-        log::warn!("歌词缓存根目录边界检查失败: {error}");
-        return;
-    }
-    let Ok(entries) = fs::read_dir(lyrics_path) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let Ok(metadata) = filesystem::entry_metadata_without_reparse(&entry) else {
-            continue;
-        };
-        if !metadata.is_dir() {
-            continue;
-        }
-        let Some(version) = entry
-            .file_name()
-            .to_str()
-            .and_then(|name| name.strip_prefix('v'))
-            .and_then(|version| version.parse::<u32>().ok())
-        else {
-            continue;
-        };
-        if version >= LYRICS_CACHE_SCHEMA_VERSION {
-            continue;
-        }
-        if let Err(error) = fs::remove_dir_all(entry.path()) {
-            log::warn!("清理旧版歌词缓存 v{version} 失败: {error}");
-        }
-    }
-}
-
-fn is_fresh(entry: &CacheEntry) -> bool {
-    is_fresh_at(entry, now_seconds())
-}
-
-fn is_fresh_at(entry: &CacheEntry, current_seconds: u64) -> bool {
-    let Some(age) = current_seconds.checked_sub(entry.refreshed_at_seconds) else {
-        return false;
-    };
-    let Some(interval) = refresh_interval(entry) else {
-        return false;
-    };
-    age < interval.as_secs()
-}
-
-fn refresh_interval(entry: &CacheEntry) -> Option<Duration> {
-    match entry.snapshot.status {
-        LyricsStatus::Ready if entry.snapshot.precision == Some(LyricsPrecision::Word) => {
-            Some(WORD_REFRESH_INTERVAL)
-        }
-        LyricsStatus::Ready => Some(LINE_REFRESH_INTERVAL),
-        LyricsStatus::Instrumental => Some(INSTRUMENTAL_REFRESH_INTERVAL),
-        LyricsStatus::NoLyrics => Some(NO_LYRICS_REFRESH_INTERVAL),
-        LyricsStatus::Loading | LyricsStatus::Unavailable | LyricsStatus::Error => None,
-    }
-}
-
-/// 是否需要在线复核。
-///
-/// 只有逐行需要：它仍可能被升级成逐字，且升级只能靠在线来源，所以每次播放都静默确认一次。
-/// 逐字已是最精密的结论，复核不可能带来提升；纯音乐与无歌词只靠本地歌词复核（不联网），
-/// 那一步由 `should_check_local_upgrade` 决定，不经过这里。
-fn needs_revalidation(entry: &CacheEntry) -> bool {
-    entry.snapshot.status == LyricsStatus::Ready
-        && entry.snapshot.precision == Some(LyricsPrecision::Line)
-}
-
-/// 只允许可稳定复用的解析结论进入磁盘缓存。
-fn is_cacheable_status(status: LyricsStatus) -> bool {
-    matches!(
-        status,
-        LyricsStatus::Ready | LyricsStatus::Instrumental | LyricsStatus::NoLyrics
-    )
-}
-
-fn now_seconds() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
 }
