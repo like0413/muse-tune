@@ -4,7 +4,8 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import type { DownloadEvent, Update } from '@tauri-apps/plugin-updater'
 import { check } from '@tauri-apps/plugin-updater'
 
-import { getErrorMessage } from '@/features/feedback/errors'
+import { getErrorMessage, reportBackgroundFailure } from '@/features/feedback/errors'
+import { logDebug } from '@/features/logging'
 import { PROJECT_RELEASES_URL } from '@/features/project/metadata'
 
 import { createDownloadProgressTracker } from './download-progress'
@@ -111,16 +112,20 @@ export function useApplicationUpdater() {
       detectedVersion.value = update?.version ?? null
       status.value = update ? 'available' : 'latest'
       errorMessage.value = null
+      const checkedAt = Date.now()
       void setUpdateCheckResult({
-        checkedAt: Date.now(),
+        checkedAt,
+        attemptedAt: checkedAt,
         availableVersion: update?.version ?? null,
       }).catch((error) => console.debug('保存更新检测结果失败', error))
     } catch (error) {
       if (silent) {
-        console.info('静默检查更新失败', error)
+        // 静默路径不打扰用户，失败也属预期（离线）：只留调试通道，不进日志文件。
+        logDebug('静默检查更新失败', error)
         return
       }
       status.value = 'error'
+      reportBackgroundFailure('检查更新失败', error)
       errorMessage.value = getErrorMessage(error, t('settings.about.update.checkFailed'))
     } finally {
       if (!silent) isChecking.value = false
@@ -132,6 +137,7 @@ export function useApplicationUpdater() {
     try {
       await openUrl(PROJECT_RELEASES_URL)
     } catch (error) {
+      reportBackgroundFailure('打开更新日志失败', error)
       errorMessage.value = getErrorMessage(error, t('settings.about.update.openReleaseNotesFailed'))
     }
   }
@@ -161,6 +167,7 @@ export function useApplicationUpdater() {
       await update.downloadAndInstall(handleDownloadEvent, { restartAfterInstall: true })
     } catch (error) {
       status.value = 'available'
+      reportBackgroundFailure('安装更新失败', error)
       const reason = getErrorMessage(error, t('settings.about.update.installerFailed'))
       errorMessage.value = t('settings.about.update.installFailed', { reason })
     } finally {
@@ -179,6 +186,7 @@ export function useApplicationUpdater() {
       automaticCheck.value = await setAutomaticUpdateCheck(enabled)
     } catch (error) {
       automaticCheck.value = previous
+      reportBackgroundFailure('保存自动检测设置失败', error)
       errorMessage.value = getErrorMessage(error, t('settings.about.update.saveAutomaticFailed'))
     } finally {
       automaticCheckSaving.value = false
@@ -195,6 +203,7 @@ export function useApplicationUpdater() {
       updateCheckFrequency.value = await setUpdateCheckFrequency(frequency)
     } catch (error) {
       updateCheckFrequency.value = previous
+      reportBackgroundFailure('保存检测周期失败', error)
       errorMessage.value = getErrorMessage(error, t('settings.about.update.saveFrequencyFailed'))
     } finally {
       updateCheckFrequencySaving.value = false
@@ -227,6 +236,7 @@ export function useApplicationUpdater() {
       if (resultRevision === revisionBeforeRead) applyAutomaticResult(result)
     } catch (error) {
       status.value = 'error'
+      reportBackgroundFailure('初始化更新设置失败', error)
       errorMessage.value = getErrorMessage(error, t('settings.about.update.initializeFailed'))
     }
   }

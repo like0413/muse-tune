@@ -65,7 +65,8 @@ impl<R: Runtime> Drop for ManagedBar<R> {
         events::request_all_layout_updates();
         if let Some(worker) = self.worker.take() {
             if worker.thread().id() == thread::current().id() {
-                log::error!("任务栏同步 worker 尝试等待自身，已跳过 join");
+                // 防御分支且已安全跳过，程序内部的问题不该占用 error 级别。
+                log::warn!("任务栏同步 worker 尝试等待自身，已跳过 join");
             } else if worker.join().is_err() {
                 log::warn!("任务栏同步线程异常退出");
             }
@@ -99,7 +100,7 @@ impl TaskbarService {
             .take();
         if let Some(worker) = worker {
             if worker.thread().id() == thread::current().id() {
-                log::error!("任务栏 monitor 尝试等待自身，已跳过 join");
+                log::warn!("任务栏 monitor 尝试等待自身，已跳过 join");
                 return;
             }
             if worker.join().is_err() {

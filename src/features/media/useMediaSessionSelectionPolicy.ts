@@ -1,5 +1,6 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   getMediaSessionSelectionPolicy,
   listenMediaSessionSelectionPolicyChange,
@@ -21,7 +22,7 @@ export function useMediaSessionSelectionPolicy() {
       try {
         await setMediaSessionSelectionPolicy(policy)
       } catch (error) {
-        console.error('应用媒体会话选择策略失败', error)
+        reportBackgroundFailure('应用媒体会话选择策略失败', error)
       }
     })
     return applyQueue
@@ -43,7 +44,7 @@ export function useMediaSessionSelectionPolicy() {
       const policy = await getMediaSessionSelectionPolicy()
       if (!disposed && policyRevision === revisionBeforeRead) await applyPolicy(policy)
     } catch (error) {
-      console.error('初始化媒体会话选择策略失败', error)
+      reportBackgroundFailure('初始化媒体会话选择策略失败', error)
     }
   }
 

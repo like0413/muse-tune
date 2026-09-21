@@ -1,4 +1,4 @@
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_LYRICS_SETTINGS,
   getTaskbarLyricsSettings,
@@ -25,7 +25,7 @@ export function useLyricsDisplaySetting() {
       selectedSettings.value = settings
       committedSettings.value = { ...settings }
     } catch (error) {
-      console.error('读取歌词显示配置失败', error)
+      reportBackgroundFailure('读取歌词显示配置失败', error)
     }
   }
 

@@ -1,6 +1,7 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { useMediaQuery } from '@vueuse/core'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   getReducedMotionOverride,
   listenReducedMotionOverrideChange,
@@ -30,7 +31,7 @@ export function useReducedMotionPreference() {
       })
       applicationOverride.value = await getReducedMotionOverride()
     } catch (error) {
-      console.error('初始化减少动态效果设置失败', error)
+      reportBackgroundFailure('初始化减少动态效果设置失败', error)
     }
   })
 

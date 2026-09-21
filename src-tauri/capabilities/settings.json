@@ -10,6 +10,7 @@
     "core:window:allow-set-focus",
     "core:app:allow-version",
     "core:resources:allow-close",
+    "log:allow-log",
     "store:allow-load",
     "store:allow-get",
     "store:allow-set",

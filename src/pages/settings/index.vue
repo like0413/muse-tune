@@ -20,6 +20,7 @@ import {
   SidebarProvider,
 } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import { colorMode } from '@/lib/color-mode'
 
 import appIconUrl from '../../../src-tauri/icons/icon.png'
@@ -112,7 +113,7 @@ onMounted(async () => {
     await settingsWindow.show()
     await settingsWindow.setFocus()
   } catch (error) {
-    console.error('显示设置窗口失败', error)
+    reportBackgroundFailure('显示设置窗口失败', error)
   }
 })
 </script>

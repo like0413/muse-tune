@@ -72,7 +72,10 @@ pub(super) fn handle_volume_rebind_due<R: Runtime>(
     let volume = selected.volume.snapshot();
     publish_volume(app, volume);
     if volume.is_none() {
-        deadlines.schedule_volume_rebind(target_id, attempt.saturating_add(1));
+        if !deadlines.schedule_volume_rebind(target_id, attempt.saturating_add(1)) {
+            // 退避用尽仍未绑上，音量控制会一直是空的；重试过程本身不值得记，结论必须记。
+            log::warn!("绑定播放器应用音量失败：重试已用尽，仍未找到当前播放器的音频会话");
+        }
     } else {
         deadlines.cancel_volume_rebind();
     }

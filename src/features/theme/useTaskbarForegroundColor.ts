@@ -1,6 +1,7 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { createColor } from 'colorthief'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   getSystemForegroundColor,
   listenSystemForegroundColorChange,
@@ -50,7 +51,7 @@ export function useTaskbarForegroundColor(backgroundTransparency: Readonly<Ref<n
       const color = await getSystemForegroundColor()
       if (!disposed && colorRevision === revisionBeforeRead) systemForegroundColor.value = color
     } catch (error) {
-      console.error('初始化 Windows 前景色失败', error)
+      reportBackgroundFailure('初始化 Windows 前景色失败', error)
     }
   }
 

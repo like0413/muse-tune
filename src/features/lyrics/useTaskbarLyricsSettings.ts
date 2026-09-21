@@ -1,5 +1,6 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_LYRICS_SETTINGS,
   getTaskbarLyricsSettings,
@@ -28,7 +29,7 @@ export function useTaskbarLyricsSettings() {
       const initial = await getTaskbarLyricsSettings()
       if (!disposed && !receivedEvent) settings.value = initial
     } catch (error) {
-      console.error('初始化歌词显示配置失败', error)
+      reportBackgroundFailure('初始化歌词显示配置失败', error)
     }
   }
 

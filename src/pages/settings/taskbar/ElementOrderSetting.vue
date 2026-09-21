@@ -5,7 +5,7 @@ import type { SortableEvent } from 'sortablejs'
 
 import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_ELEMENT_ORDER,
   getTaskbarElementOrder,
@@ -52,7 +52,7 @@ async function loadElementOrder() {
     selectedOrder.value = order
     committedOrder.value = [...order]
   } catch (error) {
-    console.error('读取任务栏区块顺序失败', error)
+    reportBackgroundFailure('读取任务栏区块顺序失败', error)
   }
 }
 
@@ -77,7 +77,7 @@ async function saveElementOrder(order: TaskbarElement[]) {
     try {
       await setTaskbarElementOrder(committedOrder.value)
     } catch (rollbackError) {
-      console.error('恢复之前的任务栏区块顺序失败', rollbackError)
+      reportBackgroundFailure('恢复之前的任务栏区块顺序失败', rollbackError)
     }
   } finally {
     orderSaving.value = false

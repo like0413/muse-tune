@@ -7,6 +7,7 @@
   "permissions": [
     "core:event:default",
     "core:app:allow-version",
+    "log:allow-log",
     "store:allow-load",
     "store:allow-get",
     "store:allow-set",

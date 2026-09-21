@@ -58,8 +58,8 @@ impl WorkerDeadlines {
         self.metadata_settle.len()
     }
 
-    /// 安排当前音量目标的指定退避重绑，切换目标时覆盖旧任务。
-    pub(super) fn schedule_volume_rebind(&mut self, target_id: u64, attempt: usize) {
+    /// 安排当前音量目标的指定退避重绑，切换目标时覆盖旧任务；返回是否还有下一档。
+    pub(super) fn schedule_volume_rebind(&mut self, target_id: u64, attempt: usize) -> bool {
         self.volume_rebind =
             INITIAL_VOLUME_REBIND_DELAYS
                 .get(attempt)
@@ -68,6 +68,7 @@ impl WorkerDeadlines {
                     attempt,
                     due_at: Instant::now() + *delay,
                 });
+        self.volume_rebind.is_some()
     }
 
     /// 音频会话已就绪或媒体目标已清空时取消剩余重绑。

@@ -2,6 +2,8 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
 import { clamp } from 'es-toolkit'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
+
 import { DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS } from './defaults'
 import { SETTINGS_SCHEMA_VERSIONS } from './storage/schema-versions'
 import { loadVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
@@ -162,7 +164,7 @@ export function useTaskbarAudioSpectrumSettings() {
         ready.value = true
       }
     } catch (error) {
-      console.error('初始化任务栏频谱配置失败', error)
+      reportBackgroundFailure('初始化任务栏频谱配置失败', error)
     }
   }
 

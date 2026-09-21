@@ -10,7 +10,7 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   getReducedMotionOverride,
   setReducedMotionOverride,
@@ -26,7 +26,7 @@ onMounted(async () => {
   try {
     enabled.value = await getReducedMotionOverride()
   } catch (error) {
-    console.error('读取减少动态效果设置失败', error)
+    reportBackgroundFailure('读取减少动态效果设置失败', error)
   }
 })
 

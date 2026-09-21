@@ -91,6 +91,7 @@ export const DEFAULT_UPDATE_CHECK_FREQUENCY: UpdateCheckFrequency = 'daily'
 /** 尚未完成任何一次更新检测时的初始结果。 */
 export const DEFAULT_UPDATE_CHECK_RESULT: UpdateCheckResult = {
   checkedAt: 0,
+  attemptedAt: 0,
   availableVersion: null,
 }
 

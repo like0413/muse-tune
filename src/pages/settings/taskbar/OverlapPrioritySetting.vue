@@ -10,7 +10,7 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   applyTaskbarOverlapPriority,
   getTaskbarOverlapPriority,
@@ -37,7 +37,7 @@ async function loadOverlapPriority() {
   try {
     selectedOverlapPriority.value = await getTaskbarOverlapPriority()
   } catch (error) {
-    console.error('读取遮挡优先级失败', error)
+    reportBackgroundFailure('读取遮挡优先级失败', error)
   }
 }
 
@@ -63,7 +63,7 @@ async function selectOverlapPriority(value: unknown) {
     try {
       await applyTaskbarOverlapPriority(previousPriority)
     } catch (rollbackError) {
-      console.error('恢复之前的遮挡优先级失败', rollbackError)
+      reportBackgroundFailure('恢复之前的遮挡优先级失败', rollbackError)
     }
   } finally {
     overlapPrioritySaving.value = false

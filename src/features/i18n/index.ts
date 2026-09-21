@@ -1,6 +1,7 @@
 import messages from '@intlify/unplugin-vue-i18n/messages'
 import { createI18n } from 'vue-i18n'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   DEFAULT_APPLICATION_LOCALE,
   getApplicationLocaleTag,
@@ -32,7 +33,7 @@ export async function initializeApplicationLocale(): Promise<void> {
   try {
     applyApplicationLocale(await getApplicationLocale())
   } catch (error) {
-    console.error('读取界面语言失败', error)
+    reportBackgroundFailure('读取界面语言失败', error)
     applyApplicationLocale(DEFAULT_APPLICATION_LOCALE)
   }
 }

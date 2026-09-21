@@ -17,7 +17,10 @@ use std::sync::Arc;
 use tauri::Manager;
 
 pub fn run() {
+    // 必须早于任何线程创建：崩溃信息只能靠日志文件保留，正式构建没有控制台。
+    logging::install_panic_hook();
     tauri::Builder::default()
+        .plugin(logging::plugin())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             let app = app.clone();
@@ -67,7 +70,6 @@ pub fn run() {
             commands::taskbar::hide_volume_popup
         ])
         .setup(|app| {
-            logging::initialize(app.handle())?;
             let lyrics_service = lyrics::initialize(app)?;
             let lyrics_snapshot_subscriber = lyrics_service.clone();
             let media_service = media::initialize(

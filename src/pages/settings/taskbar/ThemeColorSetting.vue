@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_THEME_COLOR,
   getTaskbarThemeColor,
@@ -49,7 +49,7 @@ async function loadThemeColor() {
     committedTheme.value = { ...theme }
     customColorDraft.value = theme.customColor
   } catch (error) {
-    console.error('读取任务栏主题色失败', error)
+    reportBackgroundFailure('读取任务栏主题色失败', error)
   }
 }
 

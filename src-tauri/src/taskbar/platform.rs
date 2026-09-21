@@ -81,7 +81,10 @@ pub(super) fn taskbar_buttons_center_aligned() -> bool {
     };
 
     if result.is_err() {
-        log::warn!("读取 Windows 任务栏对齐方式失败，按居中布局处理: {result:?}");
+        // 这段计算按任务栏布局事件触发，值不存在时每次都会走到这里：不限频会瞬间写满整个日志预算。
+        crate::logging::warn_throttled("taskbar-alignment-read", || {
+            format!("读取 Windows 任务栏对齐方式失败，按居中布局处理: {result:?}")
+        });
     }
 
     alignment != 0

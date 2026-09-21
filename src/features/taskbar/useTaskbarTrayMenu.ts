@@ -1,6 +1,7 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   getTaskbarAudioSpectrumSettings,
   setTaskbarAudioSpectrumSettings,
@@ -28,7 +29,7 @@ export function useTaskbarTrayMenu(readSwitchState: () => TrayMenuChecked) {
 
   /** 执行菜单操作并集中记录失败，避免菜单回调产生未处理的 Promise。 */
   function runAction(action: () => Promise<void>, failureMessage: string) {
-    void action().catch((error) => console.error(failureMessage, error))
+    void action().catch((error) => reportBackgroundFailure(failureMessage, error))
   }
 
   /** 切换指定界面模式的封面显示，并保留另一个模式当前状态。 */
@@ -99,7 +100,7 @@ export function useTaskbarTrayMenu(readSwitchState: () => TrayMenuChecked) {
       }
       unlisten = stopListener
     } catch (error) {
-      console.error('监听托盘菜单动作失败', error)
+      reportBackgroundFailure('监听托盘菜单动作失败', error)
     }
   })
 

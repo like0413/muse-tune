@@ -15,7 +15,7 @@ import {
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_CONTROLS_VISIBILITY,
   getTaskbarControlsVisibility,
@@ -64,7 +64,7 @@ async function loadVisibility() {
     selectedOrder.value = [...visibility.order]
     committedVisibility.value = { ...visibility }
   } catch (error) {
-    console.error('读取控制按钮配置失败', error)
+    reportBackgroundFailure('读取控制按钮配置失败', error)
   }
 }
 

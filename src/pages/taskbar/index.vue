@@ -7,6 +7,7 @@ import {
 } from '@vueuse/core'
 import type { CSSProperties } from 'vue'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import { useLyrics } from '@/features/lyrics/useLyrics'
 import { useTaskbarLyricsSettings } from '@/features/lyrics/useTaskbarLyricsSettings'
 import { toggleCurrentMediaPlayer } from '@/features/media/client'
@@ -258,7 +259,7 @@ async function togglePlayer() {
   try {
     await toggleCurrentMediaPlayer()
   } catch (error) {
-    console.error('开关当前播放器窗口失败', error)
+    reportBackgroundFailure('开关当前播放器窗口失败', error)
   }
 }
 

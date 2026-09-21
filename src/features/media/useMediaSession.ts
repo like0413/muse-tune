@@ -1,6 +1,8 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
+
 import {
   controlMediaSession,
   getCurrentMediaSession,
@@ -45,7 +47,7 @@ export function useMediaSession() {
         timeline.value = initial?.timeline ?? null
       }
     } catch (error) {
-      console.error('初始化 Windows 媒体会话失败', error)
+      reportBackgroundFailure('初始化 Windows 媒体会话失败', error)
     }
   }
 
@@ -57,7 +59,7 @@ export function useMediaSession() {
       const accepted = await controlMediaSession(action)
       if (!accepted) console.warn('当前播放器拒绝了媒体控制请求', action)
     } catch (error) {
-      console.error('控制 Windows 媒体会话失败', error)
+      reportBackgroundFailure('控制 Windows 媒体会话失败', error)
     } finally {
       controlPending.value = false
     }

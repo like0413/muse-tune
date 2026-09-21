@@ -1,5 +1,6 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_THEME_COLOR,
   getTaskbarThemeColor,
@@ -62,7 +63,7 @@ export function useTaskbarProgressColor(
       if (identity !== null) rememberCoverColor(identity, extractedColor)
     } catch (error) {
       if (requestId === extractionRequestId) {
-        console.error('提取封面主色失败', error)
+        reportBackgroundFailure('提取封面主色失败', error)
       }
     }
   }
@@ -102,7 +103,7 @@ export function useTaskbarProgressColor(
       if (systemColorRevision === systemColorRevisionBeforeRead) systemColor.value = accentColor
       await extractCoverColor()
     } catch (error) {
-      console.error('初始化任务栏主题色失败', error)
+      reportBackgroundFailure('初始化任务栏主题色失败', error)
     }
   }
 

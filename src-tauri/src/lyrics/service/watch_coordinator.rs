@@ -48,7 +48,10 @@ impl LyricsService {
                     service.handle_cache_content_change(player, &paths)
                 };
                 if let Err(error) = result {
-                    log::warn!("响应 {player:?} 歌词缓存变化失败: {error}");
+                    // 播放器缓存目录一次写入会触发多个事件，失败按文件事件频率复现，必须限频。
+                    crate::logging::warn_throttled("lyrics-cache-change", || {
+                        format!("响应 {player:?} 歌词缓存变化失败: {error}")
+                    });
                 }
             });
             match watcher::create(paths, callback, Arc::clone(&self.inner.watcher_metrics)) {

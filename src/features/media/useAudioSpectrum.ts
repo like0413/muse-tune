@@ -1,6 +1,7 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS,
   type TaskbarAudioSpectrumSettings,
@@ -30,7 +31,7 @@ export function useAudioSpectrum(
     try {
       await setMediaSpectrumEnabled(enabled, settings.value.frameRate)
     } catch (error) {
-      console.error('切换播放器频谱采集失败', error)
+      reportBackgroundFailure('切换播放器频谱采集失败', error)
     }
   }
 
@@ -50,7 +51,7 @@ export function useAudioSpectrum(
       unlistenFrame = stopFrameListener
       await synchronizeCapture(settings.value.visible)
     } catch (error) {
-      console.error('初始化播放器频谱失败', error)
+      reportBackgroundFailure('初始化播放器频谱失败', error)
     }
   }
 

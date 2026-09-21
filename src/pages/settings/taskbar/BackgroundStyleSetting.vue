@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_BACKGROUND_STYLE,
   getTaskbarBackgroundStyle,
@@ -48,7 +48,7 @@ async function initialize() {
     const savedStyle = await getTaskbarBackgroundStyle()
     if (!disposed && revision === styleRevision) selectedStyle.value = savedStyle
   } catch (error) {
-    console.error('读取背景样式失败', error)
+    reportBackgroundFailure('读取背景样式失败', error)
   }
 }
 

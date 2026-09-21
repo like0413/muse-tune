@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import type {
   MediaPlayer,
   MediaSessionSelectionPolicy,
@@ -85,7 +85,7 @@ async function loadPolicy() {
       onlySupportedPlayers: policy.onlySupportedPlayers,
     }
   } catch (error) {
-    console.error('读取播放器抢占策略失败', error)
+    reportBackgroundFailure('读取播放器抢占策略失败', error)
   }
 }
 

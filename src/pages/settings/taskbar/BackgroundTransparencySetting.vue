@@ -12,7 +12,7 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { Slider } from '@/components/ui/slider'
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_BACKGROUND_STYLE,
   getTaskbarBackgroundStyle,
@@ -54,7 +54,7 @@ async function loadBackgroundStyle() {
     const saved = await getTaskbarBackgroundStyle()
     if (!disposed && revision === styleRevision) backgroundStyle.value = saved
   } catch (error) {
-    console.error('读取任务栏背景样式失败', error)
+    reportBackgroundFailure('读取任务栏背景样式失败', error)
   }
 }
 
@@ -65,7 +65,7 @@ async function loadBackgroundTransparency() {
     selectedBackgroundTransparency.value = transparency
     committedBackgroundTransparency.value = transparency
   } catch (error) {
-    console.error('读取任务栏背景透明度失败', error)
+    reportBackgroundFailure('读取任务栏背景透明度失败', error)
   }
 }
 
@@ -117,7 +117,7 @@ async function commitBackgroundTransparency(values: number[]) {
     try {
       await previewTaskbarBackgroundTransparency(committedTransparency)
     } catch (rollbackError) {
-      console.error('恢复之前的背景透明度失败', rollbackError)
+      reportBackgroundFailure('恢复之前的背景透明度失败', rollbackError)
     }
   } finally {
     backgroundTransparencySaving.value = false

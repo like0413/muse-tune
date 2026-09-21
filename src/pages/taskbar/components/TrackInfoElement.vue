@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { UnlistenFn } from '@tauri-apps/api/event'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import type { MediaSessionSnapshot } from '@/features/media/types'
 import {
   DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT,
@@ -39,7 +40,7 @@ async function initializeVisibility() {
     })
     visible.value = await getTaskbarTrackInfoVisible()
   } catch (error) {
-    console.error('初始化歌曲信息显隐失败', error)
+    reportBackgroundFailure('初始化歌曲信息显隐失败', error)
   }
 }
 
@@ -63,7 +64,7 @@ async function initializeAlignment() {
     })
     alignment.value = await getTaskbarTrackInfoAlignment()
   } catch (error) {
-    console.error('初始化歌曲信息对齐方式失败', error)
+    reportBackgroundFailure('初始化歌曲信息对齐方式失败', error)
   }
 }
 
@@ -75,7 +76,7 @@ async function initializeScrolling() {
     })
     scrolling.value = await getTaskbarTrackInfoScrolling()
   } catch (error) {
-    console.error('初始化歌名滚动配置失败', error)
+    reportBackgroundFailure('初始化歌名滚动配置失败', error)
   }
 }
 

@@ -13,7 +13,7 @@ import {
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import { setCompatibleTaskbarProgressStyle } from '@/features/settings/background-style'
 import {
   DEFAULT_TASKBAR_PROGRESS_POSITION,
@@ -82,7 +82,7 @@ async function loadProgressStyle() {
     if (!disposed) selectedProgressPosition.value = savedPosition
     if (!disposed) selectedProgressVisible.value = savedVisible
   } catch (error) {
-    console.error('读取播放进度样式失败', error)
+    reportBackgroundFailure('读取播放进度样式失败', error)
   }
 }
 
@@ -148,7 +148,7 @@ async function selectProgressStyle(value: unknown) {
     try {
       await setCompatibleTaskbarProgressStyle(previousStyle)
     } catch (rollbackError) {
-      console.error('恢复之前的播放进度样式失败', rollbackError)
+      reportBackgroundFailure('恢复之前的播放进度样式失败', rollbackError)
     }
   } finally {
     progressStyleSaving.value = false

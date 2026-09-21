@@ -1,5 +1,6 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import type { MediaSessionSnapshot } from '@/features/media/types'
 import {
   DEFAULT_TASKBAR_AUTO_HIDE,
@@ -32,7 +33,7 @@ export function useTaskbarAutoHide(session: Readonly<Ref<MediaSessionSnapshot | 
       await setTaskbarContentVisibility(value)
     } catch (error) {
       appliedVisibility = undefined
-      console.error('更新任务栏播放器可见性失败', error)
+      reportBackgroundFailure('更新任务栏播放器可见性失败', error)
     }
   }
 
@@ -52,7 +53,7 @@ export function useTaskbarAutoHide(session: Readonly<Ref<MediaSessionSnapshot | 
       const savedPreference = await getTaskbarAutoHide()
       if (!disposed && preferenceRevision === revisionBeforeRead) preference.value = savedPreference
     } catch (error) {
-      console.error('初始化任务栏播放器自动隐藏配置失败', error)
+      reportBackgroundFailure('初始化任务栏播放器自动隐藏配置失败', error)
     }
   }
 

@@ -1,6 +1,6 @@
 import { useThrottleFn } from '@vueuse/core'
 
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   applyTaskbarTrackInfoScrolling,
   DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT,
@@ -57,7 +57,7 @@ export function useTrackInfoSetting() {
       selectedScrolling.value = scrolling
       committedScrolling.value = { ...scrolling }
     } catch (error) {
-      console.error('读取歌曲信息配置失败', error)
+      reportBackgroundFailure('读取歌曲信息配置失败', error)
     }
   }
 
@@ -118,7 +118,7 @@ export function useTrackInfoSetting() {
         try {
           await applyTaskbarTrackInfoScrolling(committedScrolling.value)
         } catch (rollbackError) {
-          console.error('恢复之前的歌名滚动配置失败', rollbackError)
+          reportBackgroundFailure('恢复之前的歌名滚动配置失败', rollbackError)
         }
       }
     } finally {

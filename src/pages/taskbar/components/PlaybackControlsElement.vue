@@ -3,6 +3,7 @@ import { Pause, Play, SkipBack, SkipForward } from '@lucide/vue'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 
 import { Button } from '@/components/ui/button'
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import type { MediaControlAction, MediaSessionSnapshot } from '@/features/media/types'
 import {
   DEFAULT_TASKBAR_CONTROLS_VISIBILITY,
@@ -107,7 +108,7 @@ async function initializeVisibility() {
     })
     visibility.value = await getTaskbarControlsVisibility()
   } catch (error) {
-    console.error('初始化控制按钮配置失败', error)
+    reportBackgroundFailure('初始化控制按钮配置失败', error)
   }
 }
 

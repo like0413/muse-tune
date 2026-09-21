@@ -1,6 +1,8 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
 
+import { reportBackgroundFailure, reportRepeatedFailure } from '@/features/feedback/errors'
+
 import {
   getCurrentMediaVolume,
   MEDIA_VOLUME_CHANGED_EVENT,
@@ -40,7 +42,7 @@ export function useApplicationVolume() {
       const initial = await getCurrentMediaVolume()
       if (!disposed && eventVersion === versionBeforeRead) volume.value = initial
     } catch (error) {
-      console.error('初始化播放器应用音量失败', error)
+      reportBackgroundFailure('初始化播放器应用音量失败', error)
     }
   }
 
@@ -76,11 +78,12 @@ export function useApplicationVolume() {
               ? await setCurrentMediaVolume(mutation.level)
               : await toggleCurrentMediaMute()
         } catch (error) {
-          console.error('修改播放器应用音量失败', error)
+          // 拖动音量条时每次 IPC 失败都会走到这里，限频后才不会让同一条失败刷满日志。
+          reportRepeatedFailure('修改播放器应用音量失败', error)
           try {
             volume.value = await getCurrentMediaVolume()
           } catch (refreshError) {
-            console.error('刷新播放器应用音量失败', refreshError)
+            reportRepeatedFailure('刷新播放器应用音量失败', refreshError)
           }
         }
       }

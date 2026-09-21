@@ -1,5 +1,6 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_COVER_APPEARANCE,
   getTaskbarCoverAppearance,
@@ -31,7 +32,7 @@ export function useTaskbarCoverAppearance() {
       const saved = await getTaskbarCoverAppearance()
       if (!disposed && eventRevision === revisionBeforeRead) appearance.value = saved
     } catch (error) {
-      console.error('初始化封面配置失败', error)
+      reportBackgroundFailure('初始化封面配置失败', error)
     }
   }
 

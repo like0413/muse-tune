@@ -1,6 +1,8 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
+
 import { getCurrentLyrics, LYRICS_CHANGED_EVENT } from './client'
 import type { LyricsSnapshot } from './types'
 
@@ -45,7 +47,7 @@ export function useLyrics(enabled: Readonly<Ref<boolean>> = ref(true)) {
         lyrics.value = initial
       }
     } catch (error) {
-      console.error('初始化歌词状态失败', error)
+      reportBackgroundFailure('初始化歌词状态失败', error)
     }
   }
 

@@ -6,6 +6,7 @@
 
 use std::time::Instant;
 
+use crate::logging;
 use crate::media::{
     MediaMetadata, model::MediaPlaybackStatus, players::selection_hold_after_title_change,
     thumbnail::read_thumbnail_data_url,
@@ -30,8 +31,12 @@ pub(super) fn refresh_metadata(entries: &mut [SessionEntry], session_id: u64) ->
     let Some(entry) = entries.iter_mut().find(|entry| entry.id == session_id) else {
         return MetadataRefresh::default();
     };
-    let Ok(properties) = session::read_properties(&entry.registration.session)
-        .inspect_err(|error| log::warn!("刷新媒体属性失败: {error}"))
+    let Ok(properties) =
+        session::read_properties(&entry.registration.session).inspect_err(|error| {
+            logging::warn_throttled("media-properties-read", || {
+                format!("刷新媒体属性失败: {error}")
+            });
+        })
     else {
         return MetadataRefresh::default();
     };
@@ -126,9 +131,11 @@ pub(super) fn refresh_playback(
 
 /// 刷新单个会话的播放状态，忽略播放器重复推送的等值事件。
 fn refresh_playback_entry(entry: &mut SessionEntry, next_activity_order: &mut u64) -> bool {
-    let Ok(playback) = session::read_playback(&entry.registration.session)
-        .inspect_err(|error| log::warn!("刷新媒体播放状态失败: {error}"))
-    else {
+    let Ok(playback) = session::read_playback(&entry.registration.session).inspect_err(|error| {
+        logging::warn_throttled("media-playback-read", || {
+            format!("刷新媒体播放状态失败: {error}")
+        });
+    }) else {
         return false;
     };
     if entry.snapshot.playback == playback {
@@ -150,7 +157,9 @@ pub(super) fn refresh_timeline(entries: &mut [SessionEntry], session_id: u64) ->
         return TimelineRefresh::default();
     };
     let timeline = session::read_timeline(&entry.registration.session).unwrap_or_else(|error| {
-        log::warn!("刷新媒体时间线失败: {error}");
+        logging::warn_throttled("media-timeline-read", || {
+            format!("刷新媒体时间线失败: {error}")
+        });
         None
     });
     if let Some(previous_position_ms) = entry.pending_previous_position_ms {

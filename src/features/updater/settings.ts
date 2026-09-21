@@ -22,7 +22,10 @@ const UPDATE_CHECK_FREQUENCIES = ['daily', 'weekly', 'monthly'] as const
 export type UpdateCheckFrequency = (typeof UPDATE_CHECK_FREQUENCIES)[number]
 
 export interface UpdateCheckResult {
+  /** 最近一次**成功**检测的时间；0 表示还没有拿到过结论。 */
   checkedAt: number
+  /** 最近一次检测的时间，成功或失败都算；用于失败后同样要等到下个周期再重试。 */
+  attemptedAt: number
   availableVersion: string | null
 }
 
@@ -48,18 +51,20 @@ function normalizeUpdateCheckFrequency(value: unknown): UpdateCheckFrequency {
   return isUpdateCheckFrequency(value) ? value : DEFAULT_UPDATE_CHECK_FREQUENCY
 }
 
+/** 只接受有效的时间戳，缺失、NaN 或非正数一律回退为 0。 */
+function normalizeTimestamp(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+}
+
 function normalizeUpdateCheckResult(value: unknown): UpdateCheckResult {
   const candidate =
     typeof value === 'object' && value !== null
       ? (value as Partial<Record<keyof UpdateCheckResult, unknown>>)
       : {}
   return {
-    checkedAt:
-      typeof candidate.checkedAt === 'number' &&
-      Number.isFinite(candidate.checkedAt) &&
-      candidate.checkedAt > 0
-        ? candidate.checkedAt
-        : 0,
+    checkedAt: normalizeTimestamp(candidate.checkedAt),
+    // 旧数据没有这一项：回退为 0 表示“还没尝试过”，下次调度立即检测一次。
+    attemptedAt: normalizeTimestamp(candidate.attemptedAt),
     availableVersion:
       typeof candidate.availableVersion === 'string' && candidate.availableVersion.length > 0
         ? candidate.availableVersion

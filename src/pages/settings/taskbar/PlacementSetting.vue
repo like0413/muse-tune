@@ -10,7 +10,7 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   applyTaskbarPlacement,
   getTaskbarPlacement,
@@ -38,7 +38,7 @@ async function loadPlacement() {
   try {
     selectedPlacement.value = await getTaskbarPlacement()
   } catch (error) {
-    console.error('读取播放器位置失败', error)
+    reportBackgroundFailure('读取播放器位置失败', error)
   }
 }
 
@@ -60,7 +60,7 @@ async function selectPlacement(value: unknown) {
     try {
       await applyTaskbarPlacement(previousPlacement)
     } catch (rollbackError) {
-      console.error('恢复之前的播放器位置失败', rollbackError)
+      reportBackgroundFailure('恢复之前的播放器位置失败', rollbackError)
     }
   } finally {
     placementSaving.value = false

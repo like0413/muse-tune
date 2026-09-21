@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/item'
 import { Slider } from '@/components/ui/slider'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   applyTaskbarWidth,
   getTaskbarWidth,
@@ -58,7 +58,7 @@ async function loadWidth() {
     committedMode.value = mode
     selectedPreset.value = mode === 'auto' ? 'auto' : getTaskbarWidthPreset(width)
   } catch (error) {
-    console.error('读取 bar 宽度失败', error)
+    reportBackgroundFailure('读取 bar 宽度失败', error)
   }
 }
 
@@ -128,7 +128,7 @@ async function commitWidth(values: number[], mode: TaskbarWidthMode = 'fixed') {
     try {
       await applyTaskbarWidth(committedWidth.value, committedMode.value)
     } catch (rollbackError) {
-      console.error('恢复之前的 bar 宽度失败', rollbackError)
+      reportBackgroundFailure('恢复之前的 bar 宽度失败', rollbackError)
     }
   } finally {
     widthSaving.value = false

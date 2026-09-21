@@ -5,6 +5,7 @@ import { emitTo, listen } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 
 import { Button } from '@/components/ui/button'
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import { useApplicationVolume } from '@/features/media/useApplicationVolume'
 import {
   VOLUME_POPUP_CLOSE_EVENT,
@@ -63,7 +64,7 @@ async function openPopup() {
   try {
     await showVolumePopup(bounds.left + bounds.width / 2, props.themeColor)
   } catch (error) {
-    console.error('显示音量悬浮窗失败', error)
+    reportBackgroundFailure('显示音量悬浮窗失败', error)
   }
 }
 

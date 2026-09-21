@@ -13,7 +13,7 @@ import {
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_COVER_APPEARANCE,
   getTaskbarCoverAppearance,
@@ -60,7 +60,7 @@ async function loadAppearance() {
     selectedAppearance.value = appearance
     committedAppearance.value = { ...appearance }
   } catch (error) {
-    console.error('读取封面配置失败', error)
+    reportBackgroundFailure('读取封面配置失败', error)
   }
 }
 

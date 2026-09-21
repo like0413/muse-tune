@@ -6,6 +6,7 @@
   "windows": ["volume-popup"],
   "permissions": [
     "core:event:default",
+    "log:allow-log",
     "store:allow-load",
     "store:allow-get",
     "volume-popup-commands"

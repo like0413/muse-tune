@@ -2,6 +2,9 @@ import { getVersion } from '@tauri-apps/api/app'
 import { check } from '@tauri-apps/plugin-updater'
 import { useIntervalFn } from '@vueuse/core'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
+import { logDebug, logWarn } from '@/features/logging'
+
 import { notifyUpdateAvailable } from './notifications'
 import {
   getAutomaticUpdateCheck,
@@ -10,10 +13,16 @@ import {
   getUpdateCheckResult,
   listenUpdateCheckPreferencesChange,
   setUpdateCheckResult,
+  type UpdateCheckResult,
 } from './settings'
 
 const SCHEDULE_REFRESH_INTERVAL = 60 * 60 * 1_000
 const UPDATE_CHECK_LOCK = 'muse-tune-automatic-update-check'
+
+/** 上次尝试时间：成功与失败共用同一节流依据，失败后同样要等到下个周期再重试。 */
+function lastAttemptAt(result: UpdateCheckResult): number {
+  return Math.max(result.checkedAt, result.attemptedAt)
+}
 
 /** 在任务栏窗口中按持久化频率执行自动更新检测。 */
 export function useAutomaticUpdateMonitor() {
@@ -21,7 +30,22 @@ export function useAutomaticUpdateMonitor() {
   let disposed = false
   let unlistenPreferences: (() => void) | undefined
 
-  /** 仅在已启用且距离上次成功检测达到配置周期时访问更新端点。 */
+  /**
+   * 失败也必须记下尝试时间。
+   *
+   * 只记成功时间时，检测失败的条目永远处于“已到期”状态：每个 bar 窗口挂载、每次调度
+   * 都会重新请求一个已经失败的端点，既反复打网络，也把同一条错误日志刷满整个日志预算。
+   */
+  async function recordFailedAttempt() {
+    try {
+      const lastResult = await getUpdateCheckResult()
+      await setUpdateCheckResult({ ...lastResult, attemptedAt: Date.now() })
+    } catch (error) {
+      logWarn('记录更新检测尝试时间失败', error)
+    }
+  }
+
+  /** 仅在已启用且距离上次检测达到配置周期时访问更新端点。 */
   async function checkIfDue() {
     if (checking || disposed) return
     checking = true
@@ -39,10 +63,11 @@ export function useAutomaticUpdateMonitor() {
           await setUpdateCheckResult({ ...lastResult, availableVersion: null })
           return
         }
-        const elapsed = Date.now() - lastResult.checkedAt
+        const lastAttempt = lastAttemptAt(lastResult)
+        const elapsed = Date.now() - lastAttempt
         if (
           !enabled ||
-          (lastResult.checkedAt > 0 && elapsed >= 0 && elapsed < getUpdateCheckInterval(frequency))
+          (lastAttempt > 0 && elapsed >= 0 && elapsed < getUpdateCheckInterval(frequency))
         ) {
           return
         }
@@ -52,17 +77,17 @@ export function useAutomaticUpdateMonitor() {
           const availableVersion = update?.version ?? null
           const shouldNotify =
             availableVersion !== null && availableVersion !== lastResult.availableVersion
-          await setUpdateCheckResult({
-            checkedAt: Date.now(),
-            availableVersion,
-          })
+          const checkedAt = Date.now()
+          await setUpdateCheckResult({ checkedAt, attemptedAt: checkedAt, availableVersion })
           if (shouldNotify) await notifyUpdateAvailable(availableVersion)
         } finally {
           await update?.close()
         }
       })
     } catch (error) {
-      console.info('自动检测更新失败，将在下次调度时重试', error)
+      await recordFailedAttempt()
+      // 离线时这是预期结果：只留调试通道，不进日志文件，也不与真实故障争夺注意力。
+      logDebug('自动检测更新失败，将在下个周期重试', error)
     } finally {
       checking = false
     }
@@ -79,10 +104,12 @@ export function useAutomaticUpdateMonitor() {
         return
       }
       unlistenPreferences = stopListener
-      await checkIfDue()
     } catch (error) {
-      console.info('初始化自动更新检测失败', error)
+      // 监听注册失败会让自动检测永久失效，属于真实故障，不能和“离线检测失败”混为一谈。
+      reportBackgroundFailure('注册自动更新检测监听失败', error)
+      return
     }
+    await checkIfDue()
   })
 
   onUnmounted(() => {

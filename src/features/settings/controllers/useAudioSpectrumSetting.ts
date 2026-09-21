@@ -1,6 +1,6 @@
 import { useThrottleFn } from '@vueuse/core'
 
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   applyTaskbarAudioSpectrumSettings,
   DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS,
@@ -37,7 +37,7 @@ export function useAudioSpectrumSetting() {
       selectedSettings.value = settings
       committedSettings.value = { ...settings }
     } catch (error) {
-      console.error('读取任务栏频谱配置失败', error)
+      reportBackgroundFailure('读取任务栏频谱配置失败', error)
     }
   }
 

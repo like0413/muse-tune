@@ -207,7 +207,7 @@ impl MediaServiceInner {
             .take();
         if let Some(worker) = worker {
             if worker.thread().id() == thread::current().id() {
-                log::error!("媒体 worker 尝试等待自身，已跳过 join");
+                log::warn!("媒体 worker 尝试等待自身，已跳过 join");
                 return;
             }
             if worker.join().is_err() {

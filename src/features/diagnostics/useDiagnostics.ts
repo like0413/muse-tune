@@ -2,7 +2,7 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
 import { useDebounceFn } from '@vueuse/core'
 
-import { getErrorMessage } from '@/features/feedback/errors'
+import { getErrorMessage, reportBackgroundFailure } from '@/features/feedback/errors'
 import { LYRICS_DIAGNOSTICS_CHANGED_EVENT } from '@/features/lyrics/client'
 import { MEDIA_SESSION_CHANGED_EVENT } from '@/features/media/client'
 
@@ -63,6 +63,7 @@ export function useDiagnostics() {
           }
         } catch (error) {
           if (!disposed && currentLifecycle === lifecycleId) {
+            reportBackgroundFailure('刷新诊断信息失败', error)
             errorMessage.value = getErrorMessage(error, t('diagnostics.readFailed'))
           }
         }
@@ -93,6 +94,7 @@ export function useDiagnostics() {
       await refresh(true)
     } catch (error) {
       if (!disposed && currentLifecycle === lifecycleId) {
+        reportBackgroundFailure('初始化诊断监听失败', error)
         errorMessage.value = getErrorMessage(error, t('diagnostics.initializeFailed'))
       }
     }
@@ -120,6 +122,7 @@ export function useDiagnostics() {
       window.clearTimeout(reportCopiedTimer)
       reportCopiedTimer = window.setTimeout(() => (reportCopied.value = false), 2_000)
     } catch (error) {
+      reportBackgroundFailure('复制诊断报告失败', error)
       errorMessage.value = getErrorMessage(error, t('diagnostics.copyFailed'))
     }
   }

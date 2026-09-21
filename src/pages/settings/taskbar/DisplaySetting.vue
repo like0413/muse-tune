@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   ALL_TASKBAR_DISPLAYS,
   applyTaskbarDisplayTarget,
@@ -47,12 +47,12 @@ async function loadDisplayTarget() {
   if (target.status === 'fulfilled') {
     selectedDisplayTarget.value = target.value
   } else {
-    console.error('读取目标显示器失败', target.reason)
+    reportBackgroundFailure('读取目标显示器失败', target.reason)
   }
   if (displays.status === 'fulfilled') {
     taskbarDisplays.value = displays.value
   } else {
-    console.error('读取可用显示器失败', displays.reason)
+    reportBackgroundFailure('读取可用显示器失败', displays.reason)
   }
 }
 
@@ -63,7 +63,7 @@ async function refreshTaskbarDisplays(open: boolean) {
   try {
     taskbarDisplays.value = await listTaskbarDisplays()
   } catch (error) {
-    console.error('刷新目标显示器失败', error)
+    reportBackgroundFailure('刷新目标显示器失败', error)
   }
 }
 
@@ -88,7 +88,7 @@ async function selectDisplayTarget(value: unknown) {
     try {
       await applyTaskbarDisplayTarget(previousTarget)
     } catch (rollbackError) {
-      console.error('恢复之前的目标显示器失败', rollbackError)
+      reportBackgroundFailure('恢复之前的目标显示器失败', rollbackError)
     }
   } finally {
     displayTargetSaving.value = false

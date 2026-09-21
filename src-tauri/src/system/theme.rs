@@ -44,21 +44,28 @@ pub(crate) fn initialize<R: Runtime>(
         UISettings,
         IInspectable,
     >::new(move |_, _| {
-        if let Ok(next) = read_system_colors(&event_settings) {
-            let changes = event_colors.write().ok().map(|mut current| {
-                let accent = (current.accent != next.accent).then(|| next.accent.clone());
-                let foreground =
-                    (current.foreground != next.foreground).then(|| next.foreground.clone());
-                *current = next;
-                (accent, foreground)
-            });
-            if let Some((accent, foreground)) = changes {
-                if let Some(color) = accent {
-                    let _ = app.emit(SYSTEM_ACCENT_COLOR_CHANGED_EVENT, color);
-                }
-                if let Some(color) = foreground {
-                    let _ = app.emit(SYSTEM_FOREGROUND_COLOR_CHANGED_EVENT, color);
-                }
+        let Ok(next) = read_system_colors(&event_settings) else {
+            // 读取失败会让主题色从此不再跟随系统变化，静默吞掉等于把问题藏起来。
+            log::warn!("读取系统主题色失败，本次颜色变化已忽略");
+            return Ok(());
+        };
+        let changes = event_colors.write().ok().map(|mut current| {
+            let accent = (current.accent != next.accent).then(|| next.accent.clone());
+            let foreground =
+                (current.foreground != next.foreground).then(|| next.foreground.clone());
+            *current = next;
+            (accent, foreground)
+        });
+        if let Some((accent, foreground)) = changes {
+            if let Some(color) = accent
+                && let Err(error) = app.emit(SYSTEM_ACCENT_COLOR_CHANGED_EVENT, color)
+            {
+                log::warn!("广播系统主题色失败: {error}");
+            }
+            if let Some(color) = foreground
+                && let Err(error) = app.emit(SYSTEM_FOREGROUND_COLOR_CHANGED_EVENT, color)
+            {
+                log::warn!("广播系统前景色失败: {error}");
             }
         }
         Ok(())

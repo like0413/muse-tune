@@ -14,6 +14,7 @@ import {
   ComboboxTrigger,
   ComboboxViewport,
 } from '@/components/ui/combobox'
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import { getCachedSystemFonts, refreshSystemFonts } from '@/features/system/fonts'
 
 interface FontOption {
@@ -71,7 +72,7 @@ async function refreshFonts() {
     systemFonts.value = await refreshSystemFonts()
   } catch (error) {
     loadFailed.value = true
-    console.error('读取系统字体失败', error)
+    reportBackgroundFailure('读取系统字体失败', error)
   }
 }
 

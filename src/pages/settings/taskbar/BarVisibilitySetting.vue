@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
   DEFAULT_TASKBAR_AUTO_HIDE,
   getTaskbarAutoHide,
@@ -32,7 +32,7 @@ async function loadPreference() {
     selectedPreference.value = preference
     committedPreference.value = { ...preference }
   } catch (error) {
-    console.error('读取任务栏播放器自动隐藏配置失败', error)
+    reportBackgroundFailure('读取任务栏播放器自动隐藏配置失败', error)
   }
 }
 

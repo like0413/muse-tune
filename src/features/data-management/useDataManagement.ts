@@ -1,10 +1,11 @@
 import { toast } from 'vue-sonner'
 
+import { reportBackgroundFailure } from '@/features/feedback/errors'
 import { normalizeIpcError, type IpcError } from '@/features/ipc/errors'
 
 import {
-  clearLogHistory,
   clearCurrentLyricsCache,
+  clearLogHistory,
   clearLyricsCache,
   getDataOverview,
   openDataDirectory,
@@ -44,7 +45,10 @@ export function useDataManagement() {
         error.value = null
       }
     } catch (error) {
-      if (!disposed && requestId === refreshRequestId) setError(error)
+      if (!disposed && requestId === refreshRequestId) {
+        reportBackgroundFailure('读取数据统计失败', error)
+        setError(error)
+      }
     } finally {
       if (!disposed && requestId === refreshRequestId) loading.value = false
     }
@@ -57,6 +61,7 @@ export function useDataManagement() {
       await openDataDirectory(kind)
       error.value = null
     } catch (error) {
+      reportBackgroundFailure('打开数据目录失败', error)
       setError(error)
     } finally {
       openingDirectory.value = null
@@ -74,6 +79,7 @@ export function useDataManagement() {
       cacheCleared.value = true
       clearStatusTimer = window.setTimeout(() => (cacheCleared.value = false), 2_000)
     } catch (error) {
+      reportBackgroundFailure('清空歌词缓存失败', error)
       setError(error)
     } finally {
       clearing.value = false
@@ -90,6 +96,7 @@ export function useDataManagement() {
         description: t('settings.data.cache.currentClearedDescription'),
       })
     } catch (error) {
+      reportBackgroundFailure('清除当前歌曲缓存失败', error)
       setError(error)
     } finally {
       clearingCurrent.value = false
@@ -106,6 +113,7 @@ export function useDataManagement() {
         description: t('settings.data.cache.refreshStartedDescription'),
       })
     } catch (error) {
+      reportBackgroundFailure('重新获取当前歌词失败', error)
       setError(error)
     } finally {
       refreshingCurrent.value = false
@@ -119,6 +127,7 @@ export function useDataManagement() {
       await resetConfiguration()
       error.value = null
     } catch (error) {
+      reportBackgroundFailure('恢复默认配置失败', error)
       setError(error)
       resetting.value = false
     }
@@ -135,6 +144,7 @@ export function useDataManagement() {
       logsCleared.value = true
       logClearStatusTimer = window.setTimeout(() => (logsCleared.value = false), 2_000)
     } catch (error) {
+      reportBackgroundFailure('清空历史日志失败', error)
       setError(error)
     } finally {
       clearingLogs.value = false
