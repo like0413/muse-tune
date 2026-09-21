@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Activity } from '@lucide/vue'
+import { Gauge } from '@lucide/vue'
 
 import {
   Field,
@@ -155,7 +155,7 @@ onMounted(() => void loadProgressVisibilityAndPosition())
 <template>
   <CollapsibleItem>
     <ItemMedia class="icon-tone-rose-500">
-      <Activity />
+      <Gauge />
     </ItemMedia>
     <ItemContent>
       <ItemTitle>{{ t('settings.taskbar.progress.title') }}</ItemTitle>

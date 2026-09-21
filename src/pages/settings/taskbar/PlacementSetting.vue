@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PanelTop } from '@lucide/vue'
+import { MoveHorizontal } from '@lucide/vue'
 
 import {
   Item,
@@ -72,8 +72,8 @@ onMounted(loadPlacement)
 
 <template>
   <Item>
-    <ItemMedia class="icon-tone-violet-500">
-      <PanelTop />
+    <ItemMedia class="icon-tone-indigo-500">
+      <MoveHorizontal />
     </ItemMedia>
     <ItemContent>
       <ItemTitle>{{ t('settings.taskbar.placement.title') }}</ItemTitle>

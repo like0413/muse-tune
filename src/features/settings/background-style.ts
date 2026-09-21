@@ -12,6 +12,7 @@ import { settingsStore } from './store'
 const BACKGROUND_STYLE_KEY = 'taskbar.backgroundStyle'
 const BACKGROUND_STYLE_CHANGED_EVENT = 'settings://taskbar-background-style-changed'
 export type TaskbarBackgroundStyle = 'theme' | 'cover-blur'
+const FULL_HEIGHT_PROGRESS_BACKGROUND_STYLE: TaskbarBackgroundStyle = 'theme'
 
 export { DEFAULT_TASKBAR_BACKGROUND_STYLE }
 
@@ -51,8 +52,11 @@ export async function setCompatibleTaskbarProgressStyle(
   style: TaskbarProgressStyle,
 ): Promise<boolean> {
   const previousBackground = await getTaskbarBackgroundStyle()
-  const replacedBackground = style === 'vertical-gradient' && previousBackground !== 'theme'
-  if (replacedBackground) await saveTaskbarBackgroundStyle(DEFAULT_TASKBAR_BACKGROUND_STYLE)
+  const replacedBackground =
+    style === 'vertical-gradient' && previousBackground !== FULL_HEIGHT_PROGRESS_BACKGROUND_STYLE
+  if (replacedBackground) {
+    await saveTaskbarBackgroundStyle(FULL_HEIGHT_PROGRESS_BACKGROUND_STYLE)
+  }
   try {
     await setTaskbarProgressStyle(style)
   } catch (error) {

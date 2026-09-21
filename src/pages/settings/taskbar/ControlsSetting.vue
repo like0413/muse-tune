@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gamepad2, GripVertical } from '@lucide/vue'
+import { CirclePlay, GripVertical } from '@lucide/vue'
 import { moveArrayElement, useSortable } from '@vueuse/integrations/useSortable'
 import type { SortableEvent } from 'sortablejs'
 
@@ -124,8 +124,8 @@ onMounted(loadVisibility)
 
 <template>
   <CollapsibleItem>
-    <ItemMedia class="icon-tone-violet-500">
-      <Gamepad2 />
+    <ItemMedia class="icon-tone-emerald-500">
+      <CirclePlay />
     </ItemMedia>
     <ItemContent>
       <ItemTitle>{{ t('settings.taskbar.controls.title') }}</ItemTitle>

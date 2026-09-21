@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { Images } from '@lucide/vue'
+import { Wallpaper } from '@lucide/vue'
 
 import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldGroup,
-  FieldTitle,
-} from '@/components/ui/field'
-import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemMedia,
+  ItemTitle,
+} from '@/components/ui/item'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { notifySettingSaveFailed } from '@/features/feedback/errors'
 import { useEventState } from '@/features/ipc/useEventState'
@@ -54,35 +54,25 @@ async function selectStyle(value: unknown) {
 </script>
 
 <template>
-  <CollapsibleItem>
-    <ItemMedia class="icon-tone-violet-500"><Images /></ItemMedia>
+  <Item>
+    <ItemMedia class="icon-tone-violet-500"><Wallpaper /></ItemMedia>
     <ItemContent>
       <ItemTitle>{{ t('settings.taskbar.backgroundStyle.title') }}</ItemTitle>
       <ItemDescription>{{ t('settings.taskbar.backgroundStyle.description') }}</ItemDescription>
     </ItemContent>
-    <template #content>
-      <FieldGroup>
-        <Field orientation="horizontal">
-          <FieldContent>
-            <FieldTitle>{{ t('settings.taskbar.backgroundStyle.style') }}</FieldTitle>
-            <FieldDescription>{{
-              t('settings.taskbar.backgroundStyle.styleDescription')
-            }}</FieldDescription>
-          </FieldContent>
-          <Tabs :model-value="selectedStyle" @update:model-value="selectStyle">
-            <TabsList>
-              <TabsTrigger value="theme" :disabled="saving">{{
-                t('settings.taskbar.backgroundStyle.theme')
-              }}</TabsTrigger>
-              <TabsTrigger value="cover-blur" :disabled="saving">{{
-                t('settings.taskbar.backgroundStyle.coverBlur')
-              }}</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </Field>
-      </FieldGroup>
-    </template>
-  </CollapsibleItem>
+    <ItemActions>
+      <Tabs :model-value="selectedStyle" @update:model-value="selectStyle">
+        <TabsList>
+          <TabsTrigger value="theme" :disabled="saving">{{
+            t('settings.taskbar.backgroundStyle.theme')
+          }}</TabsTrigger>
+          <TabsTrigger value="cover-blur" :disabled="saving">{{
+            t('settings.taskbar.backgroundStyle.coverBlur')
+          }}</TabsTrigger>
+        </TabsList>
+      </Tabs>
+    </ItemActions>
+  </Item>
   <CompatibilityNoticeDialog
     v-model:open="showCompatibilityNotice"
     :description="t('settings.taskbar.backgroundStyle.progressFallback')"

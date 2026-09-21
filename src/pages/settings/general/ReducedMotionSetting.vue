@@ -49,7 +49,7 @@ async function updateEnabled(next: boolean) {
 
 <template>
   <Item>
-    <ItemMedia class="icon-tone-sky-500"><Accessibility /></ItemMedia>
+    <ItemMedia class="icon-tone-teal-500"><Accessibility /></ItemMedia>
     <ItemContent>
       <ItemTitle>{{ t('settings.general.reducedMotion.title') }}</ItemTitle>
       <ItemDescription>{{ t('settings.general.reducedMotion.description') }}</ItemDescription>

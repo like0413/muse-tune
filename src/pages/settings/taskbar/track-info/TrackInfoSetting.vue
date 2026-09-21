@@ -56,7 +56,7 @@ const {
 
 <template>
   <CollapsibleItem>
-    <ItemMedia class="icon-tone-violet-500">
+    <ItemMedia class="icon-tone-indigo-500">
       <ListMusic />
     </ItemMedia>
     <ItemContent>
@@ -76,27 +76,6 @@ const {
       <FieldGroup>
         <Field orientation="horizontal" :data-disabled="!selectedVisible">
           <FieldContent>
-            <FieldTitle>{{ t('common.alignment') }}</FieldTitle>
-            <FieldDescription>{{
-              t('settings.taskbar.trackInfo.alignmentDescription')
-            }}</FieldDescription>
-          </FieldContent>
-          <Tabs :model-value="selectedAlignment" @update:model-value="selectAlignment">
-            <TabsList>
-              <TabsTrigger
-                v-for="option in alignmentOptions"
-                :key="option.value"
-                :value="option.value"
-                :disabled="alignmentSaving || !selectedVisible"
-              >
-                {{ option.label }}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </Field>
-
-        <Field orientation="horizontal" :data-disabled="!selectedVisible">
-          <FieldContent>
             <FieldLabel for="taskbar-track-title-scroll">{{
               t('settings.taskbar.trackInfo.scroll')
             }}</FieldLabel>
@@ -110,6 +89,30 @@ const {
             :disabled="scrollingSaving || !selectedVisible"
             @update:model-value="updateScrolling({ enabled: $event })"
           />
+        </Field>
+
+        <Field
+          orientation="horizontal"
+          :data-disabled="!selectedVisible || !selectedScrolling.enabled || scrollingSaving"
+        >
+          <FieldContent>
+            <FieldTitle>{{ t('settings.taskbar.trackInfo.mode') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.trackInfo.modeDescription')
+            }}</FieldDescription>
+          </FieldContent>
+          <Tabs :model-value="selectedScrolling.mode" @update:model-value="selectScrollMode">
+            <TabsList>
+              <TabsTrigger
+                v-for="option in scrollModeOptions"
+                :key="option.value"
+                :value="option.value"
+                :disabled="!selectedVisible || !selectedScrolling.enabled || scrollingSaving"
+              >
+                {{ option.label }}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </Field>
 
         <Field
@@ -139,23 +142,20 @@ const {
           </div>
         </Field>
 
-        <Field
-          orientation="horizontal"
-          :data-disabled="!selectedVisible || !selectedScrolling.enabled || scrollingSaving"
-        >
+        <Field orientation="horizontal" :data-disabled="!selectedVisible">
           <FieldContent>
-            <FieldTitle>{{ t('settings.taskbar.trackInfo.mode') }}</FieldTitle>
+            <FieldTitle>{{ t('common.alignment') }}</FieldTitle>
             <FieldDescription>{{
-              t('settings.taskbar.trackInfo.modeDescription')
+              t('settings.taskbar.trackInfo.alignmentDescription')
             }}</FieldDescription>
           </FieldContent>
-          <Tabs :model-value="selectedScrolling.mode" @update:model-value="selectScrollMode">
+          <Tabs :model-value="selectedAlignment" @update:model-value="selectAlignment">
             <TabsList>
               <TabsTrigger
-                v-for="option in scrollModeOptions"
+                v-for="option in alignmentOptions"
                 :key="option.value"
                 :value="option.value"
-                :disabled="!selectedVisible || !selectedScrolling.enabled || scrollingSaving"
+                :disabled="alignmentSaving || !selectedVisible"
               >
                 {{ option.label }}
               </TabsTrigger>

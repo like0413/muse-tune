@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { Palette } from '@lucide/vue'
 
+import { FieldGroup } from '@/components/ui/field'
 import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldGroup,
-  FieldTitle,
-} from '@/components/ui/field'
-import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemMedia,
+  ItemTitle,
+} from '@/components/ui/item'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
@@ -111,8 +112,8 @@ onMounted(loadThemeColor)
 </script>
 
 <template>
-  <CollapsibleItem>
-    <ItemMedia class="icon-tone-sky-500">
+  <Item>
+    <ItemMedia class="icon-tone-fuchsia-500">
       <Palette />
     </ItemMedia>
     <ItemContent>
@@ -120,29 +121,24 @@ onMounted(loadThemeColor)
       <ItemDescription>{{ t('settings.taskbar.theme.description') }}</ItemDescription>
     </ItemContent>
 
-    <template #content>
-      <FieldGroup>
-        <Field orientation="horizontal">
-          <FieldContent>
-            <FieldTitle>{{ t('settings.taskbar.theme.source') }}</FieldTitle>
-            <FieldDescription>{{ t('settings.taskbar.theme.sourceDescription') }}</FieldDescription>
-          </FieldContent>
-          <Tabs :model-value="selectedTheme.source" @update:model-value="selectThemeSource">
-            <TabsList>
-              <TabsTrigger
-                v-for="option in themeSourceOptions"
-                :key="option.value"
-                :value="option.value"
-                :disabled="themeSaving"
-              >
-                {{ option.label }}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </Field>
+    <ItemActions>
+      <Tabs :model-value="selectedTheme.source" @update:model-value="selectThemeSource">
+        <TabsList>
+          <TabsTrigger
+            v-for="option in themeSourceOptions"
+            :key="option.value"
+            :value="option.value"
+            :disabled="themeSaving"
+          >
+            {{ option.label }}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+    </ItemActions>
 
+    <div v-if="selectedTheme.source === 'custom'" class="border-border w-full border-t pt-3">
+      <FieldGroup>
         <CustomThemeColorFields
-          v-if="selectedTheme.source === 'custom'"
           :selected-color="selectedTheme.customColor"
           :draft="customColorDraft"
           :error="customColorError"
@@ -152,6 +148,6 @@ onMounted(loadThemeColor)
           @commit="commitCustomColor"
         />
       </FieldGroup>
-    </template>
-  </CollapsibleItem>
+    </div>
+  </Item>
 </template>

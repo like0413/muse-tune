@@ -25,7 +25,6 @@ const { t } = useI18n({ useScope: 'global' })
     <PlacementSetting />
     <OverlapPrioritySetting />
     <BarVisibilitySetting />
-    <DisplaySetting />
 
     <div class="pl-2 text-sm font-bold">{{ t('settings.taskbar.groups.appearance') }}</div>
     <BarWidthSetting />
@@ -44,5 +43,6 @@ const { t } = useI18n({ useScope: 'global' })
 
     <div class="pl-2 text-sm font-bold">{{ t('settings.taskbar.groups.advanced') }}</div>
     <MediaSessionSetting />
+    <DisplaySetting />
   </div>
 </template>

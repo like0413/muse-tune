@@ -98,30 +98,6 @@ const {
 
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
           <FieldContent>
-            <FieldTitle>{{ t('settings.taskbar.spectrum.frameRate') }}</FieldTitle>
-            <FieldDescription>{{
-              t('settings.taskbar.spectrum.frameRateDescription')
-            }}</FieldDescription>
-          </FieldContent>
-          <Tabs
-            :model-value="String(selectedSettings.frameRate)"
-            @update:model-value="selectFrameRate"
-          >
-            <TabsList>
-              <TabsTrigger
-                v-for="frameRate in TASKBAR_SPECTRUM_FRAME_RATES"
-                :key="frameRate"
-                :value="String(frameRate)"
-                :disabled="settingsSaving || !selectedSettings.visible"
-              >
-                {{ frameRate }}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </Field>
-
-        <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
-          <FieldContent>
             <FieldTitle>{{ t('settings.taskbar.spectrum.width') }}</FieldTitle>
             <FieldDescription>{{
               t('settings.taskbar.spectrum.widthDescription')
@@ -235,6 +211,30 @@ const {
               {{ selectedSettings.smoothing }}%
             </output>
           </div>
+        </Field>
+
+        <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
+          <FieldContent>
+            <FieldTitle>{{ t('settings.taskbar.spectrum.frameRate') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.spectrum.frameRateDescription')
+            }}</FieldDescription>
+          </FieldContent>
+          <Tabs
+            :model-value="String(selectedSettings.frameRate)"
+            @update:model-value="selectFrameRate"
+          >
+            <TabsList>
+              <TabsTrigger
+                v-for="frameRate in TASKBAR_SPECTRUM_FRAME_RATES"
+                :key="frameRate"
+                :value="String(frameRate)"
+                :disabled="settingsSaving || !selectedSettings.visible"
+              >
+                {{ frameRate }}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </Field>
       </FieldGroup>
     </template>

@@ -22,7 +22,7 @@ defineSlots<{
         <CollapsibleTrigger as-child>
           <Button
             variant="ghost"
-            class="group/collapsible-item relative h-auto w-full justify-start gap-2.5 rounded-none px-4 py-3 text-left whitespace-normal"
+            class="group/collapsible-item relative h-auto w-full justify-start gap-2.5 rounded-none px-4 py-3 text-left whitespace-normal has-[>svg]:px-4"
             :style="{ paddingRight: $slots.actions ? '6rem' : '3rem' }"
             type="button"
           >
@@ -42,7 +42,7 @@ defineSlots<{
       <CollapsibleContent
         class="data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down w-full overflow-hidden"
       >
-        <div class="p-3">
+        <div class="px-4 py-3">
           <slot name="content" />
         </div>
       </CollapsibleContent>

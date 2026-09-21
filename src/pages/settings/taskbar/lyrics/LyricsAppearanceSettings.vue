@@ -108,6 +108,18 @@ function selectNativeColor(key: EditableColor, event: Event) {
 <template>
   <Field orientation="horizontal" :data-disabled="disabled">
     <FieldContent>
+      <FieldTitle>{{ t('settings.taskbar.lyrics.font') }}</FieldTitle>
+      <FieldDescription>{{ t('settings.taskbar.lyrics.fontDescription') }}</FieldDescription>
+    </FieldContent>
+    <LyricsFontPicker
+      :model-value="settings.fontFamily"
+      :disabled="disabled"
+      @update:model-value="emit('updateSettings', { fontFamily: $event })"
+    />
+  </Field>
+
+  <Field orientation="horizontal" :data-disabled="disabled">
+    <FieldContent>
       <FieldTitle>{{ t('settings.taskbar.lyrics.colors') }}</FieldTitle>
       <FieldDescription>{{ t('settings.taskbar.lyrics.colorsDescription') }}</FieldDescription>
     </FieldContent>
@@ -160,16 +172,4 @@ function selectNativeColor(key: EditableColor, event: Event) {
       </div>
     </Field>
   </template>
-
-  <Field orientation="horizontal" :data-disabled="disabled">
-    <FieldContent>
-      <FieldTitle>{{ t('settings.taskbar.lyrics.font') }}</FieldTitle>
-      <FieldDescription>{{ t('settings.taskbar.lyrics.fontDescription') }}</FieldDescription>
-    </FieldContent>
-    <LyricsFontPicker
-      :model-value="settings.fontFamily"
-      :disabled="disabled"
-      @update:model-value="emit('updateSettings', { fontFamily: $event })"
-    />
-  </Field>
 </template>

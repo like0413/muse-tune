@@ -56,6 +56,28 @@ function selectAnimation(value: unknown) {
 <template>
   <Field orientation="horizontal" :data-disabled="!settings.enabled">
     <FieldContent>
+      <FieldTitle>{{ t('settings.taskbar.lyrics.offset') }}</FieldTitle>
+      <FieldDescription>{{ t('settings.taskbar.lyrics.offsetDescription') }}</FieldDescription>
+    </FieldContent>
+    <div class="flex w-56 items-center gap-3">
+      <Slider
+        :model-value="[settings.timingOffsetMs]"
+        :min="TASKBAR_LYRICS_TIMING_OFFSET_MIN"
+        :max="TASKBAR_LYRICS_TIMING_OFFSET_MAX"
+        :step="50"
+        :disabled="saving || !settings.enabled"
+        :aria-label="t('settings.taskbar.lyrics.offset')"
+        @update:model-value="emit('previewTimingOffset', $event)"
+        @value-commit="emit('commitTimingOffset', $event)"
+      />
+      <output class="text-muted-foreground w-16 text-right text-xs tabular-nums">
+        {{ settings.timingOffsetMs > 0 ? '+' : '' }}{{ settings.timingOffsetMs }}ms
+      </output>
+    </div>
+  </Field>
+
+  <Field orientation="horizontal" :data-disabled="!settings.enabled">
+    <FieldContent>
       <FieldTitle>{{ t('settings.taskbar.lyrics.animation') }}</FieldTitle>
       <FieldDescription>{{ t('settings.taskbar.lyrics.animationDescription') }}</FieldDescription>
     </FieldContent>
@@ -96,27 +118,5 @@ function selectAnimation(value: unknown) {
       :disabled="saving || !settings.enabled || settings.animation === 'none'"
       @update:model-value="emit('updateSettings', { animationPreRoll: $event })"
     />
-  </Field>
-
-  <Field orientation="horizontal" :data-disabled="!settings.enabled">
-    <FieldContent>
-      <FieldTitle>{{ t('settings.taskbar.lyrics.offset') }}</FieldTitle>
-      <FieldDescription>{{ t('settings.taskbar.lyrics.offsetDescription') }}</FieldDescription>
-    </FieldContent>
-    <div class="flex w-56 items-center gap-3">
-      <Slider
-        :model-value="[settings.timingOffsetMs]"
-        :min="TASKBAR_LYRICS_TIMING_OFFSET_MIN"
-        :max="TASKBAR_LYRICS_TIMING_OFFSET_MAX"
-        :step="50"
-        :disabled="saving || !settings.enabled"
-        :aria-label="t('settings.taskbar.lyrics.offset')"
-        @update:model-value="emit('previewTimingOffset', $event)"
-        @value-commit="emit('commitTimingOffset', $event)"
-      />
-      <output class="text-muted-foreground w-16 text-right text-xs tabular-nums">
-        {{ settings.timingOffsetMs > 0 ? '+' : '' }}{{ settings.timingOffsetMs }}ms
-      </output>
-    </div>
   </Field>
 </template>

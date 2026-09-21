@@ -3,44 +3,44 @@
     "sections": {
       "general": {
         "title": "一般",
-        "description": "管理應用程式的啟動與執行方式"
+        "description": "設定應用程式的語言、外觀與啟動行為"
       },
       "taskbar": {
         "title": "工作列",
-        "description": "調整工作列播放器的位置與顯示內容"
+        "description": "自訂工作列播放器的版面、外觀與內容"
       },
       "data": {
         "title": "資料",
-        "description": "管理歌詞快取、設定與執行記錄"
+        "description": "管理歌詞快取、應用程式設定與執行記錄"
       },
       "diagnostics": {
         "title": "診斷",
-        "description": "檢視應用程式、工作列、媒體工作階段與歌詞的目前執行狀態"
+        "description": "檢查工作列、媒體工作階段、歌詞與音訊功能的執行狀態"
       },
       "about": {
         "title": "關於",
-        "description": "檢視 Muse Tune 的版本與專案資訊"
+        "description": "檢視版本、更新與開源專案資訊"
       }
     },
     "general": {
       "language": {
         "title": "顯示語言",
-        "description": "切換語言後會立即生效"
+        "description": "選擇設定頁面與應用程式介面使用的語言"
       },
       "colorMode": {
         "title": "色彩模式",
-        "description": "切換色彩模式後會立即生效",
+        "description": "選擇淺色、深色或跟隨 Windows 設定",
         "auto": "跟隨系統",
         "dark": "深色",
         "light": "淺色"
       },
       "reducedMotion": {
         "title": "減少動態效果",
-        "description": "強制關閉歌詞、封面與介面轉場；關閉時仍跟隨 Windows 設定"
+        "description": "減少歌詞、封面與介面動畫；關閉後跟隨 Windows 動畫設定"
       },
       "autostart": {
         "title": "開機自動啟動",
-        "description": "開機後自動啟動 Muse Tune"
+        "description": "登入 Windows 後自動啟動 Muse Tune"
       }
     },
     "taskbar": {
@@ -52,55 +52,53 @@
       },
       "placement": {
         "title": "元件位置",
-        "description": "自動模式會依 Windows 工作列設定自動切換位置",
+        "description": "選擇元件位於工作列左側或右側；自動模式會配合工作列版面",
         "left": "左側",
         "auto": "自動",
         "right": "右側"
       },
       "overlap": {
         "title": "遮擋優先順序",
-        "description": "空間不足時，選擇元件或工作列項目顯示在上方",
+        "description": "空間不足時，允許元件覆蓋工作列項目，或裁切元件以避開它們",
         "bar": "元件優先",
         "taskbar": "工作列優先"
       },
       "autoHide": {
         "title": "自動隱藏",
-        "description": "依媒體工作階段與播放狀態自動隱藏元件",
+        "description": "在沒有媒體工作階段或播放暫停時自動隱藏元件",
         "noSession": "無媒體工作階段時隱藏",
-        "noSessionDescription": "Windows 沒有任何可用媒體工作階段時隱藏",
+        "noSessionDescription": "Windows 中沒有可用的媒體工作階段時隱藏元件",
         "paused": "暫停時隱藏",
-        "pausedDescription": "Windows 有可用媒體工作階段且處於暫停狀態時隱藏"
+        "pausedDescription": "目前媒體工作階段暫停播放時隱藏元件"
       },
       "transparency": {
         "title": "背景透明度",
-        "description": "只調整元件背景，文字與控制項保持清晰",
-        "coverDisabled": "模糊封面背景不調整透明度；切換為主題背景後可調整"
+        "description": "調整主題背景的透明度，不影響文字與控制項",
+        "coverDisabled": "模糊封面使用獨立效果；切換為主題背景後可調整透明度"
       },
       "backgroundStyle": {
         "title": "背景樣式",
-        "description": "以歌曲封面的多種色彩形成柔和的模糊背景",
-        "style": "背景效果",
-        "styleDescription": "模糊封面背景與主題透明度獨立",
-        "theme": "一般主題色",
+        "description": "選擇主題背景或模糊封面作為元件背景",
+        "theme": "主題背景",
         "coverBlur": "模糊封面",
         "compatibilityTitle": "相容性提示",
-        "progressFallback": "封面背景與垂直漸層進度不能同時使用。開啟封面背景時，進度樣式會切換為底部橫列。",
-        "backgroundFallback": "垂直漸層進度與封面背景不能同時使用。開啟垂直漸層時，背景會切換為一般主題色。"
+        "progressFallback": "模糊封面與全高漸層進度不能同時使用。啟用模糊封面時，進度樣式會切換為底部進度列。",
+        "backgroundFallback": "全高漸層進度與模糊封面不能同時使用。啟用全高漸層時，背景會切換為主題背景。"
       },
       "width": {
         "title": "元件寬度",
-        "description": "設定未被工作列項目裁切時的完整寬度",
+        "description": "選擇預設寬度、自訂寬度或自動填滿可用空間",
         "presets": "元件寬度預設",
         "compact": "精簡",
         "standard": "標準",
         "wide": "寬",
         "custom": "自由調整",
         "auto": "自適應",
-        "autoHint": "自動佔滿工作列空白，最小 200px"
+        "autoHint": "自動填滿工作列可用空間，最小寬度為 200px"
       },
       "display": {
         "title": "目標顯示器",
-        "description": "選擇元件出現在哪些顯示器的工作列",
+        "description": "選擇要在哪些顯示器的工作列上顯示元件",
         "placeholder": "選擇顯示器",
         "all": "所有顯示器",
         "unavailable": "先前選擇的顯示器（目前無法使用）",
@@ -108,18 +106,18 @@
       },
       "controls": {
         "title": "控制按鈕",
-        "description": "控制按鈕群組與各按鈕的顯示狀態",
+        "description": "設定播放控制按鈕的顯示與排列",
         "visible": "顯示按鈕群組",
-        "visibleDescription": "是否顯示完整按鈕群組",
+        "visibleDescription": "顯示或隱藏整組播放控制按鈕",
         "buttons": "顯示的按鈕",
-        "buttonsDescription": "選擇要顯示的按鈕，並可拖曳調整順序",
+        "buttonsDescription": "選擇要顯示的按鈕，並拖曳調整排列順序",
         "order": "控制按鈕順序"
       },
       "cover": {
         "title": "封面",
-        "description": "分別控制一般與歌詞模式的封面顯示",
+        "description": "設定封面的顯示模式、形狀與播放效果",
         "visible": "顯示封面",
-        "visibleDescription": "選擇封面在哪些介面模式中顯示",
+        "visibleDescription": "選擇在一般模式、歌詞模式或兩者中顯示封面",
         "square": "方形",
         "rounded": "圓角",
         "circle": "圓形",
@@ -128,229 +126,227 @@
         "lyricsOnly": "僅歌詞模式",
         "hidden": "永遠隱藏",
         "shape": "封面形狀",
-        "shapeDescription": "選擇方形、圓角或圓形封面",
+        "shapeDescription": "選擇封面的裁切形狀",
         "rotate": "播放時旋轉",
-        "rotateDescription": "播放時持續旋轉，暫停後停在目前位置",
+        "rotateDescription": "播放時持續旋轉，暫停時保持目前位置",
         "source": "顯示播放器來源",
         "sourceDescription": "在封面右下角顯示目前播放器的小圖示"
       },
       "elementOrder": {
         "title": "元素排列",
-        "description": "拖曳調整封面、歌曲資訊與控制按鈕群組的顯示順序"
+        "description": "拖曳調整封面、歌曲資訊與控制按鈕的排列順序"
       },
       "progress": {
         "title": "進度列",
-        "description": "進度列在工作列元件中的呈現方式",
+        "description": "設定播放進度的顯示樣式與位置",
         "visible": "顯示進度列",
         "style": "進度樣式",
-        "styleDescription": "選擇橫列或垂直漸層效果",
-        "bar": "橫列進度",
-        "gradient": "垂直漸層",
-        "position": "橫列位置",
-        "positionDescription": "將橫列進度放在元件頂部或底部",
+        "styleDescription": "選擇水平進度列或覆蓋元件高度的漸層效果",
+        "bar": "水平進度列",
+        "gradient": "全高漸層",
+        "position": "進度列位置",
+        "positionDescription": "將水平進度列放在元件頂部或底部",
         "top": "頂部",
         "bottom": "底部"
       },
       "spectrum": {
         "title": "頻譜",
-        "description": "顯示目前播放器的即時頻譜",
+        "description": "顯示目前播放器音訊的即時頻譜",
         "visible": "顯示頻譜",
         "visibleDescription": "關閉後會停止音訊擷取與頻譜計算",
         "barCount": "頻譜列數量",
-        "barCountDescription": "較少更簡潔，較多可呈現更細的頻率變化",
+        "barCountDescription": "數量越少越簡潔，越多則能顯示更細緻的頻率變化",
         "width": "頻譜寬度",
-        "widthDescription": "頻譜佔元件總寬度的比例",
+        "widthDescription": "調整頻譜佔整個元件寬度的比例",
         "horizontal": "水平位置",
-        "horizontalDescription": "從元件左側到右側連續調整頻譜位置",
+        "horizontalDescription": "調整頻譜在元件內的水平位置",
         "vertical": "垂直位置",
         "verticalDescription": "置中時向上下擴張，底部對齊時向上生長",
         "sensitivity": "靈敏度",
-        "sensitivityDescription": "放大或降低頻譜對輸入音量的反應",
+        "sensitivityDescription": "調整頻譜對輸入音量變化的反應幅度",
         "smoothing": "動態平滑",
-        "smoothingDescription": "數值越高越穩定，但快速變化的反應會更慢",
+        "smoothingDescription": "數值越高，動畫越平穩，但反應變化越慢",
         "frameRate": "幀率",
-        "frameRateDescription": "降低幀率可減少頻譜擷取、通訊與繪製開銷"
+        "frameRateDescription": "降低幀率可減少頻譜取樣、通訊與繪製開銷"
       },
       "trackInfo": {
         "title": "歌曲資訊",
-        "description": "設定歌名對齊與溢位後的捲動行為",
+        "description": "設定歌曲資訊的對齊與捲動方式",
         "visible": "顯示歌曲資訊",
-        "visibleDescription": "隱藏歌名與歌手，並將空間留給其他元件",
-        "alignmentDescription": "調整歌名與歌手在可用區域內的對齊方向",
+        "visibleDescription": "關閉後隱藏歌名與歌手，並將空間留給其他元素",
+        "alignmentDescription": "調整歌名與歌手在可用區域內的對齊方式",
         "scroll": "歌名超出時捲動",
-        "scrollDescription": "關閉後超出部分顯示為省略符號",
+        "scrollDescription": "關閉後，超出可用寬度的內容將以省略符號顯示",
         "speed": "捲動速度",
-        "speedDescription": "依每秒移動的像素數控制捲動快慢",
+        "speedDescription": "以每秒移動的像素數調整捲動速度",
         "mode": "捲動方式",
-        "modeDescription": "設定歌名到達捲動邊界後的行為",
+        "modeDescription": "選擇歌名到達邊界後的捲動行為",
         "loop": "循環",
-        "restart": "每次從頭",
-        "alternate": "來回捲動"
+        "restart": "返回起點",
+        "alternate": "往返捲動"
       },
       "lyrics": {
         "title": "歌詞",
-        "description": "設定工作列歌詞的版面與顯示",
+        "description": "設定工作列歌詞的內容、外觀與同步方式",
         "enabled": "開啟歌詞",
-        "enabledDescription": "關閉後恢復顯示歌曲資訊與控制按鈕",
+        "enabledDescription": "關閉後恢復顯示歌曲資訊與播放控制",
         "lines": "顯示行數",
-        "linesDescription": "雙行時可指定第二行優先顯示的內容",
+        "linesDescription": "選擇單行或雙行顯示；雙行模式可設定第二行內容",
         "single": "單行",
         "double": "雙行",
-        "secondary": "第二行後援規則",
-        "secondaryDescription": "只有「翻譯優先」會在沒有翻譯時顯示下一句",
+        "secondary": "第二行內容",
+        "secondaryDescription": "「翻譯優先」會在沒有翻譯時自動顯示下一句",
         "translationOnly": "僅翻譯",
         "nextLine": "下一句",
         "translationFirst": "翻譯優先",
         "wordHighlight": "逐字醒目提示",
-        "wordHighlightDescription": "僅在歌詞來源包含逐字時間軸時生效",
-        "alignmentDescription": "歌詞在空白區域內的水平位置",
-        "size": "歌詞大小",
-        "sizeDescription": "字級範圍為 10–18px，雙行時自動縮小行距",
+        "wordHighlightDescription": "僅對包含逐字時間軸的歌詞生效",
+        "alignmentDescription": "調整歌詞在可用區域內的水平位置",
+        "size": "歌詞字級",
+        "sizeDescription": "字級範圍為 10–18px；雙行模式會自動縮小行距",
         "colors": "歌詞顏色",
-        "colorsDescription": "自訂模式可分別設定已播放與未播放歌詞顏色",
+        "colorsDescription": "跟隨元件主題色，或分別設定已播放與未播放顏色",
         "followTheme": "跟隨主題",
         "playedColor": "已播放顏色",
-        "playedColorDescription": "逐字歌詞已經播放的部分",
+        "playedColorDescription": "逐字歌詞中已經播放的文字",
         "unplayedColor": "未播放顏色",
-        "unplayedColorDescription": "未播放文字與第二行共用此顏色",
+        "unplayedColorDescription": "用於未播放文字與第二行歌詞",
         "invalidColor": "請輸入 #RRGGBB 格式的顏色",
         "font": "歌詞字型",
-        "fontDescription": "搜尋 Windows 字型；每次展開都會發現新安裝的字型",
+        "fontDescription": "使用 Windows 字型；開啟清單時會自動尋找新安裝的字型",
         "systemFont": "系統預設",
         "searchFonts": "搜尋系統字型…",
         "fontLoadFailed": "系統字型讀取失敗",
         "noFonts": "找不到字型",
         "animation": "動畫效果",
-        "animationDescription": "切換到下一句時的移動與漸層方式",
+        "animationDescription": "選擇切換歌詞時的移動與淡入淡出效果",
         "animationPlaceholder": "選擇動畫",
-        "animationUp": "向上漸層",
+        "animationUp": "向上移動",
         "animationFade": "原地漸隱漸顯",
         "preRoll": "提前完成動畫",
-        "preRollOn": "開啟：在人聲前完成動畫，更貼合節拍，但連續演唱時上一句會提前離場；",
-        "preRollOff": "關閉：依時間戳記切換，不提前上一句，但動畫會與人聲同時開始",
+        "preRollOn": "開啟：動畫在人聲開始前完成，節奏更緊湊；連續演唱時，上一句可能提前離場。",
+        "preRollOff": "關閉：嚴格依時間戳記切換，動畫與人聲同時開始。",
         "offset": "時間偏移",
-        "offsetDescription": "校準歌詞來源時間；正值延後、負值提前，不改變動畫提前完成",
+        "offsetDescription": "校準歌詞時間；正值延後，負值提前，不影響動畫提前量",
         "network": "網路策略",
-        "networkDescription": "僅本機與快取不會發起新的歌詞網路請求",
+        "networkDescription": "選擇自動連線取得，或僅使用本機歌詞與現有快取",
         "localOnly": "僅本機與快取",
         "onlineStrategy": "線上解析策略",
         "parallel": "平行查詢",
-        "parallelDescription": "平行查詢：等待較短，但會同時請求多個來源",
+        "parallelDescription": "同時查詢多個來源，通常較快，但會產生更多網路要求。",
         "currentOnly": "僅目前平台",
-        "currentOnlyDescription": "僅目前平台：只查詢目前播放平台自己的線上介面，不使用其他平台後援",
+        "currentOnlyDescription": "只查詢目前播放器所屬平台，不使用其他平台作為備用來源。",
         "onlineSources": "線上介面",
-        "onlineSourcesDescription": "選擇要使用的線上介面，並可拖曳調整請求順序；未勾選的介面不會發起請求"
+        "onlineSourcesDescription": "選擇允許使用的線上來源，並拖曳調整優先順序；未選來源不會發起查詢"
       },
       "mediaSession": {
-        "title": "播放器選擇策略",
-        "description": "決定多個播放器同時存在時，工作列顯示哪一個",
+        "title": "播放器選擇",
+        "description": "設定多個播放器同時存在時優先顯示哪一個",
         "strategy": "選擇策略",
-        "strategyDescription": "最近開始播放優先只在播放器真正播放時切換，開啟用戶端不會搶佔",
+        "strategyDescription": "「最近播放優先」只在播放器實際開始播放時切換，單純開啟應用程式不會觸發切換",
         "placeholder": "選擇策略",
         "recent": "最近開始播放優先",
-        "sticky": "目前播放器優先",
+        "sticky": "播放時保持目前播放器",
         "windows": "跟隨 Windows",
         "fixed": "固定播放器優先順序",
-        "supportedOnly": "禁止擷取其他媒體",
-        "supportedOnlyDescription": "開啟後忽略 QQ 音樂、網易雲音樂、汽水音樂與酷狗音樂以外的媒體工作階段",
+        "supportedOnly": "忽略其他媒體",
+        "supportedOnlyDescription": "僅接收 QQ 音樂、網易雲音樂、汽水音樂與酷狗音樂的媒體工作階段",
         "priority": "播放器優先順序",
-        "priorityDescription": "多個播放器同時播放時，優先顯示排序較前的播放器"
+        "priorityDescription": "多個播放器同時播放時，優先顯示清單中較前面的播放器"
       },
       "theme": {
         "title": "元件主題色",
-        "description": "影響進度列、頻譜、音量列等元素的顏色",
-        "source": "顏色來源",
-        "sourceDescription": "封面主色會隨目前歌曲切換，系統色跟隨 Windows",
+        "description": "為進度列、頻譜與音量列選擇封面色、Windows 強調色或自訂顏色",
         "cover": "封面主色",
-        "system": "系統色",
+        "system": "Windows 強調色",
         "presets": "候選顏色",
-        "presetsDescription": "選擇常用顏色，點擊後立即套用",
+        "presetsDescription": "選擇預設顏色並立即套用",
         "useColor": "使用顏色 {color}",
         "customValue": "自訂顏色值",
-        "customDescription": "支援 #RRGGBB 格式",
+        "customDescription": "輸入 #RRGGBB 格式的十六進位顏色值",
         "selectCustom": "選擇自訂主題色",
         "invalidColor": "請輸入六位十六進位顏色，例如 #1677ff"
       }
     },
     "data": {
-      "usedCapacity": "已用 / {capacity} 上限",
-      "usedApproximateCapacity": "已用 / 約 {capacity} 上限",
+      "usedCapacity": "已用 · 上限 {capacity}",
+      "usedApproximateCapacity": "已用 · 上限約 {capacity}",
       "oneFile": "1 個檔案",
       "noFile": "尚未建立檔案",
       "files": "{count} 個檔案",
       "cache": {
         "title": "歌詞快取",
-        "description": "Muse Tune 維護的歌詞快取資料",
-        "clearCurrent": "清理目前歌曲",
-        "refreshCurrent": "重新取得",
-        "clearAll": "全部清理",
-        "clearConfirmTitle": "清理全部歌詞快取？",
-        "clearConfirmDescription": "已快取的歌詞將被刪除，之後播放歌曲時會按需重新取得。",
-        "entries": "{count} 個項目",
-        "fileCount": "快取檔案數量",
-        "capacity": "歌詞快取容量",
-        "currentCleared": "目前歌曲快取已清理",
-        "currentClearedDescription": "該項目已從 Muse Tune 快取中移除",
+        "description": "管理 Muse Tune 儲存的歌詞快取",
+        "clearCurrent": "清除目前歌曲",
+        "refreshCurrent": "重新取得目前歌曲",
+        "clearAll": "清除全部快取",
+        "clearConfirmTitle": "清除全部歌詞快取？",
+        "clearConfirmDescription": "所有已快取歌詞都將被刪除，並在後續播放時視需要重新取得。",
+        "entries": "{count}",
+        "fileCount": "歌詞快取項目",
+        "capacity": "歌詞快取用量",
+        "currentCleared": "已清除目前歌曲快取",
+        "currentClearedDescription": "目前歌曲的歌詞已從 Muse Tune 快取中移除",
         "refreshStarted": "已開始重新取得目前歌詞",
-        "refreshStartedDescription": "將依目前連線策略重新執行完整取得流程"
+        "refreshStartedDescription": "將依照目前連線策略重新執行完整取得流程"
       },
       "config": {
         "title": "應用程式設定",
-        "description": "應用程式設定和使用者偏好",
-        "reset": "重設設定",
-        "resetConfirmTitle": "重設全部設定？",
+        "description": "管理應用程式設定與使用者偏好",
+        "reset": "重設應用程式設定",
+        "resetConfirmTitle": "重設所有應用程式設定？",
         "resetConfirmDescription": "所有設定將恢復預設值，Muse Tune 隨後會自動重新啟動。此操作無法復原。",
         "resetAndRestart": "重設並重新啟動",
-        "fileSize": "設定檔大小"
+        "fileSize": "設定檔"
       },
       "logs": {
-        "title": "日誌",
-        "description": "執行日誌與錯誤記錄",
-        "clearHistory": "清理歷史日誌",
-        "clearConfirmTitle": "清理歷史日誌？",
-        "clearConfirmDescription": "已輪替的歷史日誌將被刪除；目前日誌會保留並繼續寫入，無需重新啟動應用程式。",
-        "fileDescription": "包含目前日誌與輪替歷史"
+        "title": "執行日誌",
+        "description": "檢視應用程式執行記錄與錯誤資訊",
+        "clearHistory": "清除歷史日誌",
+        "clearConfirmTitle": "清除歷史日誌？",
+        "clearConfirmDescription": "已封存的歷史日誌將被刪除；目前日誌會保留並繼續記錄，無需重新啟動應用程式。",
+        "fileDescription": "包含目前日誌與歷史封存"
       }
     },
     "about": {
       "update": {
         "title": "應用程式更新",
         "versions": "目前 {current} · 最新 {latest}",
-        "detected": "自動檢查發現 {version}",
-        "source": "透過 GitHub Releases 取得正式版本",
-        "releaseNotes": "查看更新日誌",
+        "detected": "自動檢查發現版本 {version}",
+        "source": "從 GitHub Releases 取得穩定版本",
+        "releaseNotes": "查看版本資訊",
         "check": "檢查更新",
         "install": "下載並安裝",
         "downloading": "正在下載",
         "downloadingProgress": "正在下載 {progress}%",
         "automatic": "自動檢查更新",
-        "automaticDescription": "應用程式執行期間依所選週期檢查",
-        "frequency": "自動檢查更新頻率",
+        "automaticDescription": "應用程式執行時依所選頻率檢查新版本",
+        "frequency": "自動檢查頻率",
         "daily": "每天",
         "weekly": "每週",
         "monthly": "每月",
         "downloadProgress": "更新下載進度",
         "latest": "已是最新版本",
-        "available": "發現新版本",
-        "checkFailed": "檢查更新失敗",
-        "openReleaseNotesFailed": "開啟更新日誌失敗",
+        "available": "有新版本可用",
+        "checkFailed": "無法檢查更新",
+        "openReleaseNotesFailed": "無法開啟版本資訊",
         "installConfirmTitle": "安裝更新",
-        "installConfirmDescription": "更新下載完成後，Muse Tune 將自動結束並安裝新版本。是否繼續？",
-        "installerFailed": "安裝程式無法啟動",
+        "installConfirmDescription": "下載完成後，Muse Tune 將自動結束並安裝更新。是否繼續？",
+        "installerFailed": "無法啟動安裝程式",
         "installFailed": "更新安裝失敗：{reason}",
-        "saveAutomaticFailed": "儲存自動檢查設定失敗",
-        "saveFrequencyFailed": "儲存檢查週期失敗",
-        "initializeFailed": "初始化更新設定失敗",
-        "notificationTitle": "Muse Tune 有新版本",
-        "notificationBody": "版本 {version} 已發布，可前往「設定 → 關於」下載並安裝。"
+        "saveAutomaticFailed": "無法儲存自動檢查設定",
+        "saveFrequencyFailed": "無法儲存檢查頻率",
+        "initializeFailed": "無法初始化更新設定",
+        "notificationTitle": "Muse Tune 新版本可用",
+        "notificationBody": "版本 {version} 已發布。前往「設定 → 關於」即可下載並安裝。"
       },
       "project": {
         "title": "專案與授權",
-        "description": "開源專案 · MIT License",
+        "description": "開放原始碼軟體 · MIT 授權條款",
         "website": "官方網站",
-        "repository": "專案首頁",
-        "issues": "問題回報",
-        "openFailed": "無法使用系統瀏覽器開啟連結"
+        "repository": "原始碼儲存庫",
+        "issues": "回報問題",
+        "openFailed": "無法在預設瀏覽器中開啟連結"
       }
     }
   },
@@ -368,10 +364,10 @@
     "dragItem": "拖曳{item}",
     "hexValue": "{item}十六進位值",
     "unavailable": "暫無",
-    "cleared": "已清理",
+    "cleared": "已清除",
     "cancel": "取消",
-    "clear": "清理",
-    "openDirectory": "開啟目錄",
+    "clear": "清除",
+    "openDirectory": "開啟資料夾",
     "continue": "繼續",
     "copied": "已複製",
     "refresh": "重新整理"

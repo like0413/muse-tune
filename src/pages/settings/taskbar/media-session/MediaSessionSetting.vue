@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AudioLines } from '@lucide/vue'
+import { RadioTower } from '@lucide/vue'
 
 import {
   Field,
@@ -134,8 +134,8 @@ onMounted(loadPolicy)
 
 <template>
   <CollapsibleItem>
-    <ItemMedia class="icon-tone-violet-500">
-      <AudioLines />
+    <ItemMedia class="icon-tone-indigo-500">
+      <RadioTower />
     </ItemMedia>
     <ItemContent>
       <ItemTitle>{{ t('settings.taskbar.mediaSession.title') }}</ItemTitle>
@@ -173,6 +173,20 @@ onMounted(loadPolicy)
           </Select>
         </Field>
 
+        <Field v-if="selectedStrategy === 'fixed_priority'" orientation="horizontal">
+          <FieldContent>
+            <FieldTitle>{{ t('settings.taskbar.mediaSession.priority') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.mediaSession.priorityDescription')
+            }}</FieldDescription>
+          </FieldContent>
+          <PlayerPriorityEditor
+            :players="selectedPriority"
+            :disabled="policySaving"
+            @reorder="updatePriority"
+          />
+        </Field>
+
         <Field orientation="horizontal">
           <FieldContent>
             <FieldTitle>{{ t('settings.taskbar.mediaSession.supportedOnly') }}</FieldTitle>
@@ -185,20 +199,6 @@ onMounted(loadPolicy)
             :disabled="policySaving"
             :aria-label="t('settings.taskbar.mediaSession.supportedOnly')"
             @update:model-value="updateOnlySupportedPlayers"
-          />
-        </Field>
-
-        <Field v-if="selectedStrategy === 'fixed_priority'" orientation="horizontal">
-          <FieldContent>
-            <FieldTitle>{{ t('settings.taskbar.mediaSession.priority') }}</FieldTitle>
-            <FieldDescription>{{
-              t('settings.taskbar.mediaSession.priorityDescription')
-            }}</FieldDescription>
-          </FieldContent>
-          <PlayerPriorityEditor
-            :players="selectedPriority"
-            :disabled="policySaving"
-            @reorder="updatePriority"
           />
         </Field>
       </FieldGroup>
