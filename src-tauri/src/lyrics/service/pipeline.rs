@@ -82,10 +82,11 @@ pub(super) struct AuxiliaryContentQuality {
     romanization_coverage: u8,
 }
 
-/// 跨平台候选依次比较时间精度、当前平台、本地来源和辅助内容。
+/// 跨平台候选依次比较时间精度、当前平台、本地来源和辅助内容；同层内按用户排定的接口顺序。
 pub(super) fn select_best_candidate(
     track: &TrackDescriptor,
     candidates: Vec<LyricsCandidate>,
+    online_sources: &[MediaPlayer],
 ) -> Option<LyricsCandidate> {
     candidates
         .into_iter()
@@ -101,7 +102,7 @@ pub(super) fn select_best_candidate(
                 u8::from(candidate.resolved.source.player == track.player),
                 u8::from(candidate.resolved.source.kind == LyricsSourceKind::Local),
                 auxiliary_content_quality(&candidate.resolved.lines),
-                source_priority(candidate.resolved.source.player),
+                source_priority(candidate.resolved.source.player, online_sources),
             )
         })
 }
@@ -311,15 +312,13 @@ pub(super) fn format_milliseconds(milliseconds: u64) -> String {
     format!("{:.1} 秒", milliseconds as f64 / 1_000.0)
 }
 
-/// 同精度、同来源类型时保持既有的 QQ → 网易云兜底顺序。
-fn source_priority(player: MediaPlayer) -> u8 {
-    match player {
-        MediaPlayer::QqMusic => 4,
-        MediaPlayer::NeteaseCloudMusic => 3,
-        MediaPlayer::SodaMusic => 2,
-        MediaPlayer::KugouMusic => 1,
-        MediaPlayer::Other => 0,
-    }
+/// 同精度、同来源类型时的择优权重：取自用户勾选并排定的在线接口顺序，越靠前的平台权重越高，
+/// 不在列表里的平台（被取消勾选或未接入）权重最低。
+fn source_priority(player: MediaPlayer, online_sources: &[MediaPlayer]) -> u8 {
+    online_sources
+        .iter()
+        .position(|source| *source == player)
+        .map_or(0, |index| (online_sources.len() - index) as u8)
 }
 
 #[cfg(test)]
@@ -327,7 +326,7 @@ mod tests {
     use super::*;
     use crate::lyrics::model::{LyricWord, LyricsSource, LyricsSourceKind};
     use crate::lyrics::track::TrackDescriptor;
-    use crate::media::MediaPlayer;
+    use crate::media::{MediaPlayer, supported_players};
 
     /// 时间轴校验与候选排序只关心播放器、时长这两个匹配字段。
     fn track(player: MediaPlayer, duration_ms: Option<u64>) -> TrackDescriptor {
@@ -547,6 +546,7 @@ mod tests {
         let selected = select_best_candidate(
             &track(MediaPlayer::QqMusic, Some(200_000)),
             vec![notice, real],
+            supported_players(),
         )
         .expect("真歌词应当被选中");
         assert_eq!(selected.resolved.source.player, MediaPlayer::KugouMusic);
@@ -570,12 +570,13 @@ mod tests {
         let selected = select_best_candidate(
             &track(MediaPlayer::QqMusic, Some(200_000)),
             vec![lined, worded],
+            supported_players(),
         )
         .expect("逐字歌词应当胜出");
         assert_eq!(selected.resolved.source.player, MediaPlayer::KugouMusic);
     }
 
-    /// 同精度层内，当前播放器的来源优于其他平台——这是"当前平台优先"策略的落点。
+    /// 同精度层内，当前播放器的来源优于其他平台——会话选择把"正在播放的平台"当作最可信来源。
     #[test]
     fn current_player_wins_within_same_layer() {
         let other_player = candidate(
@@ -591,6 +592,7 @@ mod tests {
         let selected = select_best_candidate(
             &track(MediaPlayer::QqMusic, Some(200_000)),
             vec![other_player, current_player],
+            supported_players(),
         )
         .expect("应当有候选胜出");
         assert_eq!(selected.resolved.source.player, MediaPlayer::QqMusic);
@@ -615,6 +617,7 @@ mod tests {
         let selected = select_best_candidate(
             &track(MediaPlayer::QqMusic, Some(200_000)),
             vec![bare, translated],
+            supported_players(),
         )
         .expect("应当有候选胜出");
         assert!(selected.resolved.lines[0].translation.is_some());
@@ -628,15 +631,24 @@ mod tests {
             vec![line(0, 5_000, "第一句")],
         );
         assert!(
-            select_best_candidate(&track(MediaPlayer::QqMusic, None), vec![no_duration]).is_none()
+            select_best_candidate(
+                &track(MediaPlayer::QqMusic, None),
+                vec![no_duration],
+                supported_players(),
+            )
+            .is_none()
         );
     }
 
     #[test]
     fn empty_candidates_yield_none() {
         assert!(
-            select_best_candidate(&track(MediaPlayer::QqMusic, Some(200_000)), Vec::new())
-                .is_none()
+            select_best_candidate(
+                &track(MediaPlayer::QqMusic, Some(200_000)),
+                Vec::new(),
+                supported_players(),
+            )
+            .is_none()
         );
     }
 
@@ -697,5 +709,57 @@ mod tests {
             lines: vec![word_line(0, 1_000, "a")],
         };
         assert_eq!(source_summary(&local_word), "酷狗音乐 · 本地 · 逐字");
+    }
+
+    /// 择优权重必须跟随用户排定的在线接口顺序：越靠前权重越高，不在列表里的平台最低。
+    #[test]
+    fn source_priority_follows_the_configured_online_order() {
+        let online_sources = [MediaPlayer::KugouMusic, MediaPlayer::QqMusic];
+
+        assert!(
+            source_priority(online_sources[0], &online_sources)
+                > source_priority(online_sources[1], &online_sources),
+            "排在前面的接口必须权重更高，否则用户调整顺序后胜出的仍是另一个平台"
+        );
+        assert_eq!(
+            source_priority(MediaPlayer::NeteaseCloudMusic, &online_sources),
+            0,
+            "被取消勾选或未接入的平台必须排在最后"
+        );
+    }
+
+    /// 同一批候选在用户把某家接口排到最前时应当改判给该平台。
+    #[test]
+    fn configured_order_decides_between_equal_candidates() {
+        let kugou = candidate(
+            MediaPlayer::KugouMusic,
+            LyricsSourceKind::Online,
+            vec![line(0, 5_000, "第一句"), line(5_000, 10_000, "第二句")],
+        );
+        let qq = candidate(
+            MediaPlayer::QqMusic,
+            LyricsSourceKind::Online,
+            vec![line(0, 5_000, "甲"), line(5_000, 10_000, "乙")],
+        );
+        let track = track(MediaPlayer::NeteaseCloudMusic, Some(200_000));
+
+        let preferred_kugou = select_best_candidate(
+            &track,
+            vec![qq.clone(), kugou.clone()],
+            &[MediaPlayer::KugouMusic, MediaPlayer::QqMusic],
+        )
+        .expect("应当有候选胜出");
+        assert_eq!(
+            preferred_kugou.resolved.source.player,
+            MediaPlayer::KugouMusic
+        );
+
+        let preferred_qq = select_best_candidate(
+            &track,
+            vec![qq, kugou],
+            &[MediaPlayer::QqMusic, MediaPlayer::KugouMusic],
+        )
+        .expect("应当有候选胜出");
+        assert_eq!(preferred_qq.resolved.source.player, MediaPlayer::QqMusic);
     }
 }

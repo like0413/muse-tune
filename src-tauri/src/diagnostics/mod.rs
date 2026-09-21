@@ -64,10 +64,10 @@ pub fn collect<R: Runtime>(
         visible_bar_window_count,
         content_visible: taskbar::content_visible(),
         display_target,
-        placement: format!("{placement:?}").to_lowercase(),
-        overlap_priority: format!("{overlap_priority:?}").to_lowercase(),
+        placement,
+        overlap_priority,
         content_width_dip,
-        width_mode: format!("{width_mode:?}").to_lowercase(),
+        width_mode,
         displays,
         windows: bar_windows,
     };

@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use crate::lyrics::{
     error::LyricsError,
-    model::{LyricsLookupOutcome, LyricsParallelGroup, LyricsResolutionOutcome},
+    model::{LyricsLookupOutcome, LyricsResolutionOutcome},
     network::ResolutionDeadline,
     players,
     track::TrackDescriptor,
@@ -70,7 +70,7 @@ impl LyricsService {
         execution: AttemptExecution,
         track: &TrackDescriptor,
         generation: u64,
-        group: Option<LyricsParallelGroup>,
+        parallel: bool,
     ) -> RecordedAttempt {
         let AttemptExecution {
             attempt,
@@ -80,9 +80,9 @@ impl LyricsService {
         if let Ok(LyricsLookupOutcome::Hit(resolved)) = &result
             && let Some(reason) = timeline_rejection_reason(track, &resolved.lines)
         {
-            self.record_resolution_step_in_group(
+            self.record_parallel_resolution_step(
                 generation,
-                group,
+                parallel,
                 attempt.site,
                 LyricsResolutionOutcome::Error,
                 Some(format!(
@@ -113,9 +113,9 @@ impl LyricsService {
                 },
             )
         };
-        self.record_resolution_step_in_group(
+        self.record_parallel_resolution_step(
             generation,
-            group,
+            parallel,
             attempt.site,
             outcome,
             Some(detail),

@@ -11,12 +11,16 @@ import { maxBy, minBy } from 'es-toolkit'
 
 import { TASKBAR_THEME_PRESET_COLORS } from './colors'
 
+/** 主色与鲜艳点缀的最低色度（oklch 的 c）；低于它色相无意义，会继续往下找或走兜底色。 */
 const MINIMUM_DOMINANT_CHROMA = 0.05
+/** 柔和点缀的最低色度；门槛比主色低，用于在近灰封面上保住整体的冷暖倾向。 */
 const MINIMUM_MUTED_CHROMA = 0.01
+/** 连点缀色都给不出色相时的兜底色，固定取色板索引 10（蓝）。 */
 const COVER_COLOR_FALLBACK = TASKBAR_THEME_PRESET_COLORS[10]
 
 const EXTRACTION_OPTIONS = {
   colorSpace: 'oklch',
+  // 像素采样步长（1 = 逐像素，库默认 10）：越小越准也越慢，改动会同时影响取色结果与耗时。
   quality: 8,
   ignoreWhite: true,
   minSaturation: 0,

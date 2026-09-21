@@ -1,11 +1,15 @@
 import { invoke } from '@tauri-apps/api/core'
 
+import type { MediaPlayer } from '@/features/media/types'
+
 import type { LyricsOnlineStrategy, LyricsSnapshot } from './types'
 
 interface LyricsPreferences {
   enabled: boolean
   allowOnline: boolean
   onlineStrategy: LyricsOnlineStrategy
+  /** 生效的在线接口，按请求顺序排列；空数组表示不发起在线查询。 */
+  onlineSources: MediaPlayer[]
 }
 
 export const LYRICS_CHANGED_EVENT = 'lyrics://changed'
@@ -22,5 +26,6 @@ export function setLyricsPreferences(preferences: LyricsPreferences): Promise<vo
     enabled: preferences.enabled,
     allowOnline: preferences.allowOnline,
     onlineStrategy: preferences.onlineStrategy,
+    onlineSources: preferences.onlineSources,
   })
 }

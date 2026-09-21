@@ -16,6 +16,7 @@ use super::{
     MediaControlAction, MediaRuntimeDiagnostics, MediaSessionSelectionPolicy, MediaSessionSnapshot,
     MediaVolumeSnapshot, spectrum::AudioSpectrumController, volume::ApplicationVolumeController,
 };
+use crate::error::Error;
 
 mod apartment;
 mod deadlines;
@@ -38,15 +39,15 @@ pub(super) enum WorkerMessage {
     EventsReady,
     SelectionPolicyChanged(
         MediaSessionSelectionPolicy,
-        mpsc::SyncSender<Result<(), String>>,
+        mpsc::SyncSender<Result<(), Error>>,
     ),
-    Control(MediaControlAction, mpsc::SyncSender<Result<bool, String>>),
-    TogglePlayerWindow(mpsc::SyncSender<Result<(), String>>),
+    Control(MediaControlAction, mpsc::SyncSender<Result<bool, Error>>),
+    TogglePlayerWindow(mpsc::SyncSender<Result<(), Error>>),
     GetVolume(mpsc::SyncSender<Option<MediaVolumeSnapshot>>),
-    SetVolume(f32, mpsc::SyncSender<Result<MediaVolumeSnapshot, String>>),
-    ToggleMute(mpsc::SyncSender<Result<MediaVolumeSnapshot, String>>),
+    SetVolume(f32, mpsc::SyncSender<Result<MediaVolumeSnapshot, Error>>),
+    ToggleMute(mpsc::SyncSender<Result<MediaVolumeSnapshot, Error>>),
     GetDiagnostics(mpsc::SyncSender<MediaRuntimeDiagnostics>),
-    SpectrumEnabled(bool, u16, mpsc::SyncSender<Result<(), String>>),
+    SpectrumEnabled(bool, u16, mpsc::SyncSender<Result<(), Error>>),
     Shutdown,
 }
 

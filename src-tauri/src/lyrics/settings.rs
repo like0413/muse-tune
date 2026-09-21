@@ -1,12 +1,36 @@
 use tauri::Runtime;
 use tauri_plugin_store::StoreExt;
 
+use crate::media::{MediaPlayer, supported_players};
 use crate::native_defaults::{self, LyricsNetworkPolicy};
 use crate::settings_store::PATH as SETTINGS_STORE_PATH;
 
 use super::model::LyricsOnlineStrategy;
 
 const LYRICS_DISPLAY_KEY: &str = "taskbar.lyrics";
+
+/// 需要作为一个快照提交和读取的歌词运行偏好。
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct LyricsPreferences {
+    pub(super) enabled: bool,
+    pub(super) allow_online: bool,
+    pub(super) online_strategy: LyricsOnlineStrategy,
+    /// 参与在线检索的平台，顺序即尝试顺序；只含用户勾选过的平台。
+    pub(super) online_sources: Vec<MediaPlayer>,
+}
+
+impl Default for LyricsPreferences {
+    /// 状态不可用时回退到与前端共用同一份数据的默认偏好。
+    fn default() -> Self {
+        let defaults = &native_defaults::shared().taskbar.lyrics;
+        Self {
+            enabled: defaults.enabled,
+            allow_online: defaults.network_policy.allows_online(),
+            online_strategy: defaults.online_strategy,
+            online_sources: supported_players().to_vec(),
+        }
+    }
+}
 
 /// 从版本化前端设置中恢复歌词运行偏好，各字段独立回退共享默认值。
 ///
@@ -15,9 +39,7 @@ const LYRICS_DISPLAY_KEY: &str = "taskbar.lyrics";
 /// 前端就会按不同偏好运行。版本号与默认值同来自 `native-defaults.json`。
 ///
 /// 枚举字段按取值严格解析，非法值回退默认值，与前端 `normalizeTaskbarLyricsSettings` 一致。
-pub fn restore_lyrics_preferences<R: Runtime>(
-    app: &tauri::App<R>,
-) -> (bool, bool, LyricsOnlineStrategy) {
+pub(super) fn restore_lyrics_preferences<R: Runtime>(app: &tauri::App<R>) -> LyricsPreferences {
     let shared = native_defaults::shared();
     let defaults = &shared.taskbar.lyrics;
     let value = app
@@ -43,5 +65,55 @@ pub fn restore_lyrics_preferences<R: Runtime>(
         .get("onlineStrategy")
         .and_then(|strategy| serde_json::from_value::<LyricsOnlineStrategy>(strategy.clone()).ok())
         .unwrap_or(defaults.online_strategy);
-    (enabled, allow_online, online_strategy)
+    let online_sources = restore_online_sources(&value);
+    LyricsPreferences {
+        enabled,
+        allow_online,
+        online_strategy,
+        online_sources,
+    }
+}
+
+/// 由持久化的“完整顺序 + 启用集合”解析出实际参与检索的平台。
+///
+/// 规则与前端 `normalizeTaskbarLyricsSettings` 保持一致：顺序先补齐为全部已接入平台各一次，
+/// 再与启用集合求交并保持顺序；任一项缺失或损坏时按“全部平台都启用”回退。
+fn restore_online_sources(value: &serde_json::Value) -> Vec<MediaPlayer> {
+    let supported = supported_players();
+    let order = value
+        .get("onlineSourceOrder")
+        .and_then(|order| serde_json::from_value::<Vec<MediaPlayer>>(order.clone()).ok())
+        .map(|order| complete_platform_order(&order, supported))
+        .unwrap_or_else(|| supported.to_vec());
+    let enabled = value
+        .get("enabledOnlineSources")
+        .and_then(|enabled| serde_json::from_value::<Vec<MediaPlayer>>(enabled.clone()).ok())
+        .map(|enabled| dedupe_supported(&enabled, supported))
+        .unwrap_or_else(|| order.clone());
+    order
+        .into_iter()
+        .filter(|player| enabled.contains(player))
+        .collect()
+}
+
+/// 把用户排定的顺序补齐成“全部已接入平台各一次”的完整排列。
+fn complete_platform_order(order: &[MediaPlayer], supported: &[MediaPlayer]) -> Vec<MediaPlayer> {
+    let mut completed = dedupe_supported(order, supported);
+    for player in supported {
+        if !completed.contains(player) {
+            completed.push(*player);
+        }
+    }
+    completed
+}
+
+/// 去重并剔除未接入的平台。
+fn dedupe_supported(players: &[MediaPlayer], supported: &[MediaPlayer]) -> Vec<MediaPlayer> {
+    let mut deduped = Vec::with_capacity(players.len());
+    for player in players {
+        if supported.contains(player) && !deduped.contains(player) {
+            deduped.push(*player);
+        }
+    }
+    deduped
 }

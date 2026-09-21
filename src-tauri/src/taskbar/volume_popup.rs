@@ -15,6 +15,8 @@ use windows::Win32::{
     },
 };
 
+use crate::error::Error;
+
 const POPUP_WINDOW_LABEL: &str = "volume-popup";
 const POPUP_OPEN_EVENT: &str = "volume://popup-open";
 const POPUP_GAP_LOGICAL: f64 = 4.0;
@@ -41,16 +43,18 @@ pub(super) fn show<R: Runtime>(
     source: &WebviewWindow<R>,
     anchor_center_x: f64,
     theme_color: String,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     if !source.label().starts_with(super::TASKBAR_WINDOW_LABEL) {
-        return Err("只有任务栏播放器可以打开音量悬浮窗".to_owned());
+        return Err(Error::Message(
+            "只有任务栏播放器可以打开音量悬浮窗".to_owned(),
+        ));
     }
     let popup = source
         .app_handle()
         .get_webview_window(POPUP_WINDOW_LABEL)
-        .ok_or_else(|| "音量悬浮窗尚未创建".to_owned())?;
-    let scale = source.scale_factor().map_err(|error| error.to_string())?;
-    let popup_hwnd = popup.hwnd().map_err(|error| error.to_string())?;
+        .ok_or_else(|| Error::Message("音量悬浮窗尚未创建".to_owned()))?;
+    let scale = source.scale_factor()?;
+    let popup_hwnd = popup.hwnd()?;
     let popup_config = source
         .app_handle()
         .config()
@@ -58,15 +62,14 @@ pub(super) fn show<R: Runtime>(
         .windows
         .iter()
         .find(|config| config.label == POPUP_WINDOW_LABEL)
-        .ok_or_else(|| "找不到音量悬浮窗配置".to_owned())?;
+        .ok_or_else(|| Error::Message("找不到音量悬浮窗配置".to_owned()))?;
     apply_configured_size(popup_hwnd, scale, popup_config.width, popup_config.height)?;
-    let source_position = source.outer_position().map_err(|error| error.to_string())?;
-    let source_size = source.outer_size().map_err(|error| error.to_string())?;
-    let popup_size = popup.outer_size().map_err(|error| error.to_string())?;
+    let source_position = source.outer_position()?;
+    let source_size = source.outer_size()?;
+    let popup_size = popup.outer_size()?;
     let monitor = source
-        .current_monitor()
-        .map_err(|error| error.to_string())?
-        .ok_or_else(|| "无法确定任务栏所在显示器".to_owned())?;
+        .current_monitor()?
+        .ok_or_else(|| Error::Message("无法确定任务栏所在显示器".to_owned()))?;
     let monitor_position = monitor.position();
     let monitor_size = monitor.size();
 
@@ -84,11 +87,9 @@ pub(super) fn show<R: Runtime>(
         source_position.y - popup_size.height as i32 - gap
     };
 
-    popup
-        .set_position(PhysicalPosition::new(x, y))
-        .map_err(|error| error.to_string())?;
+    popup.set_position(PhysicalPosition::new(x, y))?;
     attach_to_owner(&popup, source)?;
-    let owner_hwnd = source.hwnd().map_err(|error| error.to_string())?;
+    let owner_hwnd = source.hwnd()?;
     let generation = NEXT_GENERATION.fetch_add(1, Ordering::Relaxed);
     if let Ok(mut visible) = VISIBLE_POPUP.lock() {
         *visible = Some(VisiblePopup {
@@ -97,26 +98,24 @@ pub(super) fn show<R: Runtime>(
             generation,
         });
     }
-    popup.show().map_err(|error| error.to_string())?;
-    popup
-        .emit(
-            POPUP_OPEN_EVENT,
-            PopupOpenPayload {
-                owner_label: source.label().to_owned(),
-                theme_color,
-                generation,
-            },
-        )
-        .map_err(|error| error.to_string())?;
+    popup.show()?;
+    popup.emit(
+        POPUP_OPEN_EVENT,
+        PopupOpenPayload {
+            owner_label: source.label().to_owned(),
+            theme_color,
+            generation,
+        },
+    )?;
     Ok(())
 }
 
 /// 在前端离场动画结束后隐藏悬浮窗。
-pub(super) fn hide<R: Runtime>(source: &WebviewWindow<R>, generation: u64) -> Result<(), String> {
+pub(super) fn hide<R: Runtime>(source: &WebviewWindow<R>, generation: u64) -> Result<(), Error> {
     if source.label() != POPUP_WINDOW_LABEL {
-        return Err("只有音量悬浮窗可以隐藏自身".to_owned());
+        return Err(Error::Message("只有音量悬浮窗可以隐藏自身".to_owned()));
     }
-    let hwnd = source.hwnd().map_err(|error| error.to_string())?;
+    let hwnd = source.hwnd()?;
     let should_hide = VISIBLE_POPUP.lock().is_ok_and(|mut visible| {
         let matches = visible
             .is_some_and(|state| state.popup == hwnd.0 as isize && state.generation == generation);
@@ -126,7 +125,7 @@ pub(super) fn hide<R: Runtime>(source: &WebviewWindow<R>, generation: u64) -> Re
         matches
     });
     if should_hide {
-        source.hide().map_err(|error| error.to_string())?;
+        source.hide()?;
     }
     Ok(())
 }
@@ -152,9 +151,9 @@ pub(super) fn hide_for_owner(owner: HWND) {
 fn attach_to_owner<R: Runtime>(
     popup: &WebviewWindow<R>,
     owner: &WebviewWindow<R>,
-) -> Result<(), String> {
-    let popup_hwnd = popup.hwnd().map_err(|error| error.to_string())?;
-    let owner_hwnd = owner.hwnd().map_err(|error| error.to_string())?;
+) -> Result<(), Error> {
+    let popup_hwnd = popup.hwnd()?;
+    let owner_hwnd = owner.hwnd()?;
     // SAFETY: 两个句柄均来自存活的 Tauri 顶层窗口，仅调整 owner 与扩展样式。
     unsafe {
         let mut style = WINDOW_EX_STYLE(GetWindowLongPtrW(popup_hwnd, GWL_EXSTYLE) as u32);
@@ -172,7 +171,7 @@ fn apply_configured_size(
     scale: f64,
     logical_width: f64,
     logical_height: f64,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     if !scale.is_finite()
         || scale <= 0.0
         || !logical_width.is_finite()
@@ -180,7 +179,7 @@ fn apply_configured_size(
         || !logical_height.is_finite()
         || logical_height <= 0.0
     {
-        return Err("音量悬浮窗尺寸配置无效".to_owned());
+        return Err(Error::Message("音量悬浮窗尺寸配置无效".to_owned()));
     }
     let width = (logical_width * scale).round() as i32;
     let height = (logical_height * scale).round() as i32;
@@ -195,8 +194,8 @@ fn apply_configured_size(
             height,
             SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
         )
-    }
-    .map_err(|error| error.to_string())
+    }?;
+    Ok(())
 }
 
 /// 使用 Win32 隐藏窗口，保持无激活行为。

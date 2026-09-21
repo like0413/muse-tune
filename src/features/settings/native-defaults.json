@@ -15,7 +15,8 @@
   },
   "media": {
     "selectionStrategy": "recent_playback",
-    "onlySupportedPlayers": true
+    "onlySupportedPlayers": true,
+    "supportedPlayers": ["qq_music", "netease_cloud_music", "soda_music", "kugou_music"]
   },
   "versions": {
     "application": {

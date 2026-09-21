@@ -26,6 +26,7 @@ import {
   type TaskbarWidthMode,
   type TaskbarWidthPreset,
 } from '@/features/settings/bar-width'
+import { DEFAULT_TASKBAR_WIDTH } from '@/features/settings/defaults'
 
 const { t } = useI18n({ useScope: 'global' })
 
@@ -33,8 +34,8 @@ const { t } = useI18n({ useScope: 'global' })
 type WidthOption = TaskbarWidthPreset | 'auto'
 
 const WIDTH_PREVIEW_INTERVAL_MS = 50
-const selectedWidth = shallowRef(TASKBAR_WIDTH_MAX)
-const committedWidth = shallowRef(TASKBAR_WIDTH_MAX)
+const selectedWidth = shallowRef(DEFAULT_TASKBAR_WIDTH)
+const committedWidth = shallowRef(DEFAULT_TASKBAR_WIDTH)
 const committedMode = shallowRef<TaskbarWidthMode>('fixed')
 const widthSaving = shallowRef(false)
 const selectedPreset = shallowRef<WidthOption>('wide')
@@ -88,7 +89,7 @@ function getWidthValue(values: number[] | undefined): number | undefined {
 const previewWidth = useThrottleFn(
   (width: number) => {
     applyTaskbarWidth(width, 'fixed').catch((error) => {
-      console.error('预览 bar 宽度失败', error)
+      reportBackgroundFailure('预览 bar 宽度失败', error)
     })
   },
   WIDTH_PREVIEW_INTERVAL_MS,

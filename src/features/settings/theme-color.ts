@@ -18,7 +18,6 @@ export interface TaskbarThemeColor {
 
 export { DEFAULT_TASKBAR_THEME_COLOR }
 
-/** 判断主题色来源是否受支持。 */
 export function isTaskbarThemeColorSource(value: unknown): value is TaskbarThemeColorSource {
   return typeof value === 'string' && TASKBAR_THEME_COLOR_SOURCES.some((source) => source === value)
 }

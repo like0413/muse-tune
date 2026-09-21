@@ -1,10 +1,10 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
-import { clamp } from 'es-toolkit'
 
 import { reportBackgroundFailure } from '@/features/feedback/errors'
 
 import { DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS } from './defaults'
+import { normalizeIntegerInRange } from './normalize'
 import { SETTINGS_SCHEMA_VERSIONS } from './storage/schema-versions'
 import { loadVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
 
@@ -41,7 +41,6 @@ export interface TaskbarAudioSpectrumSettings {
 
 export { DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS }
 
-/** 判断外部值是否为支持的频谱对齐方式。 */
 export function isTaskbarSpectrumAlignment(value: unknown): value is TaskbarSpectrumAlignment {
   return (
     typeof value === 'string' &&
@@ -99,7 +98,6 @@ export function normalizeTaskbarAudioSpectrumSettings(
   }
 }
 
-/** 判断外部值是否为支持的频谱帧率。 */
 export function isTaskbarSpectrumFrameRate(value: unknown): value is TaskbarSpectrumFrameRate {
   return TASKBAR_SPECTRUM_FRAME_RATES.some((frameRate) => frameRate === value)
 }
@@ -111,7 +109,6 @@ const audioSpectrumStorage = {
   normalize: normalizeTaskbarAudioSpectrumSettings,
 }
 
-/** 读取频谱配置；版本不兼容时仅恢复此项默认值。 */
 export async function getTaskbarAudioSpectrumSettings(): Promise<TaskbarAudioSpectrumSettings> {
   return loadVersionedSetting(audioSpectrumStorage)
 }
@@ -177,9 +174,6 @@ export function useTaskbarAudioSpectrumSettings() {
   return { settings: readonly(settings), ready: readonly(ready) }
 }
 
-/** 将单个数值约束为指定范围内的整数。 */
 function normalizeInteger(value: unknown, min: number, max: number, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? Math.round(clamp(value, min, max))
-    : fallback
+  return normalizeIntegerInRange(value, min, max) ?? fallback
 }

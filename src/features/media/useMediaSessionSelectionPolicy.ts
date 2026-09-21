@@ -1,7 +1,7 @@
-import type { UnlistenFn } from '@tauri-apps/api/event'
-
 import { reportBackgroundFailure } from '@/features/feedback/errors'
+import { useEventState } from '@/features/ipc/useEventState'
 import {
+  DEFAULT_MEDIA_SESSION_SELECTION_POLICY,
   getMediaSessionSelectionPolicy,
   listenMediaSessionSelectionPolicyChange,
 } from '@/features/settings/media-session'
@@ -11,9 +11,7 @@ import type { MediaSessionSelectionPolicy } from './types'
 
 /** 将前端持久化策略同步到持有全部 WinRT 会话的 Rust 服务。 */
 export function useMediaSessionSelectionPolicy() {
-  let unlisten: UnlistenFn | undefined
-  let policyRevision = 0
-  let disposed = false
+  // 原生侧按到达顺序应用策略，乱序下发会让当前会话指向错误的播放器，因此全部串行排队。
   let applyQueue = Promise.resolve()
 
   /** 应用一次完整策略配置。 */
@@ -28,29 +26,14 @@ export function useMediaSessionSelectionPolicy() {
     return applyQueue
   }
 
-  /** 先监听设置变更，再读取持久化值，避免初始化期间漏掉更新。 */
-  async function initialize() {
-    try {
-      const stopListener = await listenMediaSessionSelectionPolicyChange((policy) => {
-        policyRevision += 1
-        void applyPolicy(policy)
-      })
-      if (disposed) {
-        stopListener()
-        return
-      }
-      unlisten = stopListener
-      const revisionBeforeRead = policyRevision
-      const policy = await getMediaSessionSelectionPolicy()
-      if (!disposed && policyRevision === revisionBeforeRead) await applyPolicy(policy)
-    } catch (error) {
-      reportBackgroundFailure('初始化媒体会话选择策略失败', error)
-    }
-  }
-
-  onMounted(initialize)
-  onUnmounted(() => {
-    disposed = true
-    unlisten?.()
-  })
+  const policy = useEventState(
+    {
+      read: getMediaSessionSelectionPolicy,
+      subscribe: listenMediaSessionSelectionPolicyChange,
+      failureMessage: '初始化媒体会话选择策略失败',
+    },
+    DEFAULT_MEDIA_SESSION_SELECTION_POLICY,
+  )
+  // 首次下发由初值读取触发，不额外提前下发默认策略；随后的变更逐次补发。
+  watch(policy, (next) => void applyPolicy(next))
 }

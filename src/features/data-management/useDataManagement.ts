@@ -1,3 +1,4 @@
+import { useTimeoutFn } from '@vueuse/core'
 import { toast } from 'vue-sonner'
 
 import { reportBackgroundFailure } from '@/features/feedback/errors'
@@ -14,6 +15,9 @@ import {
 } from './client'
 import type { DataDirectoryKind, DataOverview } from './types'
 
+/** 「已清理」提示的保留时长。 */
+const STATUS_RESET_DELAY_MS = 2_000
+
 /** 管理数据页的读取和用户操作状态。 */
 export function useDataManagement() {
   const { t } = useI18n({ useScope: 'global' })
@@ -26,12 +30,20 @@ export function useDataManagement() {
   const clearingLogs = shallowRef(false)
   const openingDirectory = shallowRef<DataDirectoryKind | null>(null)
   const cacheCleared = shallowRef(false)
+  const logsCleared = shallowRef(false)
   const error = shallowRef<IpcError | null>(null)
   const errorMessage = computed(() => error.value?.message ?? null)
+  const { start: scheduleCacheClearedReset, stop: cancelCacheClearedReset } = useTimeoutFn(
+    () => (cacheCleared.value = false),
+    STATUS_RESET_DELAY_MS,
+    { immediate: false },
+  )
+  const { start: scheduleLogsClearedReset, stop: cancelLogsClearedReset } = useTimeoutFn(
+    () => (logsCleared.value = false),
+    STATUS_RESET_DELAY_MS,
+    { immediate: false },
+  )
   let refreshRequestId = 0
-  let clearStatusTimer: number | undefined
-  let logClearStatusTimer: number | undefined
-  const logsCleared = shallowRef(false)
   let disposed = false
 
   /** 刷新三个数据板块的磁盘状态。 */
@@ -72,12 +84,12 @@ export function useDataManagement() {
   async function clearCache() {
     clearing.value = true
     cacheCleared.value = false
-    window.clearTimeout(clearStatusTimer)
+    cancelCacheClearedReset()
     try {
       overview.value = await clearLyricsCache()
       error.value = null
       cacheCleared.value = true
-      clearStatusTimer = window.setTimeout(() => (cacheCleared.value = false), 2_000)
+      scheduleCacheClearedReset()
     } catch (error) {
       reportBackgroundFailure('清空歌词缓存失败', error)
       setError(error)
@@ -137,12 +149,12 @@ export function useDataManagement() {
   async function clearLogHistoryFiles() {
     clearingLogs.value = true
     logsCleared.value = false
-    window.clearTimeout(logClearStatusTimer)
+    cancelLogsClearedReset()
     try {
       overview.value = await clearLogHistory()
       error.value = null
       logsCleared.value = true
-      logClearStatusTimer = window.setTimeout(() => (logsCleared.value = false), 2_000)
+      scheduleLogsClearedReset()
     } catch (error) {
       reportBackgroundFailure('清空历史日志失败', error)
       setError(error)
@@ -155,8 +167,6 @@ export function useDataManagement() {
   onUnmounted(() => {
     disposed = true
     refreshRequestId += 1
-    window.clearTimeout(clearStatusTimer)
-    window.clearTimeout(logClearStatusTimer)
   })
 
   /** 保留结构化错误，界面当前只展示消息，后续操作可读取是否允许安全重试。 */

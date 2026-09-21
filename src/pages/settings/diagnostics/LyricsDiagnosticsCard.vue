@@ -5,21 +5,19 @@ import type { DeepReadonly } from 'vue'
 import { Badge } from '@/components/ui/badge'
 import {
   formatAgeSeconds,
-  formatBytes,
   getLyricsStatusLabel,
-  getParallelGroupLabel,
-  getPlayerLabel,
   getPrecisionLabel,
   getResolutionMethodLabel,
   getResolutionSiteLabel,
 } from '@/features/diagnostics/labels'
+import { formatBytes } from '@/features/i18n/format'
 import type {
   LyricsDiagnostics,
-  LyricsParallelGroup,
   LyricsResolutionRecord,
   LyricsResolutionStep,
   LyricsResolutionTrack,
 } from '@/features/lyrics/types'
+import { getMediaPlayerLabel } from '@/features/media/players'
 
 import DiagnosticRow from './DiagnosticRow.vue'
 import DiagnosticsCard from './DiagnosticsCard.vue'
@@ -81,7 +79,7 @@ const originalSource = computed(() => {
   const source = props.diagnostics.snapshot.source
   if (!source) return t('common.unavailable')
   return t('diagnostics.lyrics.sourceValue', {
-    player: getPlayerLabel(source.player),
+    player: getMediaPlayerLabel(source.player),
     kind: t(source.kind === 'local' ? 'diagnostics.lyrics.local' : 'diagnostics.lyrics.online'),
   })
 })
@@ -111,8 +109,8 @@ const currentCacheStatus = computed(() => {
 })
 
 const onlineStrategyLabel = computed(() =>
-  props.diagnostics.onlineStrategy === 'current_player_first'
-    ? t('settings.taskbar.lyrics.currentFirst')
+  props.diagnostics.onlineStrategy === 'current_player_only'
+    ? t('settings.taskbar.lyrics.currentOnly')
     : t('settings.taskbar.lyrics.parallel'),
 )
 
@@ -120,20 +118,20 @@ const onlineStrategyLabel = computed(() =>
 const resolutionStages = computed(() => {
   const stages: Array<{
     key: string
-    group: LyricsParallelGroup | null
+    parallel: boolean
     groupLabel: string | null
     steps: DeepReadonly<LyricsResolutionStep>[]
   }> = []
   props.diagnostics.resolutionSteps.forEach((step, index) => {
     const previous = stages.at(-1)
-    if (step.group && previous?.group === step.group) {
+    if (step.parallel && previous?.parallel) {
       previous.steps.push(step)
       return
     }
     stages.push({
       key: `${index}-${step.site}`,
-      group: step.group,
-      groupLabel: step.group === null ? null : getParallelGroupLabel(step.group),
+      parallel: step.parallel,
+      groupLabel: step.parallel ? t('diagnostics.lyrics.groups.online') : null,
       steps: [step],
     })
   })
@@ -209,7 +207,7 @@ const resolutionStages = computed(() => {
       :label="t('diagnostics.lyrics.currentPlayer')"
       :value="
         diagnostics.currentPlayer
-          ? getPlayerLabel(diagnostics.currentPlayer)
+          ? getMediaPlayerLabel(diagnostics.currentPlayer)
           : t('common.unavailable')
       "
     />

@@ -9,7 +9,9 @@ use windows::{
     core::{HSTRING, w},
 };
 
-use crate::{logging::LOG_STORAGE_CAPACITY_BYTES, lyrics::LyricsService, settings_store};
+use crate::{
+    error::Error, logging::LOG_STORAGE_CAPACITY_BYTES, lyrics::LyricsService, settings_store,
+};
 
 #[derive(Clone, Copy, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -54,15 +56,15 @@ pub struct LogsOverview {
 pub fn overview<R: Runtime>(
     app: &AppHandle<R>,
     lyrics: &LyricsService,
-) -> Result<DataOverview, String> {
+) -> Result<DataOverview, Error> {
     let config_directory = app
         .path()
         .app_data_dir()
-        .map_err(|error| format!("无法定位配置目录: {error}"))?;
+        .map_err(|error| Error::Message(format!("无法定位配置目录: {error}")))?;
     let log_directory = app
         .path()
         .app_log_dir()
-        .map_err(|error| format!("无法定位日志目录: {error}"))?;
+        .map_err(|error| Error::Message(format!("无法定位日志目录: {error}")))?;
     let settings_file = config_directory.join(settings_store::PATH);
     let settings_metadata = fs::metadata(&settings_file).ok();
     let (log_file_count, log_total_bytes) = directory_file_totals(&log_directory);
@@ -91,28 +93,28 @@ pub fn open_directory<R: Runtime>(
     app: &AppHandle<R>,
     lyrics: &LyricsService,
     kind: DataDirectoryKind,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     let path = match kind {
         DataDirectoryKind::Cache => lyrics.cache_directory().to_path_buf(),
         DataDirectoryKind::Config => app
             .path()
             .app_data_dir()
-            .map_err(|error| format!("无法定位配置目录: {error}"))?,
+            .map_err(|error| Error::Message(format!("无法定位配置目录: {error}")))?,
         DataDirectoryKind::Logs => app
             .path()
             .app_log_dir()
-            .map_err(|error| format!("无法定位日志目录: {error}"))?,
+            .map_err(|error| Error::Message(format!("无法定位日志目录: {error}")))?,
     };
-    fs::create_dir_all(&path).map_err(|error| format!("无法创建目录: {error}"))?;
+    fs::create_dir_all(&path).map_err(|error| Error::Message(format!("无法创建目录: {error}")))?;
 
     let target = HSTRING::from(path.to_string_lossy().as_ref());
     // SAFETY: 传入的路径由 Tauri PathResolver 生成，字符串在调用期间保持有效。
     let result = unsafe { ShellExecuteW(None, w!("open"), &target, None, None, SW_SHOWNORMAL) };
     if result.0 as isize <= 32 {
-        return Err(format!(
+        return Err(Error::Message(format!(
             "Windows 无法打开目录，错误代码: {}",
             result.0 as isize
-        ));
+        )));
     }
     Ok(())
 }
@@ -123,14 +125,14 @@ pub fn open_directory<R: Runtime>(
 /// 会被写成空对象，而不是立即写回各项默认值。默认值在下次启动时由各设置模块的
 /// 首次读取兜底并落盘，所以调整默认值只需修改前端的 `features/settings/defaults.ts`，
 /// 无需在此处维护迁移逻辑。调用方负责随后重启应用，避免旧值残留在运行中的窗口。
-pub fn reset_configuration<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+pub fn reset_configuration<R: Runtime>(app: &AppHandle<R>) -> Result<(), Error> {
     let store = app
         .store(settings_store::PATH)
-        .map_err(|error| format!("无法读取配置存储: {error}"))?;
+        .map_err(|error| Error::Message(format!("无法读取配置存储: {error}")))?;
     store.reset();
     store
         .save()
-        .map_err(|error| format!("无法保存默认配置: {error}"))
+        .map_err(|error| Error::Message(format!("无法保存默认配置: {error}")))
 }
 
 fn directory_file_totals(path: &Path) -> (usize, u64) {

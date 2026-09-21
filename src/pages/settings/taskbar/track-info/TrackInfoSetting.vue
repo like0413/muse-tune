@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ListMusic } from '@lucide/vue'
 
-import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import {
   Field,
   FieldContent,

@@ -3,7 +3,6 @@ import { Disc3, GripVertical, LayoutPanelLeft, ListMusic, Radio } from '@lucide/
 import { moveArrayElement, useSortable } from '@vueuse/integrations/useSortable'
 import type { SortableEvent } from 'sortablejs'
 
-import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
@@ -37,6 +36,8 @@ const sortableContainer = useTemplateRef<HTMLElement>('sortableContainer')
 const { option } = useSortable(sortableContainer, selectedOrder, {
   animation: 160,
   direction: 'horizontal',
+  // WebView2 下原生 HTML5 拖放不可用/不稳定，必须强制走 SortableJS 的 fallback 实现；
+  // fallbackTolerance 给出 3px 死区，避免按下手柄时的轻微抖动被当作开始拖动。
   forceFallback: true,
   fallbackTolerance: 3,
   handle: '[data-drag-handle]',
@@ -61,6 +62,7 @@ function handleSortUpdate(event: SortableEvent) {
   if (event.oldIndex === undefined || event.newIndex === undefined || orderSaving.value) return
 
   orderSaving.value = true
+  // 保存期间禁用手柄：落点结果尚未提交时再次拖动会让本地排列与持久化结果交叉。
   option('disabled', true)
   moveArrayElement(selectedOrder, event.oldIndex, event.newIndex, event)
   void nextTick(() => saveElementOrder([...selectedOrder.value]))

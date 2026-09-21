@@ -45,7 +45,7 @@ export function useAudioSpectrumSetting() {
   const previewSettings = useThrottleFn(
     (settings: TaskbarAudioSpectrumSettings) => {
       applyTaskbarAudioSpectrumSettings(settings).catch((error) => {
-        console.error('预览任务栏频谱配置失败', error)
+        reportBackgroundFailure('预览任务栏频谱配置失败', error)
       })
     },
     50,

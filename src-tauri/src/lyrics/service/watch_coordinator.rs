@@ -1,6 +1,7 @@
 use std::sync::atomic::Ordering;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
+use crate::error::Error;
 use crate::lyrics::{
     model::{LyricsSourceKind, ResolvedLyrics, has_word_timing},
     players, watcher,
@@ -117,7 +118,7 @@ impl LyricsService {
     }
 
     /// 播放器目录配置变化属于低频事件，需要重建监听并淘汰旧来源结果。
-    fn handle_configuration_change(&self, player: MediaPlayer) -> Result<(), String> {
+    fn handle_configuration_change(&self, player: MediaPlayer) -> Result<(), Error> {
         if !self.lyrics_enabled() {
             return Ok(());
         }
@@ -141,7 +142,7 @@ impl LyricsService {
         &self,
         player: MediaPlayer,
         paths: &[PathBuf],
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         if !self.lyrics_enabled() {
             return Ok(());
         }
@@ -161,7 +162,7 @@ impl LyricsService {
             .inner
             .current_track
             .lock()
-            .map_err(|_| "当前歌曲状态不可用".to_owned())?
+            .map_err(|_| Error::Message("当前歌曲状态不可用".to_owned()))?
             .as_ref()
             .filter(|track| track.player == player)
             .cloned();

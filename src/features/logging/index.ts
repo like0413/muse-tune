@@ -26,7 +26,6 @@ function describe(detail: unknown): string {
   }
 }
 
-/** 前缀区分前后端来源：日志文件里两者混写在同一个 target 下。 */
 function write(level: 'debug' | 'warn' | 'error', context: string, detail?: unknown): void {
   const message = detail === undefined ? context : `${context}: ${describe(detail)}`
   const send = level === 'error' ? error : level === 'warn' ? warn : debug

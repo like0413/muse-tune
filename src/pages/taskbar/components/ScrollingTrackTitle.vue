@@ -17,7 +17,6 @@ const { width: viewportWidth } = useElementSize(viewport)
 const { width: titleWidth } = useElementSize(titleMeasure)
 const prefersReducedMotion = useReducedMotionPreference()
 
-/** 计算文字末尾完整进入显示区域时需要移动的距离。 */
 const overflowDistance = computed(() => Math.max(0, titleWidth.value - viewportWidth.value))
 
 /** 只有所在层可见、配置开启、文字确实溢出且系统允许动效时才创建滚动动画。 */

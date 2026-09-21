@@ -2,6 +2,7 @@
 import type { CSSProperties, DeepReadonly } from 'vue'
 
 import { resolveTaskbarLyricsAppearance } from '@/features/lyrics/appearance'
+import { resolvePrimaryLineHeight } from '@/features/lyrics/line-window'
 import type { TaskbarLyricsAlignment, TaskbarLyricsSettings } from '@/features/settings/lyrics'
 
 const alignmentClasses: Record<TaskbarLyricsAlignment, string> = {
@@ -16,10 +17,10 @@ const props = defineProps<{
   themeColor: string
 }>()
 
-/** 复用歌词字体、颜色和对齐设置，但不创建任何播放时间轴。 */
+/** 复用歌词字体、颜色与行高规则，但不创建任何播放时间轴。 */
 const noticeStyle = computed<CSSProperties>(() => {
   const appearance = resolveTaskbarLyricsAppearance(props.settings, props.themeColor)
-  const lineHeight = props.settings.fontSize === 14 ? 17.5 : props.settings.fontSize + 2
+  const lineHeight = resolvePrimaryLineHeight(props.settings.fontSize)
   return {
     color: appearance.playedColor,
     fontFamily: appearance.fontFamily,

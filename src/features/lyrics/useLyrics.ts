@@ -20,12 +20,14 @@ export function useLyrics(enabled: Readonly<Ref<boolean>> = ref(true)) {
   const lyrics = shallowRef<LyricsSnapshot>(EMPTY_LYRICS)
   let receivedEvent = false
   let disposed = false
+  // 初始化代际号：关闭再开启会重跑一遍订阅与补取，代际号让上一代的监听与读取结果失效。
   let initializationId = 0
   let unlisten: UnlistenFn | undefined
 
   /** 先监听后补取缓存，避免窗口初始化期间漏掉解析完成事件。 */
   async function enable() {
     const currentInitializationId = ++initializationId
+    // 上一代遗留的到达标记会让本代的初值读取被误判为过期，因此每代重新计数。
     receivedEvent = false
     try {
       const stopListener = await listen<LyricsSnapshot>(LYRICS_CHANGED_EVENT, ({ payload }) => {

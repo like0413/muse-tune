@@ -3,7 +3,13 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// 元数据稳定窗口：切歌瞬间播放器会连续改写好几次元数据，只有观测之后安静了这么久才真正结算，
+/// 把这一串写入合并成一次刷新与一次下游（歌词）重解析。调小会让同一次切歌被反复结算，
+/// 调大则会让标题、封面与歌词的更新明显滞后于实际切歌。
 const METADATA_SETTLE_DELAY: Duration = Duration::from_millis(300);
+/// 播放器启动期间音频会话可能还没建好，按几何退避重试绑定四档；表用尽即不再重试，
+/// 避免对已经失效的目标无限轮询（见 `schedule_volume_rebind` 返回的“是否还有下一档”）。
+/// 调小会让启动较慢的播放器在会话出现前就放弃绑定，调大则会让音量读数恢复得更晚。
 const INITIAL_VOLUME_REBIND_DELAYS: [Duration; 4] = [
     Duration::from_millis(300),
     Duration::from_millis(800),
@@ -53,7 +59,6 @@ impl WorkerDeadlines {
         }
     }
 
-    /// 返回当前等待稳定刷新的会话数量。
     pub(super) fn metadata_settle_pending_count(&self) -> usize {
         self.metadata_settle.len()
     }

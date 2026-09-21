@@ -10,7 +10,6 @@ use crate::lyrics::model::{LyricsResolutionMethod, LyricsSnapshot, LyricsStatus}
 use super::LyricsService;
 
 impl LyricsService {
-    /// 返回最近一次歌词快照。
     pub fn snapshot(&self) -> LyricsSnapshot {
         self.inner.runtime_state.read().map_or_else(
             |_| LyricsSnapshot::default(),

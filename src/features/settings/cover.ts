@@ -22,17 +22,14 @@ export interface TaskbarCoverAppearance {
 
 export { DEFAULT_TASKBAR_COVER_APPEARANCE }
 
-/** 判断封面形状是否受支持。 */
 export function isTaskbarCoverShape(value: unknown): value is TaskbarCoverShape {
   return typeof value === 'string' && TASKBAR_COVER_SHAPES.some((shape) => shape === value)
 }
 
-/** 判断封面显示范围是否受支持。 */
 export function isTaskbarCoverVisibility(value: unknown): value is TaskbarCoverVisibility {
   return typeof value === 'string' && TASKBAR_COVER_VISIBILITY_MODES.some((mode) => mode === value)
 }
 
-/** 判断指定界面模式是否应显示封面。 */
 export function isTaskbarCoverVisibleInMode(
   visibility: TaskbarCoverVisibility,
   mode: TaskbarCoverDisplayMode,
@@ -40,7 +37,6 @@ export function isTaskbarCoverVisibleInMode(
   return visibility === 'always' || visibility === mode
 }
 
-/** 切换一个界面模式的封面显隐，并映射回唯一的四状态配置。 */
 export function updateTaskbarCoverModeVisibility(
   visibility: TaskbarCoverVisibility,
   mode: TaskbarCoverDisplayMode,
@@ -57,7 +53,6 @@ export function updateTaskbarCoverModeVisibility(
   return 'hidden'
 }
 
-/** 将外部值规范为完整封面配置，损坏字段单独回退默认值。 */
 export function normalizeTaskbarCoverAppearance(value: unknown): TaskbarCoverAppearance {
   const candidate = typeof value === 'object' && value !== null ? value : {}
   const record = candidate as Partial<Record<keyof TaskbarCoverAppearance | 'visible', unknown>>
@@ -84,21 +79,18 @@ export function normalizeTaskbarCoverAppearance(value: unknown): TaskbarCoverApp
   }
 }
 
-/** 读取封面显示配置。 */
 export async function getTaskbarCoverAppearance(): Promise<TaskbarCoverAppearance> {
   return normalizeTaskbarCoverAppearance(
     await settingsStore.get<unknown>(TASKBAR_COVER_APPEARANCE_KEY),
   )
 }
 
-/** 持久化完整封面配置，并通知全部任务栏窗口。 */
 export async function setTaskbarCoverAppearance(appearance: TaskbarCoverAppearance): Promise<void> {
   const normalized = normalizeTaskbarCoverAppearance(appearance)
   await settingsStore.set(TASKBAR_COVER_APPEARANCE_KEY, normalized)
   await emit(TASKBAR_COVER_APPEARANCE_CHANGED_EVENT, normalized)
 }
 
-/** 监听封面显示配置变化。 */
 export async function listenTaskbarCoverAppearanceChange(
   handler: (appearance: TaskbarCoverAppearance) => void,
 ): Promise<UnlistenFn> {

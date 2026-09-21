@@ -12,6 +12,9 @@ mod metrics;
 
 pub(super) use metrics::LyricsWatcherMetrics;
 
+/// 一轮写入的安静窗口：同一批歌词落盘往往是多次写入，目录被删除重建时还会从父目录产生事件，
+/// 这里等最后一次事件之后再安静满这么久，才把整批合并成一次回调。
+/// 调小会让同一次写入被拆成多次解析，调大则会让歌词刷新明显滞后于文件实际变化。
 const WRITE_SETTLE_TIME: Duration = Duration::from_millis(400);
 
 /// 同时拥有原生目录监听器和事件归并线程，保证释放时先断开生产者再回收消费者。

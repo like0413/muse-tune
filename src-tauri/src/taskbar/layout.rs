@@ -72,7 +72,6 @@ impl LayoutStabilizer {
         self.next_sample_at = Some(now + FAILURE_RETRY_INTERVAL);
     }
 
-    /// 返回下一次内部采样的截止时间。
     pub(super) const fn next_sample_at(&self) -> Option<Instant> {
         self.next_sample_at
     }
@@ -83,5 +82,102 @@ impl LayoutStabilizer {
         self.matching_samples = 0;
         self.invalidated_since_sample = false;
         self.next_sample_at = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 构造一个左边界不同的布局候选；测试只关心两次采样是否为同一个候选。
+    fn layout(left: i32) -> BarLayout {
+        let rect = ScreenRect {
+            left,
+            top: 1080,
+            right: left + 250,
+            bottom: 1128,
+        };
+        BarLayout {
+            window_rect: rect,
+            visible_rect: rect,
+        }
+    }
+
+    /// 连续两次读到同一候选才提交：否则任务栏动画中的中间矩形会被当成最终位置。
+    #[test]
+    fn layout_is_submitted_after_two_matching_samples() {
+        let mut stabilizer = LayoutStabilizer::new();
+        let now = Instant::now();
+
+        assert!(stabilizer.observe(layout(0), now).is_none());
+        assert_eq!(
+            stabilizer.observe(layout(0), now + SAMPLE_INTERVAL),
+            Some(layout(0))
+        );
+    }
+
+    /// 候选变化必须重新计数，否则两次不同的采样会被误判为已经稳定。
+    #[test]
+    fn changing_candidate_restarts_the_sample_count() {
+        let mut stabilizer = LayoutStabilizer::new();
+        let now = Instant::now();
+
+        assert!(stabilizer.observe(layout(0), now).is_none());
+        assert!(
+            stabilizer
+                .observe(layout(40), now + SAMPLE_INTERVAL)
+                .is_none()
+        );
+        assert_eq!(
+            stabilizer.observe(layout(40), now + SAMPLE_INTERVAL * 2),
+            Some(layout(40))
+        );
+    }
+
+    /// 采样周期内出现的失效事件不能让下一次重复采样直接提交旧候选。
+    #[test]
+    fn invalidation_discards_the_next_repeat() {
+        let mut stabilizer = LayoutStabilizer::new();
+        let now = Instant::now();
+
+        assert!(stabilizer.observe(layout(0), now).is_none());
+        stabilizer.invalidate(now);
+        assert!(stabilizer.observe(layout(0), now).is_none());
+        assert!(stabilizer.observe(layout(0), now).is_some());
+    }
+
+    /// 截止时间按固定采样间隔推进，调用方依赖它决定等待多久。
+    #[test]
+    fn sample_deadline_follows_the_sample_interval() {
+        let mut stabilizer = LayoutStabilizer::new();
+        let now = Instant::now();
+        stabilizer.observe(layout(0), now);
+
+        assert!(!stabilizer.sample_due(now + SAMPLE_INTERVAL - Duration::from_millis(1)));
+        assert!(stabilizer.sample_due(now + SAMPLE_INTERVAL));
+    }
+
+    /// 查询失败只延后重试，不能提交空布局或清掉已经应用的矩形。
+    #[test]
+    fn failure_defers_the_next_sample() {
+        let mut stabilizer = LayoutStabilizer::new();
+        let now = Instant::now();
+        stabilizer.retry_after_failure(now);
+
+        assert!(!stabilizer.sample_due(now + FAILURE_RETRY_INTERVAL - Duration::from_millis(1)));
+        assert!(stabilizer.sample_due(now + FAILURE_RETRY_INTERVAL));
+    }
+
+    /// 重置后旧候选与截止时间一并清除，稳定次数需要重新累计。
+    #[test]
+    fn reset_clears_pending_state() {
+        let mut stabilizer = LayoutStabilizer::new();
+        let now = Instant::now();
+        stabilizer.observe(layout(0), now);
+        stabilizer.reset();
+
+        assert_eq!(stabilizer.next_sample_at(), None);
+        assert!(!stabilizer.sample_due(now + SAMPLE_INTERVAL));
+        assert!(stabilizer.observe(layout(0), now).is_none());
     }
 }

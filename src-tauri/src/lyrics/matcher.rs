@@ -89,6 +89,8 @@ impl<'a> TrackMatchKey<'a> {
         } else {
             return None;
         };
+        // 权重结构：标题相似度 50 分最高，艺术家 30/20 分次之，时长按差值分两档（≤2 秒 20 分、
+        // ≤5 秒且版本标记一致 15 分）最低——标题相近时靠时长再区分是否为同一发行版。
         let title_score = (title_similarity * 50.0).round() as u8;
         let duration_score = match (self.track.duration_ms, candidate.duration_ms) {
             (Some(expected), Some(actual)) => {

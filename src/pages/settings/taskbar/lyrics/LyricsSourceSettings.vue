@@ -1,17 +1,21 @@
 <script setup lang="ts">
+import { uniq } from 'es-toolkit'
 import type { DeepReadonly } from 'vue'
 
 import { Field, FieldContent, FieldDescription, FieldTitle } from '@/components/ui/field'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import type { MediaPlayer } from '@/features/media/types'
 import {
   isTaskbarLyricsNetworkPolicy,
   isTaskbarLyricsOnlineStrategy,
   type TaskbarLyricsSettings,
 } from '@/features/settings/lyrics'
 
+import LyricsOnlineSourceEditor from './LyricsOnlineSourceEditor.vue'
+
 const { t } = useI18n({ useScope: 'global' })
 
-defineProps<{
+const props = defineProps<{
   settings: DeepReadonly<TaskbarLyricsSettings>
   saving: boolean
 }>()
@@ -31,7 +35,7 @@ const onlineStrategyOptions = computed(
   () =>
     [
       { value: 'parallel', label: t('settings.taskbar.lyrics.parallel') },
-      { value: 'current_player_first', label: t('settings.taskbar.lyrics.currentFirst') },
+      { value: 'current_player_only', label: t('settings.taskbar.lyrics.currentOnly') },
     ] as const,
 )
 
@@ -43,6 +47,19 @@ function selectNetworkPolicy(value: unknown) {
 /** 接收在线歌词调度策略。 */
 function selectOnlineStrategy(value: unknown) {
   if (isTaskbarLyricsOnlineStrategy(value)) emit('updateSettings', { onlineStrategy: value })
+}
+
+/** 接收编辑器产生的在线接口顺序并提交持久化。 */
+function reorderOnlineSources(order: MediaPlayer[]) {
+  emit('updateSettings', { onlineSourceOrder: order })
+}
+
+/** 勾选或取消一个在线接口；未勾选的接口不会发起在线请求。 */
+function toggleOnlineSource(player: MediaPlayer, enabled: boolean) {
+  const enabledOnlineSources = enabled
+    ? uniq([...props.settings.enabledOnlineSources, player])
+    : props.settings.enabledOnlineSources.filter((item) => item !== player)
+  emit('updateSettings', { enabledOnlineSources })
 }
 </script>
 
@@ -74,7 +91,7 @@ function selectOnlineStrategy(value: unknown) {
       <FieldTitle>{{ t('settings.taskbar.lyrics.onlineStrategy') }}</FieldTitle>
       <FieldDescription>
         <div>{{ t('settings.taskbar.lyrics.parallelDescription') }}</div>
-        <div>{{ t('settings.taskbar.lyrics.currentFirstDescription') }}</div>
+        <div>{{ t('settings.taskbar.lyrics.currentOnlyDescription') }}</div>
       </FieldDescription>
     </FieldContent>
     <Tabs :model-value="settings.onlineStrategy" @update:model-value="selectOnlineStrategy">
@@ -89,5 +106,25 @@ function selectOnlineStrategy(value: unknown) {
         </TabsTrigger>
       </TabsList>
     </Tabs>
+  </Field>
+
+  <Field
+    v-if="settings.onlineStrategy === 'parallel'"
+    orientation="horizontal"
+    :data-disabled="!settings.enabled || settings.networkPolicy === 'local_only'"
+  >
+    <FieldContent>
+      <FieldTitle>{{ t('settings.taskbar.lyrics.onlineSources') }}</FieldTitle>
+      <FieldDescription>{{
+        t('settings.taskbar.lyrics.onlineSourcesDescription')
+      }}</FieldDescription>
+    </FieldContent>
+    <LyricsOnlineSourceEditor
+      :order="settings.onlineSourceOrder"
+      :enabled="settings.enabledOnlineSources"
+      :disabled="saving || !settings.enabled || settings.networkPolicy === 'local_only'"
+      @reorder="reorderOnlineSources"
+      @toggle="toggleOnlineSource"
+    />
   </Field>
 </template>

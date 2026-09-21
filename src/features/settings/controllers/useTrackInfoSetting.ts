@@ -140,7 +140,7 @@ export function useTrackInfoSetting() {
   const previewScrollSpeed = useThrottleFn(
     (speed: number) => {
       applyTaskbarTrackInfoScrolling({ ...selectedScrolling.value, speed }).catch((error) => {
-        console.error('预览歌名滚动速度失败', error)
+        reportBackgroundFailure('预览歌名滚动速度失败', error)
       })
     },
     SCROLL_PREVIEW_INTERVAL_MS,

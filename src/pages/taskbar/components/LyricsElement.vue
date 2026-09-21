@@ -42,7 +42,6 @@ interface DisplayLine {
 /** 当前动画的切换时长；交叉淡化比位移动画更慢，见 `resolveTransitionDurationMs`。 */
 const transitionDurationMs = computed(() => resolveTransitionDurationMs(props.settings.animation))
 
-/** 二分定位当前行；换行触发点的提前规则见 `line-window.ts`。 */
 const currentLineIndex = computed(() =>
   resolveCurrentLineIndex(
     props.lyrics.lines,
@@ -69,7 +68,6 @@ watch(
   { immediate: true },
 )
 
-/** 按当前设置挑出第二行内容；选择与回退规则见 `selectSecondaryContent`。 */
 function currentSecondaryContent(index: number): SecondaryContent | undefined {
   const current = props.lyrics.lines[index]
   if (!current) return undefined
@@ -86,7 +84,6 @@ const hasSecondaryLine = computed(
     props.settings.lineMode === 'double' && Boolean(currentSecondaryContent(activeLineIndex.value)),
 )
 
-/** 行高、字号与居中偏移；推导规则见 `resolveLayoutMetrics`。 */
 const layoutMetrics = computed(() =>
   resolveLayoutMetrics(props.settings.fontSize, hasSecondaryLine.value),
 )

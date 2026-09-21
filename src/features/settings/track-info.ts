@@ -1,12 +1,12 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
-import { clamp } from 'es-toolkit'
 
 import {
   DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT,
   DEFAULT_TASKBAR_TRACK_INFO_SCROLLING,
   DEFAULT_TASKBAR_TRACK_INFO_VISIBLE,
 } from './defaults'
+import { normalizeIntegerInRange } from './normalize'
 import { settingsStore } from './store'
 
 const TASKBAR_TRACK_INFO_ALIGNMENTS = ['left', 'right'] as const
@@ -35,19 +35,16 @@ export {
   DEFAULT_TASKBAR_TRACK_INFO_VISIBLE,
 }
 
-/** 读取歌曲信息整体显隐。 */
 export async function getTaskbarTrackInfoVisible(): Promise<boolean> {
   const value = await settingsStore.get<unknown>(TASKBAR_TRACK_INFO_VISIBLE_KEY)
   return typeof value === 'boolean' ? value : DEFAULT_TASKBAR_TRACK_INFO_VISIBLE
 }
 
-/** 保存歌曲信息整体显隐，并通知任务栏窗口。 */
 export async function setTaskbarTrackInfoVisible(visible: boolean): Promise<void> {
   await settingsStore.set(TASKBAR_TRACK_INFO_VISIBLE_KEY, visible)
   await emit(TASKBAR_TRACK_INFO_VISIBLE_CHANGED_EVENT, visible)
 }
 
-/** 监听歌曲信息整体显隐变化。 */
 export async function listenTaskbarTrackInfoVisibleChange(
   handler: (visible: boolean) => void,
 ): Promise<UnlistenFn> {
@@ -71,9 +68,10 @@ export function isTaskbarTrackInfoScrollMode(value: unknown): value is TaskbarTr
 
 /** 将外部速度规范到设置面板支持的整数像素每秒范围。 */
 export function normalizeTaskbarTrackInfoScrollSpeed(value: unknown): number | undefined {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
-  return Math.round(
-    clamp(value, TASKBAR_TRACK_INFO_SCROLL_SPEED_MIN, TASKBAR_TRACK_INFO_SCROLL_SPEED_MAX),
+  return normalizeIntegerInRange(
+    value,
+    TASKBAR_TRACK_INFO_SCROLL_SPEED_MIN,
+    TASKBAR_TRACK_INFO_SCROLL_SPEED_MAX,
   )
 }
 
@@ -96,13 +94,11 @@ export function normalizeTaskbarTrackInfoScrolling(value: unknown): TaskbarTrack
   }
 }
 
-/** 读取歌曲信息对齐方式，缺失或损坏时使用左对齐。 */
 export async function getTaskbarTrackInfoAlignment(): Promise<TaskbarTrackInfoAlignment> {
   const alignment = await settingsStore.get<unknown>(TASKBAR_TRACK_INFO_ALIGNMENT_KEY)
   return isTaskbarTrackInfoAlignment(alignment) ? alignment : DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT
 }
 
-/** 持久化歌曲信息对齐方式，并通知全部任务栏窗口。 */
 export async function setTaskbarTrackInfoAlignment(
   alignment: TaskbarTrackInfoAlignment,
 ): Promise<void> {
@@ -112,7 +108,6 @@ export async function setTaskbarTrackInfoAlignment(
   await emit(TASKBAR_TRACK_INFO_ALIGNMENT_CHANGED_EVENT, alignment)
 }
 
-/** 监听歌曲信息对齐方式变化。 */
 export async function listenTaskbarTrackInfoAlignmentChange(
   handler: (alignment: TaskbarTrackInfoAlignment) => void,
 ): Promise<UnlistenFn> {
@@ -121,7 +116,6 @@ export async function listenTaskbarTrackInfoAlignmentChange(
   })
 }
 
-/** 读取歌名溢出滚动配置。 */
 export async function getTaskbarTrackInfoScrolling(): Promise<TaskbarTrackInfoScrolling> {
   return normalizeTaskbarTrackInfoScrolling(
     await settingsStore.get<unknown>(TASKBAR_TRACK_INFO_SCROLLING_KEY),
@@ -138,7 +132,6 @@ export async function applyTaskbarTrackInfoScrolling(
   )
 }
 
-/** 持久化歌名滚动配置，并通知全部任务栏窗口。 */
 export async function setTaskbarTrackInfoScrolling(
   scrolling: TaskbarTrackInfoScrolling,
 ): Promise<void> {
@@ -147,7 +140,6 @@ export async function setTaskbarTrackInfoScrolling(
   await applyTaskbarTrackInfoScrolling(normalized)
 }
 
-/** 监听歌名滚动配置变化。 */
 export async function listenTaskbarTrackInfoScrollingChange(
   handler: (scrolling: TaskbarTrackInfoScrolling) => void,
 ): Promise<UnlistenFn> {

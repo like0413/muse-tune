@@ -10,6 +10,8 @@ use windows::{
     core::IInspectable,
 };
 
+use crate::error::Error;
+
 const SYSTEM_ACCENT_COLOR_CHANGED_EVENT: &str = "system://accent-color-changed";
 const SYSTEM_FOREGROUND_COLOR_CHANGED_EVENT: &str = "system://foreground-color-changed";
 
@@ -90,19 +92,19 @@ impl SystemThemeService {
     }
 
     /// 返回服务缓存的 Windows 当前强调色。
-    pub(crate) fn accent_color(&self) -> Result<String, String> {
+    pub(crate) fn accent_color(&self) -> Result<String, Error> {
         self.colors
             .read()
             .map(|colors| colors.accent.clone())
-            .map_err(|_| "Windows 系统颜色缓存不可用".to_owned())
+            .map_err(|_| Error::Message("Windows 系统颜色缓存不可用".to_owned()))
     }
 
     /// 返回服务缓存的 Windows 当前前景色。
-    pub(crate) fn foreground_color(&self) -> Result<String, String> {
+    pub(crate) fn foreground_color(&self) -> Result<String, Error> {
         self.colors
             .read()
             .map(|colors| colors.foreground.clone())
-            .map_err(|_| "Windows 系统颜色缓存不可用".to_owned())
+            .map_err(|_| Error::Message("Windows 系统颜色缓存不可用".to_owned()))
     }
 }
 

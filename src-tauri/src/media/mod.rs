@@ -13,6 +13,7 @@ mod spectrum;
 mod thumbnail;
 mod volume;
 
+pub use crate::native_defaults::supported_players;
 pub use model::{
     MediaControlAction, MediaPlaybackStatus, MediaPlayer, MediaSessionSelectionPolicy,
     MediaSessionSelectionStrategy, MediaSessionSnapshot, MediaTimeline, MediaVolumeSnapshot,

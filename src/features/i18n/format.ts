@@ -13,7 +13,7 @@ function getSizeFormatter(): Intl.NumberFormat {
   return formatter
 }
 
-/** 将字节数统一格式化为设置页使用的 KB 或 MB。 */
+/** 将字节数统一格式化为界面使用的 KB 或 MB；缺失值按不可用展示。 */
 export function formatBytes(bytes: number | null): string {
   if (bytes === null) return translateGlobal('common.unavailable')
   const formatter = getSizeFormatter()

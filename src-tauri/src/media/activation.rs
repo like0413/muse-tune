@@ -27,6 +27,7 @@ use super::{
     players::IdentifiedPlayer,
     process::{find_process_executable, find_process_ids},
 };
+use crate::error::Error;
 
 /// 过短的歌曲名不足以用来匹配窗口标题。
 const MIN_RELATED_TITLE_LENGTH: usize = 2;
@@ -49,11 +50,11 @@ pub(super) fn toggle_player_window(
     source_app_id: &str,
     player: &IdentifiedPlayer,
     media_title: &str,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     let process_ids = find_process_ids(source_app_id, player.executable_names());
     if process_ids.is_empty() {
         log::warn!("未找到当前播放器进程: source={source_app_id}");
-        return Err("未找到当前播放器进程".to_owned());
+        return Err(Error::Message("未找到当前播放器进程".to_owned()));
     }
 
     let search = find_main_window(&process_ids, player.preferred_window_classes(), media_title)?;
@@ -63,7 +64,7 @@ pub(super) fn toggle_player_window(
             process_ids.len(),
             search.eligible
         );
-        return Err("当前播放器没有可操作的窗口".to_owned());
+        return Err(Error::Message("当前播放器没有可操作的窗口".to_owned()));
     };
 
     // 只关闭已经在前台的窗口：窗口在后台时先置前，避免把用户没在看的窗口关掉。
@@ -80,7 +81,7 @@ fn open_player_window(
     process_ids: &HashSet<u32>,
     candidate: &WindowCandidate,
     player: &IdentifiedPlayer,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     if candidate.visible {
         restore_and_activate_window(candidate.window, candidate.minimized);
         return Ok(());
@@ -130,7 +131,7 @@ fn find_main_window<'a>(
     process_ids: &'a HashSet<u32>,
     preferred_window_classes: &'a [&'a str],
     media_title: &'a str,
-) -> Result<WindowSearch<'a>, String> {
+) -> Result<WindowSearch<'a>, Error> {
     let mut search = WindowSearch {
         process_ids,
         preferred_window_classes,
@@ -146,7 +147,7 @@ fn find_main_window<'a>(
             LPARAM((&raw mut search).cast::<()>() as isize),
         )
     }
-    .map_err(|error| format!("枚举播放器窗口失败: {error}"))?;
+    .map_err(|error| Error::Message(format!("枚举播放器窗口失败: {error}")))?;
 
     Ok(search)
 }
@@ -179,9 +180,9 @@ fn show_and_activate_window(window: HWND, minimized: bool) {
 }
 
 /// 启动播放器官方入口，由它的单实例处理把已隐藏的主窗口显示出来。
-fn relaunch_player(process_ids: &HashSet<u32>, entry_names: &[&str]) -> Result<(), String> {
+fn relaunch_player(process_ids: &HashSet<u32>, entry_names: &[&str]) -> Result<(), Error> {
     let executable = find_process_executable(process_ids)
-        .ok_or_else(|| "当前播放器窗口已隐藏，但无法读取其启动路径".to_owned())?;
+        .ok_or_else(|| Error::Message("当前播放器窗口已隐藏，但无法读取其启动路径".to_owned()))?;
     let entry = find_launch_entry(&executable, entry_names).unwrap_or(executable);
     let mut command = Command::new(&entry);
     if let Some(directory) = entry.parent() {
@@ -190,7 +191,7 @@ fn relaunch_player(process_ids: &HashSet<u32>, entry_names: &[&str]) -> Result<(
     command
         .spawn()
         .map(|_| ())
-        .map_err(|error| format!("通过播放器自身入口打开窗口失败: {error}"))
+        .map_err(|error| Error::Message(format!("通过播放器自身入口打开窗口失败: {error}")))
 }
 
 /// 客户端运行在带版本号的子目录时，官方入口在上层目录；

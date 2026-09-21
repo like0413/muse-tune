@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { Images } from '@lucide/vue'
-import type { UnlistenFn } from '@tauri-apps/api/event'
 
-import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import {
   Field,
   FieldContent,
@@ -12,45 +10,30 @@ import {
 } from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
+import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { useEventState } from '@/features/ipc/useEventState'
 import {
   DEFAULT_TASKBAR_BACKGROUND_STYLE,
   getTaskbarBackgroundStyle,
   isTaskbarBackgroundStyle,
   listenTaskbarBackgroundStyleChange,
   setTaskbarBackgroundStyle,
-  type TaskbarBackgroundStyle,
 } from '@/features/settings/background-style'
 
 import CompatibilityNoticeDialog from './components/CompatibilityNoticeDialog.vue'
 
 const { t } = useI18n({ useScope: 'global' })
-const selectedStyle = shallowRef<TaskbarBackgroundStyle>(DEFAULT_TASKBAR_BACKGROUND_STYLE)
+/** 当前背景样式；订阅变更以接收另一项设置触发的兼容模式切换。 */
+const selectedStyle = useEventState(
+  {
+    read: getTaskbarBackgroundStyle,
+    subscribe: listenTaskbarBackgroundStyleChange,
+    failureMessage: '读取背景样式失败',
+  },
+  DEFAULT_TASKBAR_BACKGROUND_STYLE,
+)
 const saving = shallowRef(false)
 const showCompatibilityNotice = shallowRef(false)
-let unlistenStyle: UnlistenFn | undefined
-let styleRevision = 0
-let disposed = false
-
-/** 恢复设置并监听另一项设置触发的兼容模式切换。 */
-async function initialize() {
-  try {
-    const stopStyle = await listenTaskbarBackgroundStyleChange((style) => {
-      styleRevision += 1
-      selectedStyle.value = style
-    })
-    if (disposed) {
-      stopStyle()
-      return
-    }
-    unlistenStyle = stopStyle
-    const revision = styleRevision
-    const savedStyle = await getTaskbarBackgroundStyle()
-    if (!disposed && revision === styleRevision) selectedStyle.value = savedStyle
-  } catch (error) {
-    reportBackgroundFailure('读取背景样式失败', error)
-  }
-}
 
 /** 保存背景样式；发生兼容切换后提示用户。 */
 async function selectStyle(value: unknown) {
@@ -68,12 +51,6 @@ async function selectStyle(value: unknown) {
     saving.value = false
   }
 }
-
-onMounted(initialize)
-onUnmounted(() => {
-  disposed = true
-  unlistenStyle?.()
-})
 </script>
 
 <template>

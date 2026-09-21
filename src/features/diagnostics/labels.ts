@@ -1,19 +1,11 @@
 import { translateGlobal } from '@/features/i18n'
 import type {
-  LyricsParallelGroup,
   LyricsPrecision,
   LyricsResolutionMethod,
   LyricsResolutionSite,
   LyricsStatus,
 } from '@/features/lyrics/types'
-import type { MediaPlaybackStatus, MediaPlayer } from '@/features/media/types'
-
-const playerNames: Record<Exclude<MediaPlayer, 'other'>, string> = {
-  qq_music: 'QQ 音乐',
-  netease_cloud_music: '网易云音乐',
-  soda_music: '汽水音乐',
-  kugou_music: '酷狗音乐',
-}
+import type { MediaPlaybackStatus } from '@/features/media/types'
 
 const playbackStatusKeys: Record<MediaPlaybackStatus, string> = {
   closed: 'diagnostics.values.closed',
@@ -50,21 +42,8 @@ const resolutionSiteKeys: Record<LyricsResolutionSite, string> = {
   application_cache: 'diagnostics.lyrics.sites.applicationCache',
   local: 'diagnostics.lyrics.sites.local',
   online: 'diagnostics.lyrics.sites.online',
-  online_preferred: 'diagnostics.lyrics.sites.onlinePreferred',
   online_fallback: 'diagnostics.lyrics.sites.onlineFallback',
   local_upgrade: 'diagnostics.lyrics.sites.localUpgrade',
-}
-
-const parallelGroupKeys: Record<LyricsParallelGroup, string> = {
-  online: 'diagnostics.lyrics.groups.online',
-  online_fallback: 'diagnostics.lyrics.groups.onlineFallback',
-}
-
-/** 播放器品牌沿用产品原名，仅本地化兜底类别。 */
-export function getPlayerLabel(player: MediaPlayer): string {
-  return player === 'other'
-    ? translateGlobal('diagnostics.values.otherPlayer')
-    : playerNames[player]
 }
 
 export const getPlaybackStatusLabel = (status: MediaPlaybackStatus) =>
@@ -77,8 +56,6 @@ export const getPrecisionLabel = (precision: LyricsPrecision) =>
   translateGlobal(precisionKeys[precision])
 export const getResolutionSiteLabel = (site: LyricsResolutionSite) =>
   translateGlobal(resolutionSiteKeys[site])
-export const getParallelGroupLabel = (group: LyricsParallelGroup) =>
-  translateGlobal(parallelGroupKeys[group])
 
 export function formatDuration(milliseconds: number | null): string {
   if (milliseconds === null || milliseconds < 0) return translateGlobal('common.unavailable')
@@ -86,12 +63,6 @@ export function formatDuration(milliseconds: number | null): string {
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
-}
-
-export function formatBytes(bytes: number | null): string {
-  if (bytes === null) return translateGlobal('common.unavailable')
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(bytes === 0 ? 0 : 1)} kb`
-  return `${(bytes / 1024 ** 2).toFixed(1)} mb`
 }
 
 export function formatAgeSeconds(seconds: number | null): string {

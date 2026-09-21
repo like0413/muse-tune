@@ -38,6 +38,12 @@ static MONITOR_THREADS: LazyLock<Mutex<HashMap<u32, Arc<AtomicBool>>>> =
 static TOPOLOGY_EVENT_HOOKS: AtomicU32 = AtomicU32::new(0);
 
 /// 在当前同步线程上合并布局失效状态。
+///
+/// 这里把 `MONITOR_THREADS` 里的待处理标志复位，是在“重新武装”防抖：`request_layout_update`
+/// 只在标志由 false 翻到 true 时投递一次 `WM_APP`，如果不在消费时清掉，本轮之后的任何布局变化
+/// 都不会再唤醒循环。三个 thread_local（窗口状态、任务栏布局、被监视的任务栏）与
+/// `MONITOR_THREADS` 里的该线程标志是同一套协作协议的两半：thread_local 只在钩子回调与等待消息的
+/// 线程之间传递状态，标志则由跨线程的 UIA 回调用来决定要不要投递消息。
 fn mark_layout_update() {
     let thread_id = unsafe { GetCurrentThreadId() };
     if let Ok(threads) = MONITOR_THREADS.lock()
@@ -226,6 +232,11 @@ fn install_win_event_hook(event_min: u32, event_max: u32) -> Option<OwnedWinEven
 }
 
 /// 将 WinEvent 回调归并为同步循环需要的两类状态信号。
+///
+/// 钩子以 `WINEVENT_OUTOFCONTEXT` 安装，回调就由安装钩子的那个线程在它下一次等待消息时分发。
+/// 这条契约带来两点约束：一是这里可以放心使用本线程的 thread_local（如 `WATCHED_TASKBAR`），
+/// 因为回调与同步循环必定是同一个线程；二是回调内不得阻塞、也不得发送窗口消息，否则会卡住
+/// 分发它的消息循环，连带停掉 UIA 事件与布局采样。
 unsafe extern "system" fn handle_win_event(
     _hook: HWINEVENTHOOK,
     event: u32,

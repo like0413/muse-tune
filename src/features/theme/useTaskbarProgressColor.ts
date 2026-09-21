@@ -1,6 +1,5 @@
-import type { UnlistenFn } from '@tauri-apps/api/event'
-
 import { reportBackgroundFailure } from '@/features/feedback/errors'
+import { useEventState } from '@/features/ipc/useEventState'
 import {
   DEFAULT_TASKBAR_THEME_COLOR,
   getTaskbarThemeColor,
@@ -23,16 +22,25 @@ export function useTaskbarProgressColor(
   thumbnailDataUrl: ComputedRef<string | null>,
   trackIdentity: Readonly<Ref<string | null>> = shallowRef(null),
 ) {
-  const setting = shallowRef<TaskbarThemeColor>({ ...DEFAULT_TASKBAR_THEME_COLOR })
-  const systemColor = shallowRef(DEFAULT_BRAND_COLOR_HEX)
+  const setting = useEventState<TaskbarThemeColor>(
+    {
+      read: getTaskbarThemeColor,
+      subscribe: listenTaskbarThemeColorChange,
+      failureMessage: '初始化任务栏主题色失败',
+    },
+    { ...DEFAULT_TASKBAR_THEME_COLOR },
+  )
+  const systemColor = useEventState(
+    {
+      read: getSystemAccentColor,
+      subscribe: listenSystemAccentColorChange,
+      failureMessage: '初始化 Windows 强调色失败',
+    },
+    DEFAULT_BRAND_COLOR_HEX,
+  )
   const coverColor = shallowRef<string | null>(null)
   const extractedColors = new Map<string, string>()
   let extractionRequestId = 0
-  let settingRevision = 0
-  let systemColorRevision = 0
-  let disposed = false
-  let unlistenSetting: UnlistenFn | undefined
-  let unlistenSystemColor: UnlistenFn | undefined
 
   /** 记录已提取的主色，并按插入序淘汰最旧的一条。 */
   function rememberCoverColor(identity: string, color: string) {
@@ -68,45 +76,6 @@ export function useTaskbarProgressColor(
     }
   }
 
-  /** 初始化设置、系统色以及两个实时变化事件。 */
-  async function initialize() {
-    try {
-      const stopSettingListener = await listenTaskbarThemeColorChange((value) => {
-        settingRevision += 1
-        setting.value = value
-        void extractCoverColor()
-      })
-      if (disposed) {
-        stopSettingListener()
-        return
-      }
-      unlistenSetting = stopSettingListener
-
-      const stopSystemColorListener = await listenSystemAccentColorChange((color) => {
-        systemColorRevision += 1
-        systemColor.value = color
-      })
-      if (disposed) {
-        stopSystemColorListener()
-        return
-      }
-      unlistenSystemColor = stopSystemColorListener
-
-      const settingRevisionBeforeRead = settingRevision
-      const systemColorRevisionBeforeRead = systemColorRevision
-      const [savedSetting, accentColor] = await Promise.all([
-        getTaskbarThemeColor(),
-        getSystemAccentColor(),
-      ])
-      if (disposed) return
-      if (settingRevision === settingRevisionBeforeRead) setting.value = savedSetting
-      if (systemColorRevision === systemColorRevisionBeforeRead) systemColor.value = accentColor
-      await extractCoverColor()
-    } catch (error) {
-      reportBackgroundFailure('初始化任务栏主题色失败', error)
-    }
-  }
-
   const progressColor = computed(() => {
     switch (setting.value.source) {
       case 'cover':
@@ -118,13 +87,12 @@ export function useTaskbarProgressColor(
     }
   })
 
+  // 主题色初值读取与变更事件都要重新取色，统一由这里触发。
+  watch(setting, () => void extractCoverColor())
   watch(thumbnailDataUrl, () => void extractCoverColor())
-  onMounted(initialize)
   onUnmounted(() => {
-    disposed = true
+    // 让仍在进行的取色请求作废，避免卸载后再写回结果。
     extractionRequestId += 1
-    unlistenSetting?.()
-    unlistenSystemColor?.()
   })
 
   return { progressColor }

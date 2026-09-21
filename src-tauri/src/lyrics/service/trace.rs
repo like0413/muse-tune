@@ -2,7 +2,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::lyrics::{
     model::{
-        LyricsParallelGroup, LyricsResolutionOutcome, LyricsResolutionRecord, LyricsResolutionSite,
+        LyricsResolutionOutcome, LyricsResolutionRecord, LyricsResolutionSite,
         LyricsResolutionStep, LyricsResolutionTrack,
     },
     track::TrackDescriptor,
@@ -47,7 +47,7 @@ impl LyricsService {
         }
     }
 
-    /// 记录一个串行解析步骤。
+    /// 记录一个不属于并发阶段的解析步骤：缓存、本地与后台升级。
     pub(super) fn record_resolution_step(
         &self,
         generation: u64,
@@ -55,14 +55,14 @@ impl LyricsService {
         outcome: LyricsResolutionOutcome,
         detail: Option<String>,
     ) {
-        self.record_resolution_step_in_group(generation, None, site, outcome, detail);
+        self.record_parallel_resolution_step(generation, false, site, outcome, detail);
     }
 
     /// 记录一次在线查询，并在诊断数据中保留其并发阶段。
-    pub(super) fn record_resolution_step_in_group(
+    pub(super) fn record_parallel_resolution_step(
         &self,
         generation: u64,
-        group: Option<LyricsParallelGroup>,
+        parallel: bool,
         site: LyricsResolutionSite,
         outcome: LyricsResolutionOutcome,
         detail: Option<String>,
@@ -75,7 +75,7 @@ impl LyricsService {
                 site,
                 outcome,
                 detail,
-                group,
+                parallel,
             });
         }
     }

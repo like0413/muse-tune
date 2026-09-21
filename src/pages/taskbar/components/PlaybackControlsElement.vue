@@ -1,16 +1,14 @@
 <script setup lang="ts">
 import { Pause, Play, SkipBack, SkipForward } from '@lucide/vue'
-import type { UnlistenFn } from '@tauri-apps/api/event'
 
 import { Button } from '@/components/ui/button'
-import { reportBackgroundFailure } from '@/features/feedback/errors'
+import { useEventState } from '@/features/ipc/useEventState'
 import type { MediaControlAction, MediaSessionSnapshot } from '@/features/media/types'
 import {
   DEFAULT_TASKBAR_CONTROLS_VISIBILITY,
   getTaskbarControlsVisibility,
   listenTaskbarControlsVisibilityChange,
   type TaskbarControlButton,
-  type TaskbarControlsVisibility,
 } from '@/features/settings/controls'
 
 import VolumeControlElement from './VolumeControlElement.vue'
@@ -24,8 +22,14 @@ const props = defineProps<{
   compact: boolean
 }>()
 const emit = defineEmits<{ control: [action: MediaControlAction] }>()
-const visibility = shallowRef<TaskbarControlsVisibility>({ ...DEFAULT_TASKBAR_CONTROLS_VISIBILITY })
-let unlistenVisibilityChange: UnlistenFn | undefined
+const visibility = useEventState(
+  {
+    read: getTaskbarControlsVisibility,
+    subscribe: listenTaskbarControlsVisibilityChange,
+    failureMessage: '初始化控制按钮配置失败',
+  },
+  { ...DEFAULT_TASKBAR_CONTROLS_VISIBILITY },
+)
 
 const isPlaying = computed(() => props.session?.playback.status === 'playing')
 const controlSize = computed(() => (props.compact ? 'icon-xs' : 'icon-sm'))
@@ -99,21 +103,6 @@ const controlItems = computed<ControlItem[]>(() => {
   }
   return items
 })
-
-/** 恢复按钮显示配置，并接收设置窗口的实时更新。 */
-async function initializeVisibility() {
-  try {
-    unlistenVisibilityChange = await listenTaskbarControlsVisibilityChange((value) => {
-      visibility.value = value
-    })
-    visibility.value = await getTaskbarControlsVisibility()
-  } catch (error) {
-    reportBackgroundFailure('初始化控制按钮配置失败', error)
-  }
-}
-
-onMounted(initializeVisibility)
-onUnmounted(() => unlistenVisibilityChange?.())
 </script>
 
 <template>

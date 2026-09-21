@@ -71,12 +71,10 @@ pub(super) fn set_content_visibility(visible: bool) {
     }
 }
 
-/// 读取当前定位偏好。
 pub(super) fn placement() -> TaskbarPlacement {
     TaskbarPlacement::from_stored(TASKBAR_PLACEMENT.load(Ordering::Acquire))
 }
 
-/// 读取当前遮挡优先级。
 pub(super) fn overlap_priority() -> TaskbarOverlapPriority {
     TaskbarOverlapPriority::from_stored(TASKBAR_OVERLAP_PRIORITY.load(Ordering::Acquire))
 }
@@ -86,7 +84,6 @@ pub(super) fn content_width() -> i32 {
     TASKBAR_CONTENT_WIDTH_DIP.load(Ordering::Acquire)
 }
 
-/// 读取当前宽度模式。
 pub(super) fn width_mode() -> TaskbarWidthMode {
     TaskbarWidthMode::from_stored(TASKBAR_WIDTH_MODE.load(Ordering::Acquire))
 }

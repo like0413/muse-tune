@@ -236,8 +236,10 @@
         "onlineStrategy": "Online resolution strategy",
         "parallel": "Query in parallel",
         "parallelDescription": "Parallel: waits less but requests multiple sources simultaneously",
-        "currentFirst": "Current platform first",
-        "currentFirstDescription": "Current platform first: stops on reliable word timing; fallback is slower after a miss"
+        "currentOnly": "Current player only",
+        "currentOnlyDescription": "Current player only: queries only the online source of the current player without falling back to others",
+        "onlineSources": "Online sources",
+        "onlineSourcesDescription": "Choose which online sources to use and drag to reorder requests; unchecked sources are never queried"
       },
       "mediaSession": {
         "title": "Player selection policy",
@@ -575,13 +577,11 @@
         "applicationCache": "Muse Tune cache",
         "local": "Current player local",
         "online": "Current player online",
-        "onlinePreferred": "Current player online (preferred)",
         "onlineFallback": "Fallback player online",
         "localUpgrade": "Background local upgrade"
       },
       "groups": {
-        "online": "Parallel online lookups",
-        "onlineFallback": "Parallel online fallbacks"
+        "online": "Parallel online lookups"
       },
       "recentResolution": "Previous resolution · {time} · {status}",
       "latestNote": "Latest note"

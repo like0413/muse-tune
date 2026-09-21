@@ -121,18 +121,12 @@ pub struct MediaSessionSelectionPolicy {
 }
 
 /// 前端推送到达前媒体线程使用的占位策略，取值与前端默认值同来自共享配置。
-/// `player_priority` 的规范顺序由 `MediaPlayer` 枚举派生，故仍在此构造。
 impl Default for MediaSessionSelectionPolicy {
     fn default() -> Self {
         let media = &native_defaults::shared().media;
         Self {
             strategy: media.selection_strategy,
-            player_priority: vec![
-                MediaPlayer::QqMusic,
-                MediaPlayer::NeteaseCloudMusic,
-                MediaPlayer::SodaMusic,
-                MediaPlayer::KugouMusic,
-            ],
+            player_priority: media.supported_players.clone(),
             only_supported_players: media.only_supported_players,
         }
     }

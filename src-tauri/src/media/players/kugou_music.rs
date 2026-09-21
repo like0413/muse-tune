@@ -3,6 +3,8 @@ use std::time::Duration;
 use super::PlayerAdapter;
 use crate::media::MediaPlayer;
 
+/// 标题变化后的会话保持窗口：窗口内择优会锁定当前会话，不让其他播放器更近的播放活动抢走控制目标。
+/// 调小会让切歌瞬间的控制目标过于敏感地跳走，调大会延后跟随用户真正切到的播放器。
 const TRACK_CHANGE_SELECTION_HOLD: Duration = Duration::from_millis(400);
 
 pub(super) static KUGOU_MUSIC: KugouMusicAdapter = KugouMusicAdapter;

@@ -2,7 +2,7 @@
 
 use std::{
     collections::VecDeque,
-    ops::Range,
+    ops::{Range, RangeInclusive},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -15,6 +15,8 @@ use rustfft::{FftPlanner, num_complex::Complex};
 use tauri::{AppHandle, Emitter, Runtime};
 use wasapi::{AudioClient, Direction, SampleType, StreamMode, WaveFormat, initialize_mta};
 
+use crate::error::Error;
+
 pub(super) const MEDIA_SPECTRUM_CHANGED_EVENT: &str = "media://spectrum-changed";
 
 const SAMPLE_RATE: u32 = 48_000;
@@ -25,8 +27,14 @@ const OUTPUT_BAND_COUNT: usize = 64;
 const MIN_FREQUENCY_HZ: f32 = 45.0;
 const MAX_FREQUENCY_HZ: f32 = 16_000.0;
 const DEFAULT_FRAME_RATE: u16 = 20;
+/// 频谱帧率的合法区间；越界属于参数非法，命令层据此判定不可重试。
+pub(super) const SPECTRUM_FRAME_RATE_RANGE: RangeInclusive<u16> = 15..=30;
 const STOP_CHECK_INTERVAL_MS: u32 = 100;
+/// dB 换算成 0..1 归一化值的下界：低于它的频带直接落到 0。
 const NOISE_FLOOR_DB: f32 = -72.0;
+/// 归一化值的上界：达到它的频带输出满值。它与 [`NOISE_FLOOR_DB`] 一起决定映射区间，
+/// 因此只影响画面动态范围而不改变采集本身：区间收窄会让更多频带顶到满格、画面更容易跳动，
+/// 区间放宽则会让整幅频谱整体偏暗。
 const PEAK_DB: f32 = -8.0;
 
 /// 管理频谱开关、当前捕获进程以及唯一的捕获线程。
@@ -51,9 +59,13 @@ impl<R: Runtime> AudioSpectrumController<R> {
     }
 
     /// 切换频谱采集；关闭时立即释放 WASAPI 流并清空画面。
-    pub(super) fn set_enabled(&mut self, enabled: bool, frame_rate: u16) -> Result<(), String> {
-        if !(15..=30).contains(&frame_rate) {
-            return Err("频谱帧率必须在 15 到 30 之间".to_owned());
+    pub(super) fn set_enabled(&mut self, enabled: bool, frame_rate: u16) -> Result<(), Error> {
+        if !SPECTRUM_FRAME_RATE_RANGE.contains(&frame_rate) {
+            return Err(Error::InvalidInput(format!(
+                "频谱帧率必须在 {} 到 {} 之间",
+                SPECTRUM_FRAME_RATE_RANGE.start(),
+                SPECTRUM_FRAME_RATE_RANGE.end()
+            )));
         }
         if self.enabled == enabled && self.frame_rate == frame_rate {
             return Ok(());
@@ -80,7 +92,7 @@ impl<R: Runtime> AudioSpectrumController<R> {
     }
 
     /// 停止旧目标并在需要时启动新目标，保证同时只有一个捕获流。
-    fn restart(&mut self) -> Result<(), String> {
+    fn restart(&mut self) -> Result<(), Error> {
         self.worker.take();
         emit_spectrum(&self.app, &zero_frame());
 
@@ -108,7 +120,7 @@ impl SpectrumWorker {
         app: AppHandle<R>,
         process_id: u32,
         frame_interval: Duration,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Error> {
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = Arc::clone(&stop);
         let thread = thread::Builder::new()
@@ -119,8 +131,7 @@ impl SpectrumWorker {
                     log::warn!("捕获播放器音频频谱失败: {error}");
                     emit_spectrum(&app, &zero_frame());
                 }
-            })
-            .map_err(|error| error.to_string())?;
+            })?;
         Ok(Self {
             stop,
             thread: Some(thread),
@@ -145,8 +156,11 @@ fn capture_spectrum<R: Runtime>(
     process_id: u32,
     stop: &AtomicBool,
     frame_interval: Duration,
-) -> Result<(), String> {
-    initialize_mta().ok().map_err(|error| error.to_string())?;
+) -> Result<(), Error> {
+    // COM 初始化返回的 HRESULT 来自 wasapi 内部的 windows 版本，只能保留其文案。
+    initialize_mta()
+        .ok()
+        .map_err(|error| Error::Message(error.to_string()))?;
 
     let format = WaveFormat::new(
         32,
@@ -156,27 +170,20 @@ fn capture_spectrum<R: Runtime>(
         CHANNEL_COUNT,
         None,
     );
-    let mut audio_client = AudioClient::new_application_loopback_client(process_id, true)
-        .map_err(|error| error.to_string())?;
-    audio_client
-        .initialize_client(
-            &format,
-            &Direction::Capture,
-            &StreamMode::EventsShared {
-                autoconvert: true,
-                buffer_duration_hns: 0,
-            },
-        )
-        .map_err(|error| error.to_string())?;
-    let audio_event = audio_client
-        .set_get_eventhandle()
-        .map_err(|error| error.to_string())?;
-    let capture_client = audio_client
-        .get_audiocaptureclient()
-        .map_err(|error| error.to_string())?;
-    audio_client
-        .start_stream()
-        .map_err(|error| error.to_string())?;
+    // 第二个参数 true 表示把捕获范围扩到该进程的整棵子进程树；改成 false 时，音频由子进程
+    // （渲染进程、独立音频宿主等）输出的播放器只会采到静默帧。
+    let mut audio_client = AudioClient::new_application_loopback_client(process_id, true)?;
+    audio_client.initialize_client(
+        &format,
+        &Direction::Capture,
+        &StreamMode::EventsShared {
+            autoconvert: true,
+            buffer_duration_hns: 0,
+        },
+    )?;
+    let audio_event = audio_client.set_get_eventhandle()?;
+    let capture_client = audio_client.get_audiocaptureclient()?;
+    audio_client.start_stream()?;
 
     let mut samples = VecDeque::with_capacity(FFT_SIZE);
     let mut packet = Vec::new();
@@ -187,15 +194,12 @@ fn capture_spectrum<R: Runtime>(
         // 本轮是否读到新音频包；没有新包时不再重复发射同一份陈旧频谱。
         let mut has_new_samples = false;
         while let Some(frame_count) = capture_client
-            .get_next_packet_size()
-            .map_err(|error| error.to_string())?
+            .get_next_packet_size()?
             .filter(|count| *count > 0)
         {
             let packet_size = frame_count as usize * CHANNEL_COUNT * BYTES_PER_SAMPLE;
             packet.resize(packet_size, 0);
-            let (read_frames, info) = capture_client
-                .read_from_device(&mut packet)
-                .map_err(|error| error.to_string())?;
+            let (read_frames, info) = capture_client.read_from_device(&mut packet)?;
             append_mono_samples(
                 &mut samples,
                 &packet[..read_frames as usize * CHANNEL_COUNT * BYTES_PER_SAMPLE],
@@ -295,6 +299,8 @@ impl SpectrumAnalyzer {
             let normalized = ((decibels - NOISE_FLOOR_DB) / (PEAK_DB - NOISE_FLOOR_DB))
                 .clamp(0.0, 1.0)
                 .sqrt();
+            // 上升用大系数、回落用小系数：能量增加时快速跟上、减少时缓慢回落，因此画面不会逐帧抖动。
+            // 两者必须留在 0..=1：超过 1 会过冲来回振荡，等于 1 则完全不留缓动。
             let smoothing = if normalized > self.smoothed[band] {
                 0.68
             } else {
@@ -311,7 +317,6 @@ fn frequency_to_bin(frequency: f32) -> usize {
     ((frequency * FFT_SIZE as f32 / SAMPLE_RATE as f32).floor() as usize).max(1)
 }
 
-/// 创建固定长度的静默帧。
 fn zero_frame() -> Vec<f32> {
     vec![0.0; OUTPUT_BAND_COUNT]
 }

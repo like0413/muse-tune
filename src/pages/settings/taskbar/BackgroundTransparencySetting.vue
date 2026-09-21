@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Blend } from '@lucide/vue'
-import type { UnlistenFn } from '@tauri-apps/api/event'
 import { useThrottleFn } from '@vueuse/core'
 
 import {
@@ -13,11 +12,11 @@ import {
 } from '@/components/ui/item'
 import { Slider } from '@/components/ui/slider'
 import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
+import { useEventState } from '@/features/ipc/useEventState'
 import {
   DEFAULT_TASKBAR_BACKGROUND_STYLE,
   getTaskbarBackgroundStyle,
   listenTaskbarBackgroundStyleChange,
-  type TaskbarBackgroundStyle,
 } from '@/features/settings/background-style'
 import {
   getTaskbarBackgroundTransparency,
@@ -27,36 +26,25 @@ import {
   TASKBAR_TRANSPARENCY_MAX,
   TASKBAR_TRANSPARENCY_MIN,
 } from '@/features/settings/background-transparency'
+import { DEFAULT_TASKBAR_BACKGROUND_TRANSPARENCY } from '@/features/settings/defaults'
 
 const { t } = useI18n({ useScope: 'global' })
 
-const selectedBackgroundTransparency = shallowRef(0)
-const committedBackgroundTransparency = shallowRef(0)
+const selectedBackgroundTransparency = shallowRef(DEFAULT_TASKBAR_BACKGROUND_TRANSPARENCY)
+const committedBackgroundTransparency = shallowRef(DEFAULT_TASKBAR_BACKGROUND_TRANSPARENCY)
 const backgroundTransparencySaving = shallowRef(false)
-const backgroundStyle = shallowRef<TaskbarBackgroundStyle>(DEFAULT_TASKBAR_BACKGROUND_STYLE)
+/** 当前背景样式；订阅变更以确保切换模式后透明度控件立即更新。 */
+const backgroundStyle = useEventState(
+  {
+    read: getTaskbarBackgroundStyle,
+    subscribe: listenTaskbarBackgroundStyleChange,
+    failureMessage: '读取任务栏背景样式失败',
+  },
+  DEFAULT_TASKBAR_BACKGROUND_STYLE,
+)
 const transparencyDisabled = computed(
   () => backgroundTransparencySaving.value || backgroundStyle.value !== 'theme',
 )
-let unlistenBackgroundStyle: UnlistenFn | undefined
-let styleRevision = 0
-let disposed = false
-
-/** 先监听再读取背景样式，确保切换模式后透明度控件立即更新。 */
-async function loadBackgroundStyle() {
-  try {
-    const stop = await listenTaskbarBackgroundStyleChange((style) => {
-      styleRevision += 1
-      backgroundStyle.value = style
-    })
-    if (disposed) return stop()
-    unlistenBackgroundStyle = stop
-    const revision = styleRevision
-    const saved = await getTaskbarBackgroundStyle()
-    if (!disposed && revision === styleRevision) backgroundStyle.value = saved
-  } catch (error) {
-    reportBackgroundFailure('读取任务栏背景样式失败', error)
-  }
-}
 
 /** 恢复已保存的背景透明度。 */
 async function loadBackgroundTransparency() {
@@ -78,7 +66,7 @@ function getTransparencyValue(values: number[] | undefined): number | undefined 
 const previewTransparency = useThrottleFn(
   (transparency: number) => {
     previewTaskbarBackgroundTransparency(transparency).catch((error) => {
-      console.error('预览任务栏背景透明度失败', error)
+      reportBackgroundFailure('预览任务栏背景透明度失败', error)
     })
   },
   32,
@@ -124,14 +112,7 @@ async function commitBackgroundTransparency(values: number[]) {
   }
 }
 
-onMounted(() => {
-  void loadBackgroundStyle()
-  void loadBackgroundTransparency()
-})
-onUnmounted(() => {
-  disposed = true
-  unlistenBackgroundStyle?.()
-})
+onMounted(() => void loadBackgroundTransparency())
 </script>
 
 <template>

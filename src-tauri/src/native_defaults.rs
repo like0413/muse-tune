@@ -11,7 +11,7 @@
 use std::sync::LazyLock;
 
 use crate::lyrics::LyricsOnlineStrategy;
-use crate::media::MediaSessionSelectionStrategy;
+use crate::media::{MediaPlayer, MediaSessionSelectionStrategy};
 use crate::taskbar::{TaskbarOverlapPriority, TaskbarPlacement, TaskbarWidthMode};
 
 const SHARED_DEFAULTS: &str = include_str!("../../src/features/settings/native-defaults.json");
@@ -76,12 +76,14 @@ pub struct LyricsDefaults {
     pub online_strategy: LyricsOnlineStrategy,
 }
 
-/// 媒体服务在前端推送到达前使用的会话选择策略；优先级顺序由播放器枚举派生，故不在此。
+/// 媒体服务在前端推送到达前使用的会话选择策略。
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaDefaults {
     pub selection_strategy: MediaSessionSelectionStrategy,
     pub only_supported_players: bool,
+    /// 已接入播放器及其规范顺序；前端与原生共用这一份列表。
+    pub supported_players: Vec<MediaPlayer>,
 }
 
 static DEFAULTS: LazyLock<SharedDefaults> = LazyLock::new(|| {
@@ -99,6 +101,14 @@ pub fn display_target() -> &'static str {
     &shared().taskbar.display_target
 }
 
+/// 已接入的播放器及其规范顺序。
+///
+/// 这是“哪些平台已接入、默认如何排序”的唯一事实源：默认会话策略、策略归一化与候选择优
+/// 权重都从这里派生。用户调整优先级只影响持久化策略，不会改变这份规范顺序。
+pub fn supported_players() -> &'static [MediaPlayer] {
+    &shared().media.supported_players
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -111,5 +121,26 @@ mod tests {
             taskbar.width_min <= taskbar.width && taskbar.width <= taskbar.width_max,
             "默认宽度必须落在可调范围内，否则会被原生钳制而与设置界面不一致"
         );
+    }
+
+    /// 共享平台列表是前端规范化与原生归一化的共同来源：损坏或重复会让平台被错误地排除。
+    #[test]
+    fn supported_players_are_well_formed() {
+        let players = supported_players();
+        assert!(!players.is_empty(), "共享配置里的已接入平台列表不能为空");
+
+        let mut seen = Vec::new();
+        for player in players {
+            assert_ne!(
+                *player,
+                MediaPlayer::Other,
+                "Other 不是已接入平台，不该出现在列表里"
+            );
+            assert!(
+                !seen.contains(player),
+                "{player:?} 在共享平台列表里重复出现"
+            );
+            seen.push(*player);
+        }
     }
 }

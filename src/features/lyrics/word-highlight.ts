@@ -6,8 +6,8 @@ import type { LyricWord } from './types'
  * 歌词行的播放比例区间：滚动只在行中段发生，首尾留出静止时间，
  * 否则歌词刚出现就开始滑动，视觉上会很焦躁。
  */
-export const SCROLL_START_PROGRESS = 0.28
-export const SCROLL_END_PROGRESS = 0.88
+const SCROLL_START_PROGRESS = 0.28
+const SCROLL_END_PROGRESS = 0.88
 
 /** 逐字高亮渐变在词两侧的过渡宽度，单位是词内进度的百分比。 */
 const WORD_GRADIENT_HALF_WIDTH = 12

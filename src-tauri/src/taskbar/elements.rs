@@ -40,6 +40,8 @@ impl TaskbarLayoutEventHandler_Impl {
         sender: Ref<'_, IUIAutomationElement>,
     ) -> windows::core::Result<()> {
         let sender = sender.ok()?;
+        // SAFETY: 事件回调只在订阅它的同步线程上触发，sender 由 UIA 在该次回调期间保证有效；
+        // 读取的是注册处理器时请求过的缓存属性，不会再回到 Explorer 里现场取一次值。
         if unsafe { sender.CachedProcessId()? } == self.provider_process_id {
             request_layout_update(self.monitor_thread_id);
         }
@@ -109,6 +111,9 @@ impl Drop for ComMta {
 }
 
 /// 复用监控线程的 COM 单元与 UI Automation 客户端。
+///
+/// `_apartment` 必须留在最后一个字段：Rust 按声明顺序析构，它会先释放全部 COM 接口、
+/// 最后才 `CoUninitialize`。把它挪到前面会让 COM 单元先于接口失效，之后释放接口即未定义行为。
 pub(super) struct TaskbarElements {
     automation: Option<IUIAutomation>,
     query: Option<TaskbarQuery>,
@@ -180,6 +185,9 @@ impl TaskbarElements {
             return;
         };
 
+        // SAFETY: automation 与 subscription 里的接口都创建于本线程的 MTA，且只能在创建它们的
+        // 线程上调用；subscription 在移除前才被 take，处理器的所有权一直由它持有，因此这里传回
+        // 的正是注册时的那两个实例。
         unsafe {
             let _ = automation.RemoveAutomationEventHandler(
                 UIA_LayoutInvalidatedEventId,
@@ -235,6 +243,9 @@ fn subscribe_taskbar_events(
     let structure_handler = layout_handler.cast::<IUIAutomationStructureChangedEventHandler>()?;
     let event_cache = create_property_cache(automation, UIA_ProcessIdPropertyId)?;
 
+    // SAFETY: 注册与调用都发生在所属任务栏的同步线程（同一 MTA）上；两个 handler 的所有权
+    // 交给返回的 TaskbarEventSubscription，注销时用的就是同一对实例。订阅跨进程生效，若 Explorer
+    // 正在重建，注册可能失败并返回错误，此时调用方退回低频查询。
     unsafe {
         automation.AddAutomationEventHandler(
             UIA_LayoutInvalidatedEventId,
@@ -270,21 +281,28 @@ fn create_taskbar_query(
     automation: &IUIAutomation,
     taskbar: HWND,
 ) -> windows::core::Result<TaskbarQuery> {
+    // SAFETY: taskbar 由调用方在同步线程上验证过；查询跨进程建立，Explorer 正在退出时会失败，
+    // 错误直接上抛，调用方据此跳过本次订阅并保留完整 bar。
     let root = unsafe { automation.ElementFromHandle(taskbar)? };
+    // SAFETY: root 来自本次查询，只读取该元素的进程 ID；跨进程读取可能失败，同样由 `?` 上抛。
     let provider_process_id = unsafe { root.CurrentProcessId()? };
+    // SAFETY: 条件由本线程的 UIA 客户端创建，VARIANT 是临时值且在调用期间存活。
     let button_condition = unsafe {
         automation.CreatePropertyCondition(
             UIA_ControlTypePropertyId,
             &VARIANT::from(UIA_ButtonControlTypeId.0),
         )?
     };
+    // SAFETY: 同上，条件与临时 VARIANT 都只在本次调用期间使用。
     let process_condition = unsafe {
         automation
             .CreatePropertyCondition(UIA_ProcessIdPropertyId, &VARIANT::from(provider_process_id))?
     };
+    // SAFETY: 同上，条件与临时 VARIANT 都只在本次调用期间使用。
     let visible_condition = unsafe {
         automation.CreatePropertyCondition(UIA_IsOffscreenPropertyId, &VARIANT::from(false))?
     };
+    // SAFETY: 三个输入条件在调用期间由上面的局部变量持有，因此组合条件不会引用到已释放的对象。
     let condition = unsafe {
         automation.CreateAndConditionFromNativeArray(&[
             Some(button_condition),
@@ -307,7 +325,9 @@ fn create_property_cache(
     automation: &IUIAutomation,
     property: windows::Win32::UI::Accessibility::UIA_PROPERTY_ID,
 ) -> windows::core::Result<IUIAutomationCacheRequest> {
+    // SAFETY: 缓存请求由本线程的 UIA 客户端创建，随后由本函数设置的属性与模式都只作用于它。
     let cache = unsafe { automation.CreateCacheRequest()? };
+    // SAFETY: 属性 ID 由调用方传入且来自 UIA 的固定枚举；模式只控制是否建立完整元素引用。
     unsafe {
         cache.AddProperty(property)?;
         cache.SetAutomationElementMode(AutomationElementMode_None)?;
@@ -321,16 +341,21 @@ fn read_button_rects(
     taskbar_rect: ScreenRect,
     tray_rect: Option<ScreenRect>,
 ) -> windows::core::Result<Vec<ScreenRect>> {
+    // SAFETY: 跨进程批量查询，调用方已保证 query 在同线程创建并持有；Explorer 正在重建时可能
+    // 直接失败，或返回一批已经失效的元素，两种情况都由下面逐元素读取缓存属性时体现。
     let elements = unsafe {
         query
             .root
             .FindAllBuildCache(TreeScope_Descendants, &query.condition, &query.cache)?
     };
+    // SAFETY: 只读取本次结果集的长度，不移动或释放其中的元素。
     let length = unsafe { elements.Length()? };
     let mut rects = Vec::with_capacity(length.max(0) as usize);
 
     for index in 0..length {
+        // SAFETY: index 一定落在上面取到的长度范围内。
         let element = unsafe { elements.GetElement(index)? };
+        // SAFETY: 只读取注册缓存请求时声明过的属性；元素若已失效这里返回错误，跳过即可。
         let rect = ScreenRect::from(unsafe { element.CachedBoundingRectangle()? });
         let horizontal_center = rect.left + rect.width() / 2;
         let belongs_to_tray = tray_rect

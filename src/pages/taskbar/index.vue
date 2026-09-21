@@ -74,7 +74,7 @@ const isCompact = computed(
     barWindowWidth.value > 0 &&
     barWindowWidth.value <= TASKBAR_WIDTH_PRESETS.compact + COMPACT_WIDTH_TOLERANCE,
 )
-// 纯音乐、歌词关闭或鼠标悬停显示控件时，不需要持续推演歌词播放位置。
+/** 歌词状态就绪且行非空；不含设置开关、播放状态与悬停等进入歌词模式的条件。 */
 const hasTimedLyrics = computed(
   () => lyrics.value.status === 'ready' && lyrics.value.lines.length > 0,
 )

@@ -16,9 +16,8 @@ use crate::lyrics::{
     error::LyricsError,
     matcher::MAX_DURATION_DIFFERENCE_MS,
     model::{
-        LyricsLookupOutcome, LyricsOnlineStrategy, LyricsPrecision, LyricsResolutionMethod,
-        LyricsResolutionOutcome, LyricsResolutionSite, LyricsSnapshot, LyricsStatus,
-        ResolvedLyrics, has_word_timing,
+        LyricsLookupOutcome, LyricsPrecision, LyricsResolutionMethod, LyricsResolutionOutcome,
+        LyricsResolutionSite, LyricsSnapshot, LyricsStatus, ResolvedLyrics, has_word_timing,
     },
     network::ResolutionDeadline,
     players,
@@ -42,6 +41,24 @@ const CONCLUSION_SETTLE_TIMEOUT: Duration = Duration::from_millis(500);
 /// 挂起期间检查“是否已有新一轮解析”的间隔；也是它对新请求的最大延迟。
 const CONCLUSION_SETTLE_POLL: Duration = Duration::from_millis(20);
 
+/// 一轮解析在阶段之间累积的结果。
+///
+/// 缓存升级、本地、在线三个阶段各自只往这里追加，最终由 `finish_resolution` 统一择优；
+/// 收敛成结构体后阶段之间不再需要传递一长串出入参。
+struct ResolutionProgress {
+    /// 各阶段收集到的候选。
+    candidates: Vec<LyricsCandidate>,
+    /// 已经展示了可用的逐行结果（缓存命中或本地命中）时，本轮在线只用于升级到逐字：
+    /// 换成另一个逐行只会让用户看到歌词无意义地跳一次，精度并没有提高。
+    upgrade_to_word_only: bool,
+    /// 是否有来源技术性失败；用于把“来源暂时不可用”与“确认这首歌没有歌词”分开上报。
+    source_failed: bool,
+    /// 缓存升级阶段是否已经查过当前播放器的本地来源，此时本地阶段不必重复。
+    local_source_resolved: bool,
+    /// 缓存里已有可展示的逐行结果；本地阶段以它为基准判断替换是否值得。
+    cached_line_displayed: bool,
+}
+
 impl LyricsService {
     pub(super) fn resolve_track(
         &self,
@@ -53,8 +70,11 @@ impl LyricsService {
     ) {
         let deadline = ResolutionDeadline::new(cancellation);
         let preferences = self.preferences();
-        let plan = ResolutionPlan::new(track.player, preferences.online_strategy);
-        let mut candidates = Vec::new();
+        let plan = ResolutionPlan::new(
+            track.player,
+            preferences.online_strategy,
+            &preferences.online_sources,
+        );
         let cache_timeline_validation = cached.as_ref().and_then(|cached| {
             (cached.snapshot.status == LyricsStatus::Ready)
                 .then(|| validate_timeline(&track, &cached.snapshot.lines))
@@ -94,9 +114,15 @@ impl LyricsService {
                 && cached.snapshot.status == LyricsStatus::Ready
                 && cached.snapshot.precision == Some(LyricsPrecision::Line)
         });
+        let mut progress = ResolutionProgress {
+            candidates: Vec::new(),
+            upgrade_to_word_only: cached_line_displayed,
+            source_failed: false,
+            local_source_resolved: false,
+            cached_line_displayed,
+        };
 
         // 缓存分支可能已经解析过当前播放器的本地来源（新鲜逐行的升级判定），此时本地阶段不必重复。
-        let mut local_source_resolved = false;
         if let Some(cached) = cached {
             if cached_snapshot_displayable && cached.is_fresh {
                 // 逐行与纯音乐都要顺手查一次本地（判据见 `should_check_local_upgrade`）。
@@ -113,83 +139,11 @@ impl LyricsService {
                 }
 
                 // 已有缓存必须先展示；本地精度升级属于增强路径，不能阻塞首屏歌词。
-                let mut upgraded_locally = false;
-                let upgrade_started_at = Instant::now();
-                local_source_resolved = true;
-                match players::resolve_current_local(&track, self.cache_path(track.player)) {
-                    Ok(LyricsLookupOutcome::Hit(local))
-                        if is_acceptable_candidate(&track, &local.lines)
-                            && cache_policy::local_result_is_upgrade(&cached.snapshot, &local) =>
-                    {
-                        self.record_resolution_step(
-                            generation,
-                            LyricsResolutionSite::LocalUpgrade,
-                            LyricsResolutionOutcome::Hit,
-                            Some(format!(
-                                "发现更高精度或辅助内容更完整的本地歌词 · {} ms",
-                                duration_millis(upgrade_started_at.elapsed()),
-                            )),
-                        );
-                        self.publish_resolution(&track, local, generation);
-                        upgraded_locally = true;
-                    }
-                    Ok(LyricsLookupOutcome::Hit(local))
-                        if !is_acceptable_candidate(&track, &local.lines) =>
-                    {
-                        self.record_resolution_step(
-                            generation,
-                            LyricsResolutionSite::LocalUpgrade,
-                            LyricsResolutionOutcome::Error,
-                            Some(format!(
-                                "{} · {} ms",
-                                timeline_rejection_reason(&track, &local.lines)
-                                    .unwrap_or("歌词时间轴不可用"),
-                                duration_millis(upgrade_started_at.elapsed()),
-                            )),
-                        );
-                    }
-                    Ok(LyricsLookupOutcome::Hit(_)) => self.record_resolution_step(
-                        generation,
-                        LyricsResolutionSite::LocalUpgrade,
-                        LyricsResolutionOutcome::Miss,
-                        Some(format!(
-                            "本地歌词未提供更高精度或更多辅助内容 · {} ms",
-                            duration_millis(upgrade_started_at.elapsed()),
-                        )),
-                    ),
-                    Ok(LyricsLookupOutcome::Miss(reason)) => self.record_resolution_step(
-                        generation,
-                        LyricsResolutionSite::LocalUpgrade,
-                        LyricsResolutionOutcome::Miss,
-                        Some(format!(
-                            "{} · {} ms",
-                            lookup_miss_detail(reason),
-                            duration_millis(upgrade_started_at.elapsed()),
-                        )),
-                    ),
-                    Ok(LyricsLookupOutcome::Unsupported) => self.record_resolution_step(
-                        generation,
-                        LyricsResolutionSite::LocalUpgrade,
-                        LyricsResolutionOutcome::Miss,
-                        Some(format!(
-                            "当前播放器不支持本地歌词 · {} ms",
-                            duration_millis(upgrade_started_at.elapsed()),
-                        )),
-                    ),
-                    Err(LyricsError::Cancelled) => return,
-                    Err(error) => {
-                        self.record_resolution_step(
-                            generation,
-                            LyricsResolutionSite::LocalUpgrade,
-                            LyricsResolutionOutcome::Error,
-                            Some(format!(
-                                "{error} · {} ms",
-                                duration_millis(upgrade_started_at.elapsed()),
-                            )),
-                        );
-                        log::debug!("检查播放器本地歌词升级失败: {error}");
-                    }
-                }
+                progress.local_source_resolved = true;
+                let Some(upgraded_locally) = self.try_local_upgrade(&track, generation, &cached)
+                else {
+                    return;
+                };
                 // 本地升级没有结果时，只有逐行缓存继续走在线阶段尝试升级到逐字。
                 if !should_revalidate || upgraded_locally {
                     return;
@@ -201,7 +155,7 @@ impl LyricsService {
                 && cached_snapshot_displayable
                 && let Some(source) = cached.snapshot.source
             {
-                candidates.push(LyricsCandidate {
+                progress.candidates.push(LyricsCandidate {
                     resolved: ResolvedLyrics {
                         source,
                         lines: cached.snapshot.lines,
@@ -211,71 +165,188 @@ impl LyricsService {
             }
         }
 
-        // 是否有来源技术性失败。用于把“来源暂时不可用”与“确认这首歌没有歌词”分开上报。
-        let mut source_failed = false;
-        // 已经展示了可用的逐行结果（缓存命中或本地命中）时，本轮在线只用于升级到逐字：
-        // 换成另一个逐行只会让用户看到歌词无意义地跳一次，精度并没有提高。
-        let mut upgrade_to_word_only = cached_line_displayed;
-
-        let local_attempts = plan
-            .local_attempts
-            .iter()
-            .filter(|attempt| !(local_source_resolved && attempt.player == track.player));
-        for attempt in local_attempts {
-            let execution = self.execute_attempt(*attempt, &track, &deadline);
-            match self.record_attempt(execution, &track, generation, None) {
-                RecordedAttempt::Candidate(candidate)
-                    if candidate.resolved.source.player == track.player
-                        && has_word_timing(&candidate.resolved.lines) =>
-                {
-                    self.publish_candidate(&track, candidate, generation);
-                    return;
-                }
-                RecordedAttempt::Candidate(candidate) => {
-                    // 本地逐行先发布：用户不必等在线阶段跑完才看到歌词，升级在后台继续。
-                    // 但已展示逐行时（新鲜缓存）只有真正的提升才值得替换，否则歌词会无意义地跳一次。
-                    if candidate.resolved.source.player == track.player
-                        && improves_displayed(cached_line_displayed, &candidate)
-                    {
-                        upgrade_to_word_only = true;
-                        self.publish_candidate(&track, candidate.clone(), generation);
-                    }
-                    candidates.push(candidate);
-                }
-                RecordedAttempt::Missed => {}
-                RecordedAttempt::Failed => source_failed = true,
-                RecordedAttempt::Cancelled => return,
-            }
-            if !self.is_current_generation(generation) {
-                return;
-            }
+        if !self.run_local_stage(&track, generation, &plan, &deadline, &mut progress) {
+            return;
         }
-
         if !preferences.allow_online {
             self.finish_resolution(
                 &track,
                 generation,
-                candidates,
-                upgrade_to_word_only,
-                source_failed,
+                progress,
                 stale_notice,
                 "联网策略仅允许本地与缓存",
                 "本地与缓存歌词来源暂时不可用",
             );
             return;
         }
+        if !self.run_online_stages(&track, generation, &plan, &deadline, &mut progress) {
+            return;
+        }
+        self.finish_resolution(
+            &track,
+            generation,
+            progress,
+            stale_notice,
+            "没有找到可靠歌词",
+            "歌词来源暂时不可用，请检查网络连接",
+        );
+    }
 
-        for (stage_index, stage) in plan.online_stages.iter().enumerate() {
+    /// 已有新鲜缓存时，检查本地歌词是否提供更高精度或更完整的辅助内容。
+    ///
+    /// 返回 `None` 表示本轮解析已被取消，调用方应当直接结束。
+    fn try_local_upgrade(
+        &self,
+        track: &TrackDescriptor,
+        generation: u64,
+        cached: &CacheLookup,
+    ) -> Option<bool> {
+        let mut upgraded_locally = false;
+        let upgrade_started_at = Instant::now();
+        match players::resolve_current_local(track, self.cache_path(track.player)) {
+            Ok(LyricsLookupOutcome::Hit(local))
+                if is_acceptable_candidate(track, &local.lines)
+                    && cache_policy::local_result_is_upgrade(&cached.snapshot, &local) =>
+            {
+                self.record_resolution_step(
+                    generation,
+                    LyricsResolutionSite::LocalUpgrade,
+                    LyricsResolutionOutcome::Hit,
+                    Some(format!(
+                        "发现更高精度或辅助内容更完整的本地歌词 · {} ms",
+                        duration_millis(upgrade_started_at.elapsed()),
+                    )),
+                );
+                self.publish_resolution(track, local, generation);
+                upgraded_locally = true;
+            }
+            Ok(LyricsLookupOutcome::Hit(local))
+                if !is_acceptable_candidate(track, &local.lines) =>
+            {
+                self.record_resolution_step(
+                    generation,
+                    LyricsResolutionSite::LocalUpgrade,
+                    LyricsResolutionOutcome::Error,
+                    Some(format!(
+                        "{} · {} ms",
+                        timeline_rejection_reason(track, &local.lines)
+                            .unwrap_or("歌词时间轴不可用"),
+                        duration_millis(upgrade_started_at.elapsed()),
+                    )),
+                );
+            }
+            Ok(LyricsLookupOutcome::Hit(_)) => self.record_resolution_step(
+                generation,
+                LyricsResolutionSite::LocalUpgrade,
+                LyricsResolutionOutcome::Miss,
+                Some(format!(
+                    "本地歌词未提供更高精度或更多辅助内容 · {} ms",
+                    duration_millis(upgrade_started_at.elapsed()),
+                )),
+            ),
+            Ok(LyricsLookupOutcome::Miss(reason)) => self.record_resolution_step(
+                generation,
+                LyricsResolutionSite::LocalUpgrade,
+                LyricsResolutionOutcome::Miss,
+                Some(format!(
+                    "{} · {} ms",
+                    lookup_miss_detail(reason),
+                    duration_millis(upgrade_started_at.elapsed()),
+                )),
+            ),
+            Ok(LyricsLookupOutcome::Unsupported) => self.record_resolution_step(
+                generation,
+                LyricsResolutionSite::LocalUpgrade,
+                LyricsResolutionOutcome::Miss,
+                Some(format!(
+                    "当前播放器不支持本地歌词 · {} ms",
+                    duration_millis(upgrade_started_at.elapsed()),
+                )),
+            ),
+            Err(LyricsError::Cancelled) => return None,
+            Err(error) => {
+                self.record_resolution_step(
+                    generation,
+                    LyricsResolutionSite::LocalUpgrade,
+                    LyricsResolutionOutcome::Error,
+                    Some(format!(
+                        "{error} · {} ms",
+                        duration_millis(upgrade_started_at.elapsed()),
+                    )),
+                );
+                log::debug!("检查播放器本地歌词升级失败: {error}");
+            }
+        }
+        Some(upgraded_locally)
+    }
+
+    /// 执行本地阶段：当前播放器的本地歌词是同一首歌最可信的来源。
+    ///
+    /// 返回 `false` 表示本轮解析到此结束（已发布逐字结果、被取消或代际作废）。
+    fn run_local_stage(
+        &self,
+        track: &TrackDescriptor,
+        generation: u64,
+        plan: &ResolutionPlan,
+        deadline: &ResolutionDeadline,
+        progress: &mut ResolutionProgress,
+    ) -> bool {
+        let local_attempts = plan
+            .local_attempts
+            .iter()
+            .filter(|attempt| !(progress.local_source_resolved && attempt.player == track.player));
+        for attempt in local_attempts {
+            let execution = self.execute_attempt(*attempt, track, deadline);
+            match self.record_attempt(execution, track, generation, false) {
+                RecordedAttempt::Candidate(candidate)
+                    if candidate.resolved.source.player == track.player
+                        && has_word_timing(&candidate.resolved.lines) =>
+                {
+                    self.publish_candidate(track, candidate, generation);
+                    return false;
+                }
+                RecordedAttempt::Candidate(candidate) => {
+                    // 本地逐行先发布：用户不必等在线阶段跑完才看到歌词，升级在后台继续。
+                    // 但已展示逐行时（新鲜缓存）只有真正的提升才值得替换，否则歌词会无意义地跳一次。
+                    if candidate.resolved.source.player == track.player
+                        && improves_displayed(progress.cached_line_displayed, &candidate)
+                    {
+                        progress.upgrade_to_word_only = true;
+                        self.publish_candidate(track, candidate.clone(), generation);
+                    }
+                    progress.candidates.push(candidate);
+                }
+                RecordedAttempt::Missed => {}
+                RecordedAttempt::Failed => progress.source_failed = true,
+                RecordedAttempt::Cancelled => return false,
+            }
+            if !self.is_current_generation(generation) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// 执行全部在线阶段：同一阶段内的来源并发查询，候选按计划顺序收集。
+    ///
+    /// 返回 `false` 表示本轮解析已被取消或代际作废，调用方应当直接结束。
+    fn run_online_stages(
+        &self,
+        track: &TrackDescriptor,
+        generation: u64,
+        plan: &ResolutionPlan,
+        deadline: &ResolutionDeadline,
+        progress: &mut ResolutionProgress,
+    ) -> bool {
+        for stage in &plan.online_stages {
             if stage.attempts.is_empty() {
                 continue;
             }
             let executions = if stage.attempts.len() == 1 {
-                vec![self.execute_attempt(stage.attempts[0], &track, &deadline)]
+                vec![self.execute_attempt(stage.attempts[0], track, deadline)]
             } else {
                 thread::scope(|scope| {
                     let service = self;
-                    let track = &track;
-                    let deadline = &deadline;
                     let handles = stage
                         .attempts
                         .iter()
@@ -291,56 +362,38 @@ impl LyricsService {
                 })
             };
             for execution in executions {
-                match self.record_attempt(execution, &track, generation, stage.group) {
-                    RecordedAttempt::Candidate(candidate)
-                        if preferences.online_strategy
-                            == LyricsOnlineStrategy::CurrentPlayerFirst
-                            && stage_index == 0
-                            && has_word_timing(&candidate.resolved.lines) =>
-                    {
-                        self.publish_candidate(&track, candidate, generation);
-                        return;
-                    }
-                    RecordedAttempt::Candidate(candidate) => candidates.push(candidate),
+                match self.record_attempt(execution, track, generation, stage.parallel) {
+                    RecordedAttempt::Candidate(candidate) => progress.candidates.push(candidate),
                     RecordedAttempt::Missed => {}
-                    RecordedAttempt::Failed => source_failed = true,
-                    RecordedAttempt::Cancelled => return,
+                    RecordedAttempt::Failed => progress.source_failed = true,
+                    RecordedAttempt::Cancelled => return false,
                 }
             }
             if !self.is_current_generation(generation) {
-                return;
+                return false;
             }
         }
-        self.finish_resolution(
-            &track,
-            generation,
-            candidates,
-            upgrade_to_word_only,
-            source_failed,
-            stale_notice,
-            "没有找到可靠歌词",
-            "歌词来源暂时不可用，请检查网络连接",
-        );
+        true
     }
 
     /// 选出并提交最终结论。
     ///
     /// 离线与在线两条路径的收尾完全一致，只有“确认没有歌词”时的原因文案不同，
     /// 因此合并为一处：否则两边容易各自漂移，出现同一条件下结论不一致。
-    #[allow(clippy::too_many_arguments)]
     fn finish_resolution(
         &self,
         track: &TrackDescriptor,
         generation: u64,
-        candidates: Vec<LyricsCandidate>,
-        upgrade_to_word_only: bool,
-        source_failed: bool,
+        progress: ResolutionProgress,
         stale_notice: Option<LyricsSnapshot>,
         miss_reason: &str,
         failure_reason: &str,
     ) {
-        match select_best_candidate(track, candidates) {
-            Some(candidate) if improves_displayed(upgrade_to_word_only, &candidate) => {
+        // 择优顺序取自当前的在线接口配置：本轮候选已按计划抓取完毕，这里读最新快照即可——
+        // 偏好变化不会作废进行中的一轮，而是从下一轮解析开始生效。
+        let online_sources = self.preferences().online_sources;
+        match select_best_candidate(track, progress.candidates, &online_sources) {
+            Some(candidate) if improves_displayed(progress.upgrade_to_word_only, &candidate) => {
                 self.publish_candidate(track, candidate, generation);
             }
             // 只升级不降级：已经展示的逐行保持不变，也不要让过期结论覆盖它。
@@ -363,7 +416,7 @@ impl LyricsService {
                     self.publish_no_lyrics(
                         &track.key,
                         generation,
-                        source_failed,
+                        progress.source_failed,
                         miss_reason,
                         failure_reason,
                     );

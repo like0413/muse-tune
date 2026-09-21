@@ -1,11 +1,13 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
-import { clamp } from 'es-toolkit'
+import { isEqual, uniq } from 'es-toolkit'
 
 import { setLyricsPreferences } from '@/features/lyrics/client'
 import { LYRICS_ONLINE_STRATEGIES, type LyricsOnlineStrategy } from '@/features/lyrics/types'
+import type { MediaPlayer } from '@/features/media/types'
 
-import { DEFAULT_TASKBAR_LYRICS_SETTINGS } from './defaults'
+import { DEFAULT_TASKBAR_LYRICS_SETTINGS, SUPPORTED_MEDIA_PLAYERS } from './defaults'
+import { normalizeIntegerInRange } from './normalize'
 import { SETTINGS_SCHEMA_VERSIONS } from './storage/schema-versions'
 import { loadVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
 import { normalizeHexColor } from './theme-color'
@@ -21,6 +23,7 @@ const TASKBAR_LYRICS_COLOR_SCHEMES = ['theme', 'custom'] as const
 const MAX_FONT_FAMILY_LENGTH = 128
 export const TASKBAR_LYRICS_FONT_SIZE_MIN = 10
 export const TASKBAR_LYRICS_FONT_SIZE_MAX = 18
+/** 时间偏移的可调范围；设置页滑杆按此区间与 50ms 步进取值，任务栏据此换算歌词位置。 */
 export const TASKBAR_LYRICS_TIMING_OFFSET_MIN = -2000
 export const TASKBAR_LYRICS_TIMING_OFFSET_MAX = 2000
 
@@ -38,6 +41,10 @@ export interface TaskbarLyricsSettings {
   secondaryLine: TaskbarLyricsSecondaryLine
   networkPolicy: TaskbarLyricsNetworkPolicy
   onlineStrategy: LyricsOnlineStrategy
+  /** 全部已接入平台的在线接口顺序；始终是每个平台各出现一次的完整排列。 */
+  onlineSourceOrder: MediaPlayer[]
+  /** 参与在线检索的平台子集，可为空表示不使用任何在线接口。 */
+  enabledOnlineSources: MediaPlayer[]
   timingOffsetMs: number
   wordHighlight: boolean
   animation: TaskbarLyricsAnimation
@@ -51,47 +58,41 @@ export interface TaskbarLyricsSettings {
 
 export { DEFAULT_TASKBAR_LYRICS_SETTINGS }
 
-/** 判断外部值是否为支持的歌词对齐方式。 */
 export function isTaskbarLyricsAlignment(value: unknown): value is TaskbarLyricsAlignment {
   return TASKBAR_LYRICS_ALIGNMENTS.some((alignment) => alignment === value)
 }
 
-/** 判断外部值是否为支持的歌词行数模式。 */
 export function isTaskbarLyricsLineMode(value: unknown): value is TaskbarLyricsLineMode {
   return TASKBAR_LYRICS_LINE_MODES.some((mode) => mode === value)
 }
 
-/** 判断外部值是否为支持的双行次要内容。 */
 export function isTaskbarLyricsSecondaryLine(value: unknown): value is TaskbarLyricsSecondaryLine {
   return TASKBAR_LYRICS_SECONDARY_LINES.some((secondaryLine) => secondaryLine === value)
 }
 
-/** 判断外部值是否为支持的联网策略。 */
 export function isTaskbarLyricsNetworkPolicy(value: unknown): value is TaskbarLyricsNetworkPolicy {
   return TASKBAR_LYRICS_NETWORK_POLICIES.some((policy) => policy === value)
 }
 
-/** 判断外部值是否为支持的在线歌词调度策略。 */
 export function isTaskbarLyricsOnlineStrategy(value: unknown): value is LyricsOnlineStrategy {
   return LYRICS_ONLINE_STRATEGIES.some((strategy) => strategy === value)
 }
 
 /** 将时间偏移限制到可校准的范围；正值表示延后显示。 */
 export function normalizeTaskbarLyricsTimingOffset(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return DEFAULT_TASKBAR_LYRICS_SETTINGS.timingOffsetMs
-  }
-  return Math.round(
-    clamp(value, TASKBAR_LYRICS_TIMING_OFFSET_MIN, TASKBAR_LYRICS_TIMING_OFFSET_MAX),
+  return (
+    normalizeIntegerInRange(
+      value,
+      TASKBAR_LYRICS_TIMING_OFFSET_MIN,
+      TASKBAR_LYRICS_TIMING_OFFSET_MAX,
+    ) ?? DEFAULT_TASKBAR_LYRICS_SETTINGS.timingOffsetMs
   )
 }
 
-/** 判断外部值是否为支持的歌词切换动画。 */
 export function isTaskbarLyricsAnimation(value: unknown): value is TaskbarLyricsAnimation {
   return TASKBAR_LYRICS_ANIMATIONS.some((animation) => animation === value)
 }
 
-/** 判断外部值是否为支持的歌词配色方案。 */
 export function isTaskbarLyricsColorScheme(value: unknown): value is TaskbarLyricsColorScheme {
   return TASKBAR_LYRICS_COLOR_SCHEMES.some((scheme) => scheme === value)
 }
@@ -118,16 +119,48 @@ function normalizeTaskbarLyricsColorScheme(value: unknown): TaskbarLyricsColorSc
 
 /** 将字号限制到任务栏双行布局也不会被上下裁切的范围。 */
 export function normalizeTaskbarLyricsFontSize(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return DEFAULT_TASKBAR_LYRICS_SETTINGS.fontSize
-  }
-  return Math.round(clamp(value, TASKBAR_LYRICS_FONT_SIZE_MIN, TASKBAR_LYRICS_FONT_SIZE_MAX))
+  return (
+    normalizeIntegerInRange(value, TASKBAR_LYRICS_FONT_SIZE_MIN, TASKBAR_LYRICS_FONT_SIZE_MAX) ??
+    DEFAULT_TASKBAR_LYRICS_SETTINGS.fontSize
+  )
+}
+
+/** 从外部值中筛出受支持的已接入平台，并按首次出现顺序去重。 */
+function filterSupportedMediaPlayers(value: unknown): MediaPlayer[] {
+  if (!Array.isArray(value)) return []
+  return uniq(
+    value.filter((player): player is MediaPlayer =>
+      SUPPORTED_MEDIA_PLAYERS.some((supported) => supported === player),
+    ),
+  )
+}
+
+/** 规范化在线接口顺序：缺失或损坏时回退默认，否则按规范平台顺序补齐为完整排列。 */
+function normalizeTaskbarLyricsOnlineSourceOrder(value: unknown): MediaPlayer[] {
+  if (!Array.isArray(value)) return [...DEFAULT_TASKBAR_LYRICS_SETTINGS.onlineSourceOrder]
+  return uniq([...filterSupportedMediaPlayers(value), ...SUPPORTED_MEDIA_PLAYERS])
+}
+
+/**
+ * 规范化参与在线检索的平台：缺失或损坏时回退为全部启用，允许空数组表示完全停用在线接口。
+ *
+ * 只保留出现在归一化顺序里的平台，确保启用集合始终是顺序集合的子集。
+ */
+function normalizeTaskbarLyricsEnabledOnlineSources(
+  value: unknown,
+  onlineSourceOrder: readonly MediaPlayer[],
+): MediaPlayer[] {
+  if (!Array.isArray(value)) return [...DEFAULT_TASKBAR_LYRICS_SETTINGS.enabledOnlineSources]
+  const available = new Set(onlineSourceOrder)
+  return filterSupportedMediaPlayers(value).filter((player) => available.has(player))
 }
 
 /** 将持久化或事件数据收敛为完整歌词显示配置。 */
 export function normalizeTaskbarLyricsSettings(value: unknown): TaskbarLyricsSettings {
   const candidate = typeof value === 'object' && value !== null ? value : {}
   const record = candidate as Partial<Record<keyof TaskbarLyricsSettings, unknown>>
+  // 启用集合的合法性依赖归一化后的顺序，因此先算出完整排列再收敛子集。
+  const onlineSourceOrder = normalizeTaskbarLyricsOnlineSourceOrder(record.onlineSourceOrder)
   return {
     enabled:
       typeof record.enabled === 'boolean'
@@ -151,6 +184,11 @@ export function normalizeTaskbarLyricsSettings(value: unknown): TaskbarLyricsSet
     onlineStrategy: isTaskbarLyricsOnlineStrategy(record.onlineStrategy)
       ? record.onlineStrategy
       : DEFAULT_TASKBAR_LYRICS_SETTINGS.onlineStrategy,
+    onlineSourceOrder,
+    enabledOnlineSources: normalizeTaskbarLyricsEnabledOnlineSources(
+      record.enabledOnlineSources,
+      onlineSourceOrder,
+    ),
     timingOffsetMs: normalizeTaskbarLyricsTimingOffset(record.timingOffsetMs),
     wordHighlight:
       typeof record.wordHighlight === 'boolean'
@@ -185,20 +223,27 @@ export function getTaskbarLyricsSettings(): Promise<TaskbarLyricsSettings> {
   return loadVersionedSetting(lyricsStorage)
 }
 
+/** 计算生效的在线接口：按偏好顺序取与启用集合的交集，未启用的平台不会发起请求。 */
+function resolveOnlineSources(settings: TaskbarLyricsSettings): MediaPlayer[] {
+  const enabled = new Set(settings.enabledOnlineSources)
+  return settings.onlineSourceOrder.filter((player) => enabled.has(player))
+}
+
 /** 将歌词显示配置映射为后端歌词解析偏好；原生侧值未变化时是空操作。 */
 async function applyLyricsPreferences(settings: TaskbarLyricsSettings): Promise<void> {
   await setLyricsPreferences({
     enabled: settings.enabled,
     allowOnline: settings.networkPolicy === 'auto',
     onlineStrategy: settings.onlineStrategy,
+    onlineSources: resolveOnlineSources(settings),
   })
 }
 
 /**
  * 保存显示配置、同步后端解析开关并广播到全部任务栏窗口。
  *
- * 必须经由本函数写入：后端只在启动时读取 `enabled` / `networkPolicy` / `onlineStrategy`，
- * 绕过它直接写 `settingsStore` 不会把这几个字段推送给后端（见 `defaults.ts` 的写入契约）。
+ * 必须经由本函数写入：`enabled` / `networkPolicy` / `onlineStrategy` 与在线接口顺序、
+ * 启用集合只在这里推送给后端（写入契约见 `defaults.ts`）。
  */
 export async function setTaskbarLyricsSettings(value: TaskbarLyricsSettings): Promise<void> {
   const previous = await getTaskbarLyricsSettings()
@@ -206,7 +251,9 @@ export async function setTaskbarLyricsSettings(value: TaskbarLyricsSettings): Pr
   if (
     saved.enabled !== previous.enabled ||
     saved.networkPolicy !== previous.networkPolicy ||
-    saved.onlineStrategy !== previous.onlineStrategy
+    saved.onlineStrategy !== previous.onlineStrategy ||
+    !isEqual(saved.enabledOnlineSources, previous.enabledOnlineSources) ||
+    !isEqual(saved.onlineSourceOrder, previous.onlineSourceOrder)
   ) {
     try {
       await applyLyricsPreferences(saved)

@@ -87,6 +87,7 @@ export function useApplicationUpdater() {
   /** 合并同一时刻的更新请求，避免页面静默检查与手动检查重复访问网络。 */
   function requestUpdateCheck() {
     if (activeCheck) return activeCheck
+    // 单次检查的请求超时；超时按检查失败处理，静默路径只留调试通道。
     activeCheck = check({ timeout: 15_000 }).finally(() => {
       activeCheck = null
     })

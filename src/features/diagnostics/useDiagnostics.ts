@@ -1,6 +1,6 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
-import { useDebounceFn } from '@vueuse/core'
+import { useDebounceFn, useTimeoutFn } from '@vueuse/core'
 
 import { getErrorMessage, reportBackgroundFailure } from '@/features/feedback/errors'
 import { LYRICS_DIAGNOSTICS_CHANGED_EVENT } from '@/features/lyrics/client'
@@ -15,6 +15,9 @@ const DIAGNOSTICS_REFRESH_EVENTS = [
   LYRICS_DIAGNOSTICS_CHANGED_EVENT,
 ] as const
 
+/** 「已复制」标记的保留时长。 */
+const REPORT_COPIED_RESET_DELAY_MS = 2_000
+
 /** 使用现有业务事件刷新应用诊断，不引入定时轮询。 */
 export function useDiagnostics() {
   const { t } = useI18n({ useScope: 'global' })
@@ -23,13 +26,17 @@ export function useDiagnostics() {
   const errorMessage = shallowRef<string | null>(null)
   const updatedAt = shallowRef<Date | null>(null)
   const reportCopied = shallowRef(false)
+  const { start: scheduleReportCopiedReset, stop: cancelReportCopiedReset } = useTimeoutFn(
+    () => (reportCopied.value = false),
+    REPORT_COPIED_RESET_DELAY_MS,
+    { immediate: false },
+  )
   let disposed = false
   let lifecycleId = 0
   let requestRunning = false
   let refreshQueued = false
   let storageRefreshQueued = false
   let unlisteners: UnlistenFn[] = []
-  let reportCopiedTimer: number | undefined
 
   /** 合并歌曲切换时相邻的媒体与歌词事件，避免重复读取磁盘和媒体线程。 */
   const scheduleRefresh = useDebounceFn(
@@ -37,6 +44,7 @@ export function useDiagnostics() {
       if (!disposed) void refresh(false)
     },
     150,
+    // maxWait 兜底：事件持续到达（始终不满 150ms 间隔）时也至少每 500ms 刷新一次。
     { maxWait: 500 },
   )
 
@@ -108,7 +116,7 @@ export function useDiagnostics() {
     storageRefreshQueued = false
     unlisteners.forEach((unlisten) => unlisten())
     unlisteners = []
-    window.clearTimeout(reportCopiedTimer)
+    cancelReportCopiedReset()
     reportCopied.value = false
     refreshing.value = false
   }
@@ -119,8 +127,7 @@ export function useDiagnostics() {
     try {
       await navigator.clipboard.writeText(createDiagnosticsReport(diagnostics.value))
       reportCopied.value = true
-      window.clearTimeout(reportCopiedTimer)
-      reportCopiedTimer = window.setTimeout(() => (reportCopied.value = false), 2_000)
+      scheduleReportCopiedReset()
     } catch (error) {
       reportBackgroundFailure('复制诊断报告失败', error)
       errorMessage.value = getErrorMessage(error, t('diagnostics.copyFailed'))

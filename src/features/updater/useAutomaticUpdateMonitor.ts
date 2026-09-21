@@ -72,6 +72,7 @@ export function useAutomaticUpdateMonitor() {
           return
         }
 
+        // 单次检查的请求超时；失败会记下尝试时间，因此要等到下个周期才会重试。
         const update = await check({ timeout: 15_000 })
         try {
           const availableVersion = update?.version ?? null

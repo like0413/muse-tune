@@ -236,8 +236,10 @@
         "onlineStrategy": "在线解析策略",
         "parallel": "并行查询",
         "parallelDescription": "并行查询：等待更短，但会同时请求多个来源",
-        "currentFirst": "当前平台优先",
-        "currentFirstDescription": "当前平台优先：命中可靠逐字后停止；未命中时兜底会更慢"
+        "currentOnly": "仅当前平台",
+        "currentOnlyDescription": "仅当前平台：只查询当前正在播放的平台自己的在线接口，不使用其他平台兜底",
+        "onlineSources": "在线接口",
+        "onlineSourcesDescription": "选择要使用的在线接口，并可拖动调整请求顺序；未勾选的接口不会发起请求"
       },
       "mediaSession": {
         "title": "播放器抢占策略",
@@ -571,13 +573,11 @@
         "applicationCache": "Muse Tune 缓存",
         "local": "当前播放器本地",
         "online": "当前播放器在线",
-        "onlinePreferred": "当前播放器在线优先",
         "onlineFallback": "备用平台在线",
         "localUpgrade": "后台本地歌词升级"
       },
       "groups": {
-        "online": "并行在线查询",
-        "onlineFallback": "并行在线兜底"
+        "online": "并行在线查询"
       },
       "recentResolution": "上一轮解析 · {time} · {status}",
       "latestNote": "最近说明"

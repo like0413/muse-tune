@@ -1,5 +1,6 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
+import { uniq } from 'es-toolkit'
 
 import type {
   MediaPlayer,
@@ -10,33 +11,27 @@ import type {
 import {
   DEFAULT_MEDIA_SESSION_ONLY_SUPPORTED_PLAYERS,
   DEFAULT_MEDIA_SESSION_SELECTION_STRATEGY,
+  SUPPORTED_MEDIA_PLAYERS,
 } from './defaults'
 import { settingsStore } from './store'
 
-export const MEDIA_SESSION_SELECTION_STRATEGIES = [
+const MEDIA_SESSION_SELECTION_STRATEGIES = [
   'follow_windows',
   'recent_playback',
   'sticky_current',
   'fixed_priority',
 ] as const satisfies readonly MediaSessionSelectionStrategy[]
-export const SUPPORTED_MEDIA_PLAYERS = [
-  'qq_music',
-  'netease_cloud_music',
-  'soda_music',
-  'kugou_music',
-] as const satisfies readonly MediaPlayer[]
 
 const MEDIA_SESSION_SELECTION_KEY = 'media.sessionSelection'
 const MEDIA_SESSION_SELECTION_CHANGED_EVENT = 'settings://media-session-selection-changed'
 
-/** 会话选择策略默认值；`playerPriority` 的规范顺序由 SUPPORTED_MEDIA_PLAYERS 派生，其余取自共享配置。 */
+/** 会话选择策略默认值；`playerPriority` 取共享配置里的规范平台顺序，其余同样来自共享配置。 */
 export const DEFAULT_MEDIA_SESSION_SELECTION_POLICY: MediaSessionSelectionPolicy = {
   strategy: DEFAULT_MEDIA_SESSION_SELECTION_STRATEGY,
   playerPriority: [...SUPPORTED_MEDIA_PLAYERS],
   onlySupportedPlayers: DEFAULT_MEDIA_SESSION_ONLY_SUPPORTED_PLAYERS,
 }
 
-/** 判断外部值是否为有效会话选择策略。 */
 export function isMediaSessionSelectionStrategy(
   value: unknown,
 ): value is MediaSessionSelectionStrategy {
@@ -51,15 +46,13 @@ export function normalizeMediaSessionSelectionPolicy(value: unknown): MediaSessi
   const candidate = typeof value === 'object' && value !== null ? value : {}
   const record = candidate as Partial<Record<keyof MediaSessionSelectionPolicy, unknown>>
   const inputPriority = Array.isArray(record.playerPriority) ? record.playerPriority : []
-  const playerPriority = inputPriority.filter(
-    (player, index): player is MediaPlayer =>
-      SUPPORTED_MEDIA_PLAYERS.some((supported) => supported === player) &&
-      inputPriority.indexOf(player) === index,
-  )
-
-  for (const player of SUPPORTED_MEDIA_PLAYERS) {
-    if (!playerPriority.includes(player)) playerPriority.push(player)
-  }
+  // 先按持久化顺序去重保序，再补齐缺失的播放器，保证优先级列表完整且不重复。
+  const playerPriority = uniq([
+    ...inputPriority.filter((player): player is MediaPlayer =>
+      SUPPORTED_MEDIA_PLAYERS.some((supported) => supported === player),
+    ),
+    ...SUPPORTED_MEDIA_PLAYERS,
+  ])
 
   return {
     strategy: isMediaSessionSelectionStrategy(record.strategy)
@@ -73,7 +66,6 @@ export function normalizeMediaSessionSelectionPolicy(value: unknown): MediaSessi
   }
 }
 
-/** 读取持久化的多播放器选择策略。 */
 export async function getMediaSessionSelectionPolicy(): Promise<MediaSessionSelectionPolicy> {
   return normalizeMediaSessionSelectionPolicy(
     await settingsStore.get<unknown>(MEDIA_SESSION_SELECTION_KEY),
@@ -83,8 +75,7 @@ export async function getMediaSessionSelectionPolicy(): Promise<MediaSessionSele
 /**
  * 保存选择策略并通知任务栏实时应用。
  *
- * 必须经由本函数写入：原生侧依赖这里广播的变更事件完成推送，绕过它直接写
- * `settingsStore` 不会触发同步（见 `defaults.ts` 的写入契约）。
+ * 必须经由本函数写入：原生侧依赖这里广播的变更事件完成推送（写入契约见 `defaults.ts`）。
  */
 export async function setMediaSessionSelectionPolicy(
   policy: MediaSessionSelectionPolicy,
@@ -94,7 +85,6 @@ export async function setMediaSessionSelectionPolicy(
   await emit(MEDIA_SESSION_SELECTION_CHANGED_EVENT, normalized)
 }
 
-/** 监听多播放器选择策略变化。 */
 export async function listenMediaSessionSelectionPolicyChange(
   handler: (policy: MediaSessionSelectionPolicy) => void,
 ): Promise<UnlistenFn> {

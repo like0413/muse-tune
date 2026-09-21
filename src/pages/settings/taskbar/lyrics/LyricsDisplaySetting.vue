@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Captions } from '@lucide/vue'
 
-import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import { FieldGroup } from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'

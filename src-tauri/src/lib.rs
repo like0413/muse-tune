@@ -1,6 +1,7 @@
 mod commands;
 mod data;
 mod diagnostics;
+mod error;
 mod filesystem;
 mod ipc;
 mod logging;
@@ -70,6 +71,14 @@ pub fn run() {
             commands::taskbar::hide_volume_popup
         ])
         .setup(|app| {
+            // 这里的顺序不是风格问题，改错不会编译失败，只会在运行时暴露：
+            // - 媒体快照的订阅者由 `lyrics_service` 克隆而来，而 `media::initialize` 返回时媒体线程
+            //   已经在跑、随时可能回调它，因此歌词服务必须先建好再启动媒体服务；
+            // - `taskbar::initialize` 会立刻启动监控线程去创建 bar 窗口，窗口前端一加载就会调用
+            //   用 `State<...>` 注入服务的 command（媒体快照、强调色、歌词等），所以四个服务都必须
+            //   先 `app.manage` 再初始化任务栏，否则首次 invoke 会因状态未注册而失败；
+            // - 反过来，少 manage 任何一个都会让下面的 `ExitRequested`/`Exit` 分支在
+            //   `app.state::<...>()` 上 panic，而那里正是唯一能停止这些线程的地方。
             let lyrics_service = lyrics::initialize(app)?;
             let lyrics_snapshot_subscriber = lyrics_service.clone();
             let media_service = media::initialize(

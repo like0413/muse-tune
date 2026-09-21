@@ -2,6 +2,7 @@ use tauri::{AppHandle, State};
 
 use crate::{
     data::{self, DataDirectoryKind, DataOverview},
+    error::Error,
     ipc::IpcError,
     logging,
     lyrics::LyricsService,
@@ -46,7 +47,7 @@ pub async fn open_data_directory(
         .map_err(|error| IpcError::new("data.open-directory", error, true))
 }
 
-/// 恢复默认配置，并通过 Tauri 的正常退出流程重启应用。
+/// 恢复默认配置后重启应用：设置只在启动时加载一次，不重启会让已运行的窗口继续沿用旧值。
 #[tauri::command]
 pub async fn reset_configuration(app: AppHandle) -> Result<(), IpcError> {
     let reset_app = app.clone();
@@ -74,7 +75,7 @@ pub async fn clear_lyrics_cache(
     tauri::async_runtime::spawn_blocking(move || {
         lyrics
             .clear_cache()
-            .map_err(|error| format!("清理缓存失败: {error}"))?;
+            .map_err(|error| Error::Message(format!("清理缓存失败: {error}")))?;
         data::overview(&app, &lyrics)
     })
     .await

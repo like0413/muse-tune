@@ -5,11 +5,11 @@ import type { TaskbarLyricsSettings } from '@/features/settings/lyrics'
 import type { LyricLine } from './types'
 
 /** 歌词容器可用高度；双行内容连同居中偏移都必须放得下。 */
-export const LYRICS_AVAILABLE_HEIGHT_PX = 40
+const LYRICS_AVAILABLE_HEIGHT_PX = 40
 /** 单行切换动画时长，同时作为 `--lyric-duration-ms` 暴露给样式。 */
-export const LINE_TRANSITION_DURATION_MS = 300
+const LINE_TRANSITION_DURATION_MS = 300
 /** 原地渐隐渐显的时长。*/
-export const FADE_TRANSITION_DURATION_MS = 500
+const FADE_TRANSITION_DURATION_MS = 500
 
 /** 字号等于歌曲信息的标题字号时复用其行高，保持一致的行距节奏。 */
 const TRACK_INFO_FONT_SIZE = 14
@@ -63,7 +63,7 @@ export function resolveCurrentLineIndex(
   return Math.max(0, matched)
 }
 
-export type SecondaryLinePolicy = TaskbarLyricsSettings['secondaryLine']
+type SecondaryLinePolicy = TaskbarLyricsSettings['secondaryLine']
 
 export interface SecondaryContent {
   kind: 'translation' | 'next'
@@ -91,7 +91,7 @@ export function selectSecondaryContent(
   }
 }
 
-export interface LyricsLayoutMetrics {
+interface LyricsLayoutMetrics {
   primaryLineHeight: number
   secondaryFontSize: number
   secondaryLineHeight: number
@@ -102,11 +102,14 @@ export interface LyricsLayoutMetrics {
   blockTop: number
 }
 
+export function resolvePrimaryLineHeight(fontSize: number): number {
+  return fontSize === TRACK_INFO_FONT_SIZE ? TRACK_INFO_TITLE_LINE_HEIGHT_PX : fontSize + 2
+}
+
 /** 由字号与是否双行推导行高与居中偏移。 */
 export function resolveLayoutMetrics(fontSize: number, usesTwoLines: boolean): LyricsLayoutMetrics {
+  const primaryLineHeight = resolvePrimaryLineHeight(fontSize)
   const secondaryFontSize = Math.max(MIN_FONT_SIZE, fontSize - SECONDARY_FONT_SIZE_OFFSET_STEP)
-  const primaryLineHeight =
-    fontSize === TRACK_INFO_FONT_SIZE ? TRACK_INFO_TITLE_LINE_HEIGHT_PX : fontSize + 2
   const secondaryLineHeight =
     fontSize === TRACK_INFO_FONT_SIZE ? TRACK_INFO_ARTIST_LINE_HEIGHT_PX : secondaryFontSize + 2
   const blockHeight = usesTwoLines ? primaryLineHeight + secondaryLineHeight : primaryLineHeight

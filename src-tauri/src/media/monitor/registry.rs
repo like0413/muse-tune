@@ -49,6 +49,9 @@ pub(super) fn synchronize_sessions(
         let Ok(snapshot) = session::read_snapshot(&registration.session) else {
             continue;
         };
+        // 活动顺序的不变量：`0` 表示“还没有活动记录”，因此真实序号从 1 起分配；
+        // 值越大表示越近进入播放态，择优算法直接把它当作“新近程度”比较（见 `selector`）。
+        // 新建会话若此刻不在播放，就保留 0，让它排在有记录的会话之后。
         let activity_order = if new_playing_session_is_active
             && snapshot.playback.status == MediaPlaybackStatus::Playing
         {

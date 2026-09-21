@@ -1,5 +1,12 @@
 import type { MediaPlayer } from '@/features/media/types'
 
+/**
+ * 歌词解析结论，只有前三种会在任务栏上有对应渲染。
+ *
+ * `ready` 由歌词行组件渲染，但歌词层还额外要求 `timeline !== null`（无有效播放器时间线
+ * 时不进入歌词模式）；`instrumental` / `no_lyrics` 渲染为结论提示；`loading` /
+ * `unavailable` / `error` 没有渲染分支，界面保持普通模式而非空白歌词。
+ */
 export type LyricsStatus =
   | 'loading'
   | 'ready'
@@ -16,20 +23,18 @@ export type LyricsResolutionSite =
   | 'application_cache'
   | 'local'
   | 'online'
-  | 'online_preferred'
   | 'online_fallback'
   | 'local_upgrade'
-/** 并发阶段标识；同一阶段的步骤同时执行。 */
-export type LyricsParallelGroup = 'online' | 'online_fallback'
 /** 前后端共同支持的在线歌词调度策略。 */
-export const LYRICS_ONLINE_STRATEGIES = ['parallel', 'current_player_first'] as const
+export const LYRICS_ONLINE_STRATEGIES = ['parallel', 'current_player_only'] as const
 export type LyricsOnlineStrategy = (typeof LYRICS_ONLINE_STRATEGIES)[number]
 
 export interface LyricsResolutionStep {
   site: LyricsResolutionSite
   outcome: LyricsResolutionOutcome
   detail: string | null
-  group: LyricsParallelGroup | null
+  /** 该步骤属于并发查询多个来源的阶段；同阶段的步骤是同时执行的。 */
+  parallel: boolean
 }
 
 export interface LyricsCacheDiagnostics {

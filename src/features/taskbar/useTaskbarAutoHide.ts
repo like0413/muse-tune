@@ -1,24 +1,28 @@
-import type { UnlistenFn } from '@tauri-apps/api/event'
-
 import { reportBackgroundFailure } from '@/features/feedback/errors'
+import { useEventState } from '@/features/ipc/useEventState'
 import type { MediaSessionSnapshot } from '@/features/media/types'
 import {
   DEFAULT_TASKBAR_AUTO_HIDE,
   getTaskbarAutoHide,
   listenTaskbarAutoHideChange,
-  type TaskbarAutoHide,
 } from '@/features/settings/bar-visibility'
 
 import { setTaskbarContentVisibility } from './client'
 
 /** 根据媒体状态与用户偏好，驱动原生 bar 窗口的可见性门控。 */
 export function useTaskbarAutoHide(session: Readonly<Ref<MediaSessionSnapshot | null>>) {
-  const preference = shallowRef<TaskbarAutoHide>({ ...DEFAULT_TASKBAR_AUTO_HIDE })
-  let preferenceRevision = 0
-  let disposed = false
-  let unlisten: UnlistenFn | undefined
+  const preference = useEventState(
+    {
+      read: getTaskbarAutoHide,
+      subscribe: listenTaskbarAutoHideChange,
+      failureMessage: '初始化任务栏播放器自动隐藏配置失败',
+    },
+    { ...DEFAULT_TASKBAR_AUTO_HIDE },
+  )
   let appliedVisibility: boolean | undefined
 
+  // 只有 paused 有独立偏好；其余任何状态（含 stopped / closed / changing / unknown）都直接显示，
+  // 新增状态默认可见，若要单独控制必须在此加分支。
   const visible = computed(() => {
     if (!session.value) return !preference.value.whenNoMediaSession
     if (session.value.playback.status === 'paused') return !preference.value.whenPaused
@@ -37,32 +41,7 @@ export function useTaskbarAutoHide(session: Readonly<Ref<MediaSessionSnapshot | 
     }
   }
 
-  /** 先监听再读取，避免初始化期间丢失设置变更。 */
-  async function initialize() {
-    try {
-      const stopListener = await listenTaskbarAutoHideChange((value) => {
-        preferenceRevision += 1
-        preference.value = value
-      })
-      if (disposed) {
-        stopListener()
-        return
-      }
-      unlisten = stopListener
-      const revisionBeforeRead = preferenceRevision
-      const savedPreference = await getTaskbarAutoHide()
-      if (!disposed && preferenceRevision === revisionBeforeRead) preference.value = savedPreference
-    } catch (error) {
-      reportBackgroundFailure('初始化任务栏播放器自动隐藏配置失败', error)
-    }
-  }
-
   watch(visible, (value) => void applyVisibility(value), { immediate: true })
-  onMounted(initialize)
-  onUnmounted(() => {
-    disposed = true
-    unlisten?.()
-  })
 
   return {
     /** 原生 bar 隐藏期间供高频视觉组件停止工作。 */

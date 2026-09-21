@@ -22,9 +22,10 @@ use std::{
 use reqwest::{Url, blocking::Client, redirect};
 use tauri::{Emitter, Manager, Runtime};
 
+use crate::error::Error;
 use crate::media::{MediaPlayer, MediaSessionSnapshot};
-use crate::native_defaults;
 
+use super::settings::LyricsPreferences;
 use super::{
     cache::{CacheLookup, ParsedLyricsCache},
     error::LyricsError,
@@ -53,6 +54,8 @@ mod watch_coordinator;
 
 const LYRICS_CHANGED_EVENT: &str = "lyrics://changed";
 const LYRICS_DIAGNOSTICS_CHANGED_EVENT: &str = "lyrics://diagnostics-changed";
+/// 单次 HTTP 请求的总超时，覆盖连接、重定向与读取响应体的全过程。
+/// 超时按“该来源失败”处理并交给解析层判断结论（见 `publish_no_lyrics`），这里不做重试。
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(8);
 const ALLOWED_HTTPS_HOSTS: [&str; 6] = [
     "c.y.qq.com",
@@ -88,26 +91,6 @@ struct LyricsServiceInner {
     registry_watchers: Mutex<Vec<RegistryWatchHandle>>,
     shutdown_requested: AtomicBool,
     resolver: Mutex<ResolverState>,
-}
-
-/// 需要作为一个快照提交和读取的歌词运行偏好。
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct LyricsPreferences {
-    enabled: bool,
-    allow_online: bool,
-    online_strategy: LyricsOnlineStrategy,
-}
-
-impl Default for LyricsPreferences {
-    /// 状态不可用时回退到与前端共用同一份数据的默认偏好。
-    fn default() -> Self {
-        let defaults = &native_defaults::shared().taskbar.lyrics;
-        Self {
-            enabled: defaults.enabled,
-            allow_online: defaults.network_policy.allows_online(),
-            online_strategy: defaults.online_strategy,
-        }
-    }
 }
 
 #[derive(Default)]
@@ -146,7 +129,11 @@ impl LyricsService {
         let cache = ParsedLyricsCache::new(&cache_dir)?;
         let client = Client::builder()
             .timeout(NETWORK_TIMEOUT)
+            // 连接阶段单独设更短的上限：握不上手时尽快换下一个来源，而已建立的连接仍可用满总超时。
             .connect_timeout(Duration::from_secs(4))
+            // 重定向逐跳校验且最多 3 跳：`Location` 由第三方平台返回、不在我们的控制范围内，
+            // 不校验就会让一次本来合法的请求被 302 到任意主机（内网探测、明文降级）；
+            // 跳数不设上限则等于允许一条可以无限接力的跳转链。两个条件缺一不可。
             .redirect(redirect::Policy::custom(|attempt| {
                 if is_allowed_url(attempt.url()) && attempt.previous().len() < 3 {
                     attempt.follow()
@@ -168,19 +155,14 @@ impl LyricsService {
                 log::warn!("广播歌词诊断变化失败: {error}");
             }
         });
-        let (enabled, allow_online, online_strategy) =
-            super::settings::restore_lyrics_preferences(app);
+        let preferences = super::settings::restore_lyrics_preferences(app);
         let service = Self {
             inner: Arc::new(LyricsServiceInner {
                 cache,
                 client,
                 current_track: Mutex::new(None),
                 generation: AtomicU64::new(0),
-                preferences: RwLock::new(LyricsPreferences {
-                    enabled,
-                    allow_online,
-                    online_strategy,
-                }),
+                preferences: RwLock::new(preferences),
                 publisher,
                 diagnostics_notifier,
                 runtime_state: RwLock::new(LyricsRuntimeState::default()),
@@ -222,79 +204,83 @@ impl LyricsService {
     }
 
     /// 只删除当前歌曲的应用歌词缓存，不改变正在展示的歌词快照。
-    pub fn clear_current_cache(&self) -> Result<(), String> {
+    pub fn clear_current_cache(&self) -> Result<(), Error> {
         let (track, _) = self.prepare_current_cache_mutation()?;
         self.cancel_resolution();
         self.inner
             .cache
             .remove(&track.key)
-            .map_err(|error| format!("清理当前歌曲缓存失败: {error}"))?;
+            .map_err(|error| Error::Message(format!("清理当前歌曲缓存失败: {error}")))?;
         (self.inner.diagnostics_notifier)();
         Ok(())
     }
 
     /// 删除当前歌曲缓存并立即启动一次完整解析。
-    pub fn refresh_current(&self) -> Result<(), String> {
+    pub fn refresh_current(&self) -> Result<(), Error> {
         let (track, generation) = self.prepare_current_cache_mutation()?;
         self.cancel_resolution();
         self.inner
             .cache
             .remove(&track.key)
-            .map_err(|error| format!("清理当前歌曲缓存失败: {error}"))?;
+            .map_err(|error| Error::Message(format!("清理当前歌曲缓存失败: {error}")))?;
         (self.inner.diagnostics_notifier)();
         self.start_resolution(Some(track), generation, false, true);
         Ok(())
     }
 
     /// 在当前歌曲锁内提升解析代数，确保旧任务不能在删除之后回写缓存。
-    fn prepare_current_cache_mutation(&self) -> Result<(TrackDescriptor, u64), String> {
+    fn prepare_current_cache_mutation(&self) -> Result<(TrackDescriptor, u64), Error> {
         let current = self
             .inner
             .current_track
             .lock()
-            .map_err(|_| "当前歌曲状态不可用".to_owned())?;
+            .map_err(|_| Error::Message("当前歌曲状态不可用".to_owned()))?;
         let track = current
             .clone()
-            .ok_or_else(|| "当前没有可清理的歌曲".to_owned())?;
+            .ok_or_else(|| Error::Message("当前没有可清理的歌曲".to_owned()))?;
         let generation = self.inner.generation.fetch_add(1, Ordering::AcqRel) + 1;
         Ok((track, generation))
     }
 
-    /// 原子更新歌词开关、联网能力和在线调度策略，并只触发一次必要的重新解析。
+    /// 原子更新歌词开关、联网能力、在线调度策略与在线接口集合。
+    ///
+    /// 策略与接口集合只决定“后续怎么选来源”，不会重解析当前歌曲、也不清缓存；
+    /// 总开关与联网开关决定“现在还能不能用某项能力”，因此立即生效。
     pub fn set_preferences(
         &self,
         enabled: bool,
         allow_online: bool,
         online_strategy: LyricsOnlineStrategy,
-    ) -> Result<(), String> {
+        online_sources: Vec<MediaPlayer>,
+    ) -> Result<(), Error> {
         let next = LyricsPreferences {
             enabled,
             allow_online,
             online_strategy,
+            online_sources: online_sources.clone(),
         };
         let previous = {
             let mut current = self
                 .inner
                 .preferences
                 .write()
-                .map_err(|_| "歌词偏好状态不可用".to_owned())?;
+                .map_err(|_| Error::Message("歌词偏好状态不可用".to_owned()))?;
             if *current == next {
                 return Ok(());
             }
-            let previous = *current;
+            let previous = current.clone();
             *current = next;
             previous
         };
         let enabled_changed = previous.enabled != enabled;
         let online_changed = previous.allow_online != allow_online;
-        let strategy_changed = previous.online_strategy != online_strategy;
         if !enabled {
             let (track_key, generation) = {
                 let current = self
                     .inner
                     .current_track
                     .lock()
-                    .map_err(|_| "当前歌曲状态不可用".to_owned())?;
+                    .map_err(|_| Error::Message("当前歌曲状态不可用".to_owned()))?;
                 let generation = self.inner.generation.fetch_add(1, Ordering::AcqRel) + 1;
                 (current.as_ref().map(|track| track.key.clone()), generation)
             };
@@ -312,19 +298,10 @@ impl LyricsService {
             self.refresh_watchers();
             self.start_registry_watcher();
         }
-        let cache_cleared = if strategy_changed {
-            match self.clear_current_cache() {
-                Ok(()) => true,
-                Err(error) => {
-                    log::debug!("切换在线调度策略时清理当前歌词缓存失败: {error}");
-                    false
-                }
-            }
-        } else {
-            false
-        };
-        if enabled_changed || online_changed || strategy_changed {
-            self.force_resolve_current(online_changed && allow_online, cache_cleared)
+        // 在线策略与接口集合只决定“后续怎么选来源”：已经拿到的歌词继续沿用，也不清缓存，
+        // 否则每切换一次配置就要为当前歌曲重跑一轮在线检索。
+        if enabled_changed || online_changed {
+            self.force_resolve_current()
         } else {
             (self.inner.diagnostics_notifier)();
             Ok(())
@@ -450,10 +427,10 @@ impl LyricsService {
 
     /// 读取一致的歌词偏好快照；锁损坏时回退到兼容旧版本的默认值。
     fn preferences(&self) -> LyricsPreferences {
-        self.inner
-            .preferences
-            .read()
-            .map_or_else(|_| LyricsPreferences::default(), |preferences| *preferences)
+        self.inner.preferences.read().map_or_else(
+            |_| LyricsPreferences::default(),
+            |preferences| preferences.clone(),
+        )
     }
 
     /// 歌词总开关是否开启；关闭后所有后台歌词工作都应停止。
@@ -473,12 +450,12 @@ impl LyricsService {
     fn prepare_player_resolution(
         &self,
         player: MediaPlayer,
-    ) -> Result<Option<(TrackDescriptor, u64)>, String> {
+    ) -> Result<Option<(TrackDescriptor, u64)>, Error> {
         let current = self
             .inner
             .current_track
             .lock()
-            .map_err(|_| "当前歌曲状态不可用".to_owned())?;
+            .map_err(|_| Error::Message("当前歌曲状态不可用".to_owned()))?;
         let Some(track) = current.as_ref().filter(|track| track.player == player) else {
             return Ok(None);
         };
@@ -491,12 +468,12 @@ impl LyricsService {
         &self,
         player: MediaPlayer,
         expected_track_key: &str,
-    ) -> Result<Option<(TrackDescriptor, u64)>, String> {
+    ) -> Result<Option<(TrackDescriptor, u64)>, Error> {
         let current = self
             .inner
             .current_track
             .lock()
-            .map_err(|_| "当前歌曲状态不可用".to_owned())?;
+            .map_err(|_| Error::Message("当前歌曲状态不可用".to_owned()))?;
         let Some(track) = current
             .as_ref()
             .filter(|track| track.player == player && track.key == expected_track_key)
@@ -519,26 +496,29 @@ impl LyricsService {
         }
     }
 
-    /// 保留当前歌曲身份并重新解析；缓存刷新可在解析期间继续显示已就绪歌词。
-    fn force_resolve_current(
-        &self,
-        preserve_ready: bool,
-        cache_cleared: bool,
-    ) -> Result<(), String> {
+    /// 用最新偏好重新解析当前歌曲，并在解析期间保留已显示的歌词。
+    ///
+    /// 与手动刷新不同，这里不清缓存：开关类改动不应顺带丢掉已经拿到的结果。
+    fn force_resolve_current(&self) -> Result<(), Error> {
         let (current, generation) = {
             let current = self
                 .inner
                 .current_track
                 .lock()
-                .map_err(|_| "当前歌曲状态不可用".to_owned())?;
+                .map_err(|_| Error::Message("当前歌曲状态不可用".to_owned()))?;
             let generation = self.inner.generation.fetch_add(1, Ordering::AcqRel) + 1;
             (current.clone(), generation)
         };
-        self.start_resolution(current, generation, preserve_ready, cache_cleared);
+        // 保留当前显示，且没有清除缓存。
+        self.start_resolution(current, generation, true, false);
         Ok(())
     }
 }
 
+/// 放行条件：必须同时是 HTTPS、且主机在 [`ALLOWED_HTTPS_HOSTS`] 内。
+///
+/// 这两条一起构成出站白名单：协议只允许加密传输（不接受明文 HTTP），目标只允许已知的歌词平台，
+/// 避免播放器上报的元数据或平台返回的重定向把我们带到任意主机。
 fn is_allowed_url(url: &Url) -> bool {
     url.scheme() == "https"
         && url

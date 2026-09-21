@@ -23,13 +23,11 @@ export function isTaskbarElementOrder(value: unknown): value is TaskbarElement[]
   )
 }
 
-/** 读取任务栏区块顺序；缺失或损坏时恢复默认排列。 */
 export async function getTaskbarElementOrder(): Promise<TaskbarElement[]> {
   const order = await settingsStore.get<unknown>(TASKBAR_ELEMENT_ORDER_KEY)
   return isTaskbarElementOrder(order) ? [...order] : [...DEFAULT_TASKBAR_ELEMENT_ORDER]
 }
 
-/** 持久化区块顺序，并通知全部任务栏窗口立即更新。 */
 export async function setTaskbarElementOrder(order: TaskbarElement[]): Promise<void> {
   if (!isTaskbarElementOrder(order)) throw new Error('无效的任务栏区块顺序')
 
@@ -38,7 +36,6 @@ export async function setTaskbarElementOrder(order: TaskbarElement[]): Promise<v
   await emit(TASKBAR_ELEMENT_ORDER_CHANGED_EVENT, nextOrder)
 }
 
-/** 监听设置窗口发出的区块顺序变更。 */
 export async function listenTaskbarElementOrderChange(
   handler: (order: TaskbarElement[]) => void,
 ): Promise<UnlistenFn> {

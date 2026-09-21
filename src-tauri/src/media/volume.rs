@@ -21,7 +21,14 @@ use super::{
     monitor::{metrics::WorkerSender, pending_events::WorkerEvent},
     process::find_process_ids,
 };
+use crate::error::Error;
 
+/// `SetMasterVolume`/`SetMute` 的事件上下文：Core Audio 会把它原样回传给本进程注册的事件回调，
+/// 用于标识“本次变更由本应用发起”，而不是播放器自身 UI 或系统混音器发起的。
+///
+/// 当前 `VolumeSessionEvents` 忽略回调里的 `_eventcontext`，因此自身写入也会触发一次音量事件，
+/// 被当作外部变更重新读一遍会话音量并重新发布——只是多一次刷新，不影响读写正确性。
+/// 若要按上下文过滤，必须让这里写入的值与回调里的值保持一致，否则会把自己的写入也当成外部变更。
 const VOLUME_EVENT_CONTEXT: GUID = GUID::from_u128(0x16c5b57c_2d31_45a5_9c9e_f97a63d20f31);
 /// 当前播放器跨输出设备的全部应用音频会话。
 pub(super) struct ApplicationVolumeController {
@@ -32,7 +39,6 @@ pub(super) struct ApplicationVolumeController {
 }
 
 impl ApplicationVolumeController {
-    /// 创建尚未绑定播放器的控制器。
     pub(super) fn new(sender: WorkerSender) -> Self {
         Self {
             target_id: None,
@@ -87,9 +93,11 @@ impl ApplicationVolumeController {
     }
 
     /// 同步设置该播放器的全部音频会话；拖动音量时自动解除静音。
-    pub(super) fn set_level(&self, level: f32) -> Result<MediaVolumeSnapshot, String> {
+    pub(super) fn set_level(&self, level: f32) -> Result<MediaVolumeSnapshot, Error> {
         if self.session_registrations.is_empty() {
-            return Err("当前播放器尚未创建 Windows 应用音频会话".to_owned());
+            return Err(Error::Message(
+                "当前播放器尚未创建 Windows 应用音频会话".to_owned(),
+            ));
         }
         let level = level.clamp(0.0, 1.0);
         for registration in &self.session_registrations {
@@ -102,10 +110,10 @@ impl ApplicationVolumeController {
     }
 
     /// 切换当前播放器全部音频会话的原生静音状态。
-    pub(super) fn toggle_muted(&self) -> Result<MediaVolumeSnapshot, String> {
+    pub(super) fn toggle_muted(&self) -> Result<MediaVolumeSnapshot, Error> {
         let current = self
             .snapshot()
-            .ok_or_else(|| "当前播放器尚未创建 Windows 应用音频会话".to_owned())?;
+            .ok_or_else(|| Error::Message("当前播放器尚未创建 Windows 应用音频会话".to_owned()))?;
         let muted = !current.muted;
         for registration in &self.session_registrations {
             registration.set_muted(muted)?;
@@ -124,15 +132,19 @@ impl ApplicationVolumeController {
             unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL) }?;
         // SAFETY: 枚举只读取当前活动的渲染端点。
         let devices = unsafe { enumerator.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE) }?;
+        // SAFETY: devices 由本线程创建，只读取端点数量。
         for index in 0..unsafe { devices.GetCount() }? {
+            // SAFETY: index 落在 GetCount 给出的范围内，只借用该端点的接口。
             let Ok(device) = (unsafe { devices.Item(index) }) else {
                 continue;
             };
+            // SAFETY: device 来自本次枚举；激活出的会话管理器同样只在本线程使用。
             let Ok(manager) =
                 (unsafe { device.Activate::<IAudioSessionManager2>(CLSCTX_ALL, None) })
             else {
                 continue;
             };
+            // SAFETY: 会话枚举器由上面这个 manager 创建，生命周期与其一致，且只在本线程访问。
             let Ok(session_enumerator) = (unsafe { manager.GetSessionEnumerator() }) else {
                 continue;
             };
@@ -143,6 +155,8 @@ impl ApplicationVolumeController {
                 target_id,
             }
             .into();
+            // SAFETY: notification 的所有权随后交给 DeviceRegistration，一直持有到 Drop 里用同一实例
+            // 注销；注册只让 Core Audio 在回调线程上调用 OnSessionCreated，不在本线程重入。
             if let Err(error) = unsafe { manager.RegisterSessionNotification(&notification) } {
                 log::warn!("订阅音频设备新会话通知失败: {error}");
                 continue;
@@ -152,14 +166,17 @@ impl ApplicationVolumeController {
                 notification,
             });
 
+            // SAFETY: session_enumerator 由本线程创建，只读取会话数量；取不到时按没有会话处理。
             let session_count = unsafe { session_enumerator.GetCount() }.unwrap_or_default();
             for session_index in 0..session_count {
+                // SAFETY: index 落在 GetCount 给出的范围内；会话已失效时由该调用返回错误。
                 let Ok(control) = (unsafe { session_enumerator.GetSession(session_index) }) else {
                     continue;
                 };
                 let Ok(control2) = control.cast::<IAudioSessionControl2>() else {
                     continue;
                 };
+                // SAFETY: control2 是本线程刚取到的会话接口，只读取其进程 ID 用于比对。
                 let Ok(process_id) = (unsafe { control2.GetProcessId() }) else {
                     continue;
                 };
@@ -233,8 +250,9 @@ impl VolumeSessionRegistration {
         })
     }
 
-    /// 读取当前会话的标量音量与静音状态。
     fn snapshot(&self) -> Option<MediaVolumeSnapshot> {
+        // SAFETY: volume 与 control/events 同属本线程注册的会话，读取不改变会话状态；任一项读不到
+        // 就按“暂无快照”处理，避免把半个结果当成音量值发布出去。
         Some(MediaVolumeSnapshot {
             level: unsafe { self.volume.GetMasterVolume() }
                 .ok()?
@@ -245,23 +263,26 @@ impl VolumeSessionRegistration {
 
     /// 判断此音频会话是否正在产生或准备产生声音。
     fn is_active(&self) -> bool {
+        // SAFETY: control 是本线程持有的会话接口，只读取状态。
         unsafe { self.control.GetState() }.is_ok_and(|state| state == AudioSessionStateActive)
     }
 
     /// 设置单会话音量，并确保滑块操作能够从静音恢复。
-    fn set_level(&self, level: f32) -> Result<(), String> {
+    fn set_level(&self, level: f32) -> Result<(), Error> {
+        // SAFETY: volume 是本线程持有的会话接口；两次写入共享同一事件上下文，失败即上抛给命令层。
         unsafe {
             self.volume
                 .SetMasterVolume(level, &VOLUME_EVENT_CONTEXT)
                 .and_then(|()| self.volume.SetMute(false, &VOLUME_EVENT_CONTEXT))
-        }
-        .map_err(|error| error.to_string())
+        }?;
+        Ok(())
     }
 
     /// 使用 Core Audio 会话静音接口修改单个播放器音频会话。
-    fn set_muted(&self, muted: bool) -> Result<(), String> {
-        unsafe { self.volume.SetMute(muted, &VOLUME_EVENT_CONTEXT) }
-            .map_err(|error| error.to_string())
+    fn set_muted(&self, muted: bool) -> Result<(), Error> {
+        // SAFETY: volume 是本线程持有的会话接口，写入使用与 set_level 相同的事件上下文。
+        unsafe { self.volume.SetMute(muted, &VOLUME_EVENT_CONTEXT) }?;
+        Ok(())
     }
 }
 

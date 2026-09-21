@@ -236,8 +236,10 @@
         "onlineStrategy": "線上解析策略",
         "parallel": "平行查詢",
         "parallelDescription": "平行查詢：等待較短，但會同時請求多個來源",
-        "currentFirst": "目前平台優先",
-        "currentFirstDescription": "目前平台優先：命中可靠逐字後停止；未命中時後援會較慢"
+        "currentOnly": "僅目前平台",
+        "currentOnlyDescription": "僅目前平台：只查詢目前播放平台自己的線上介面，不使用其他平台後援",
+        "onlineSources": "線上介面",
+        "onlineSourcesDescription": "選擇要使用的線上介面，並可拖曳調整請求順序；未勾選的介面不會發起請求"
       },
       "mediaSession": {
         "title": "播放器選擇策略",
@@ -571,13 +573,11 @@
         "applicationCache": "Muse Tune 快取",
         "local": "目前播放器本機",
         "online": "目前播放器線上",
-        "onlinePreferred": "目前播放器線上優先",
         "onlineFallback": "備用平台線上",
         "localUpgrade": "背景本機歌詞升級"
       },
       "groups": {
-        "online": "並行線上查詢",
-        "onlineFallback": "並行線上備援"
+        "online": "並行線上查詢"
       },
       "recentResolution": "上一輪解析 · {time} · {status}",
       "latestNote": "最近說明"

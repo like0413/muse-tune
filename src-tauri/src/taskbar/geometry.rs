@@ -17,7 +17,7 @@ pub(super) enum TaskbarSide {
     Right,
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[repr(u8)]
 #[serde(rename_all = "lowercase")]
 pub enum TaskbarPlacement {
@@ -58,12 +58,10 @@ impl From<RECT> for ScreenRect {
 }
 
 impl ScreenRect {
-    /// 返回矩形宽度。
     pub(super) fn width(self) -> i32 {
         self.right - self.left
     }
 
-    /// 返回矩形高度。
     pub(super) fn height(self) -> i32 {
         self.bottom - self.top
     }
@@ -207,4 +205,141 @@ pub(super) fn auto_content_width(
     };
 
     to_dip(available.max(0), dpi)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 构造任务栏高度上的矩形，测试只关心横向范围。
+    fn rect(left: i32, right: i32) -> ScreenRect {
+        ScreenRect {
+            left,
+            top: 1080,
+            right,
+            bottom: 1128,
+        }
+    }
+
+    /// 右侧停靠时播放器贴着锚点向内生长。
+    #[test]
+    fn right_docked_bar_grows_leftwards_from_the_anchor() {
+        let bar = calculate_bar_rect(rect(0, 1920), 1800, BASE_DPI, TaskbarSide::Right, 250);
+
+        assert_eq!(bar, rect(1550, 1800));
+    }
+
+    /// 宽度不得超过任务栏可用宽度，否则播放器会被推到屏幕外。
+    #[test]
+    fn bar_width_is_capped_by_the_taskbar() {
+        let bar = calculate_bar_rect(rect(0, 1920), 1920, BASE_DPI, TaskbarSide::Right, 4000);
+
+        assert_eq!(bar, rect(0, 1920));
+    }
+
+    /// DPI 缺失时按基准 DPI 处理，不能出现除零或退化到 0 宽度。
+    #[test]
+    fn missing_dpi_falls_back_to_base_dpi() {
+        let bar = calculate_bar_rect(rect(0, 1920), 1800, 0, TaskbarSide::Right, 250);
+
+        assert_eq!(bar.width(), 250);
+    }
+
+    /// 高 DPI 下同一 DIP 宽度要按比例放大，否则高分屏上播放器会明显偏窄。
+    #[test]
+    fn dip_width_scales_with_dpi() {
+        let bar = calculate_bar_rect(rect(0, 1920), 1920, 120, TaskbarSide::Right, 250);
+
+        assert_eq!(bar.width(), 313);
+    }
+
+    /// 左侧停靠时从任务栏左边缘起算，与右侧锚点无关。
+    #[test]
+    fn left_docked_bar_starts_at_the_taskbar_edge() {
+        let bar = calculate_bar_rect(rect(0, 1920), 1800, BASE_DPI, TaskbarSide::Left, 250);
+
+        assert_eq!(bar, rect(0, 250));
+    }
+
+    /// 硬裁剪只为真正重叠的元素让位，且右侧要额外留出视觉间距。
+    #[test]
+    fn hard_clip_makes_room_for_overlapping_elements() {
+        let bar = rect(1500, 1800);
+        let elements = [rect(1700, 1750)];
+
+        let clipped = hard_clip_bar_rect(bar, &elements, TaskbarSide::Right, BASE_DPI);
+
+        assert_eq!(clipped, rect(1758, 1800));
+    }
+
+    /// 元素与播放器不重叠时保持原矩形，不能凭空裁剪出空隙。
+    #[test]
+    fn hard_clip_keeps_the_rect_without_overlap() {
+        let bar = rect(1500, 1800);
+        let elements = [rect(1000, 1200)];
+
+        assert_eq!(
+            hard_clip_bar_rect(bar, &elements, TaskbarSide::Right, BASE_DPI),
+            bar
+        );
+    }
+
+    /// 左侧停靠时右边界让给最靠左的重叠元素。
+    #[test]
+    fn left_docked_clip_uses_the_nearest_element_edge() {
+        let bar = rect(0, 250);
+        let elements = [rect(200, 220), rect(300, 320)];
+
+        let clipped = hard_clip_bar_rect(bar, &elements, TaskbarSide::Left, BASE_DPI);
+
+        assert_eq!(clipped, rect(0, 200));
+    }
+
+    /// 自适应宽度取锚点到最靠拢元素之间的空白，并扣除视觉间距。
+    #[test]
+    fn auto_width_uses_the_gap_to_the_nearest_element() {
+        let elements = [rect(1600, 1700)];
+
+        let width =
+            auto_content_width(rect(0, 1920), 1800, TaskbarSide::Right, BASE_DPI, &elements);
+
+        assert_eq!(width, 92);
+    }
+
+    /// 空间不足时返回 0，由调用方按最小宽度兜底，不能返回负数。
+    #[test]
+    fn auto_width_never_goes_negative() {
+        let elements = [rect(1750, 1900)];
+
+        let width =
+            auto_content_width(rect(0, 1920), 1800, TaskbarSide::Right, BASE_DPI, &elements);
+
+        assert_eq!(width, 0);
+    }
+
+    /// 还没读到任何元素时占满整段可用区。
+    #[test]
+    fn auto_width_fills_the_available_area_without_elements() {
+        let width = auto_content_width(rect(0, 1920), 1800, TaskbarSide::Right, BASE_DPI, &[]);
+
+        assert_eq!(width, 1800);
+    }
+
+    /// 贴合边界不算越界，否则与显示器同尺寸的任务栏会被判定为在屏幕外。
+    #[test]
+    fn rect_within_accepts_touching_edges() {
+        let bounds = rect(0, 1920);
+
+        assert!(is_rect_within(bounds, bounds));
+        assert!(!is_rect_within(rect(0, 1921), bounds));
+    }
+
+    /// 仅边缘接触不算相交，否则相邻元素的裁剪会互相影响。
+    #[test]
+    fn intersection_requires_positive_area() {
+        let left = rect(0, 100);
+
+        assert!(!left.intersects(rect(100, 200)));
+        assert!(left.intersects(rect(99, 200)));
+    }
 }

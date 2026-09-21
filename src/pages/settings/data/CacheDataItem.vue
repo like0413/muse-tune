@@ -23,8 +23,8 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { Progress } from '@/components/ui/progress'
-import { formatBytes } from '@/features/data-management/format'
 import type { CacheOverview } from '@/features/data-management/types'
+import { formatBytes } from '@/features/i18n/format'
 
 const { t } = useI18n({ useScope: 'global' })
 

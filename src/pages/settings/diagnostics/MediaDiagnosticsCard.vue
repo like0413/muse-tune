@@ -3,12 +3,9 @@ import { AudioLines } from '@lucide/vue'
 import type { DeepReadonly } from 'vue'
 
 import { Badge } from '@/components/ui/badge'
-import {
-  formatDuration,
-  getPlaybackStatusLabel,
-  getPlayerLabel,
-} from '@/features/diagnostics/labels'
+import { formatDuration, getPlaybackStatusLabel } from '@/features/diagnostics/labels'
 import type { MediaDiagnostics } from '@/features/diagnostics/types'
+import { getMediaPlayerLabel } from '@/features/media/players'
 
 import DiagnosticRow from './DiagnosticRow.vue'
 import DiagnosticsCard from './DiagnosticsCard.vue'
@@ -52,7 +49,9 @@ const workerMessageSummary = computed(() => {
     </template>
     <DiagnosticRow
       :label="t('diagnostics.media.player')"
-      :value="diagnostics.player ? getPlayerLabel(diagnostics.player) : t('common.unavailable')"
+      :value="
+        diagnostics.player ? getMediaPlayerLabel(diagnostics.player) : t('common.unavailable')
+      "
     />
     <DiagnosticRow
       :label="t('diagnostics.media.playbackStatus')"
@@ -141,7 +140,7 @@ const workerMessageSummary = computed(() => {
         class="bg-muted/20 rounded-md border px-3 py-2"
       >
         <div class="flex flex-wrap items-center gap-2">
-          <span class="text-sm font-medium">{{ getPlayerLabel(session.player) }}</span>
+          <span class="text-sm font-medium">{{ getMediaPlayerLabel(session.player) }}</span>
           <Badge v-if="session.selected" variant="secondary">{{
             t('diagnostics.media.selected')
           }}</Badge>

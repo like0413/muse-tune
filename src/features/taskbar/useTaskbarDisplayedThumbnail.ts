@@ -15,6 +15,7 @@ export function useTaskbarDisplayedThumbnail(session: Readonly<Ref<MediaSessionS
   const updateDelayMs = shallowRef(0)
   let requestId = 0
   let pendingSource: string | null = null
+  // 切歌瞬间 thumbnail 会短暂为空：仅在仍有会话时延迟 500ms 清空，避免封面与背景一起塌陷。
   const { start: scheduleClear, stop: cancelClear } = useTimeoutFn(
     () => (thumbnail.value = null),
     500,

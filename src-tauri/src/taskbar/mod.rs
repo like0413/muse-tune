@@ -23,6 +23,7 @@ use std::{
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 use tauri_plugin_store::StoreExt;
 
+use crate::error::Error;
 use crate::native_defaults;
 use crate::settings_store::PATH as SETTINGS_STORE_PATH;
 
@@ -116,7 +117,7 @@ impl Drop for TaskbarService {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[repr(u8)]
 #[serde(rename_all = "lowercase")]
 pub enum TaskbarOverlapPriority {
@@ -137,7 +138,7 @@ impl TaskbarOverlapPriority {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[repr(u8)]
 #[serde(rename_all = "lowercase")]
 pub enum TaskbarWidthMode {
@@ -159,32 +160,26 @@ impl TaskbarWidthMode {
     }
 }
 
-/// 更新播放器定位偏好，并通知监控线程立即重新计算位置。
 pub fn set_placement(placement: TaskbarPlacement) {
     settings::set_placement(placement);
 }
 
-/// 更新任务栏元素与播放器的遮挡优先级，并通知监控线程重新计算可见区域。
 pub fn set_overlap_priority(priority: TaskbarOverlapPriority) {
     settings::set_overlap_priority(priority);
 }
 
-/// 更新 bar 基准宽度，并通知监控线程立即重新计算位置与裁剪区域。
 pub fn set_content_width(width: i32) {
     settings::set_content_width(width);
 }
 
-/// 更新 bar 宽度模式（固定宽度或自适应），并通知监控线程重新计算布局。
 pub fn set_width_mode(mode: TaskbarWidthMode) {
     settings::set_width_mode(mode);
 }
 
-/// 更新 bar 内容可见性；值变化时立即唤醒全部同步线程。
 pub fn set_content_visibility(visible: bool) {
     settings::set_content_visibility(visible);
 }
 
-/// 读取媒体状态计算出的 bar 内容可见性。
 pub(crate) fn content_visible() -> bool {
     settings::content_visible()
 }
@@ -212,7 +207,7 @@ pub fn show_volume_popup<R: Runtime>(
     source: &WebviewWindow<R>,
     anchor_center_x: f64,
     theme_color: String,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     volume_popup::show(source, anchor_center_x, theme_color)
 }
 
@@ -220,21 +215,21 @@ pub fn show_volume_popup<R: Runtime>(
 pub fn hide_volume_popup<R: Runtime>(
     source: &WebviewWindow<R>,
     generation: u64,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     volume_popup::hide(source, generation)
 }
 
 /// 更新目标显示器，并立即唤醒窗口管理线程。
-pub fn set_display_target(target: String) -> Result<(), String> {
+pub fn set_display_target(target: String) -> Result<(), Error> {
     if target != native_defaults::display_target() && (target.is_empty() || target.trim() != target)
     {
-        return Err("目标显示器标识无效".to_owned());
+        return Err(Error::Message("目标显示器标识无效".to_owned()));
     }
 
     let (state, changed) = &*DISPLAY_TARGET;
     let mut state = state
         .lock()
-        .map_err(|_| "目标显示器状态不可用".to_owned())?;
+        .map_err(|_| Error::Message("目标显示器状态不可用".to_owned()))?;
     if state.value != target {
         state.value = target;
         mark_display_state_changed(&mut state, changed);

@@ -4,6 +4,7 @@ import type { DeepReadonly } from 'vue'
 
 import { Badge } from '@/components/ui/badge'
 import type { TaskbarDiagnostics } from '@/features/diagnostics/types'
+import type { TaskbarOverlapPriority, TaskbarPlacement } from '@/features/taskbar/contracts'
 
 import DiagnosticRow from './DiagnosticRow.vue'
 import DiagnosticsCard from './DiagnosticsCard.vue'
@@ -11,18 +12,20 @@ import DiagnosticsCard from './DiagnosticsCard.vue'
 defineProps<{ diagnostics: DeepReadonly<TaskbarDiagnostics> }>()
 const { t } = useI18n({ useScope: 'global' })
 
-const placementLabels = computed<Record<string, string>>(() => ({
+/** 任务栏定位的本地化标签，键与原生枚举一一对应。 */
+const placementLabels = computed<Record<TaskbarPlacement, string>>(() => ({
   auto: t('common.auto'),
   left: t('diagnostics.values.leftSide'),
   right: t('diagnostics.values.rightSide'),
 }))
-const priorityLabels = computed<Record<string, string>>(() => ({
+/** 遮挡优先级的本地化标签，键与原生枚举一一对应。 */
+const priorityLabels = computed<Record<TaskbarOverlapPriority, string>>(() => ({
   bar: t('diagnostics.taskbar.barPriority'),
-  taskbarelements: t('diagnostics.taskbar.systemPriority'),
+  taskbar: t('diagnostics.taskbar.systemPriority'),
 }))
 
-const placementLabel = (value: string) => placementLabels.value[value] ?? value
-const priorityLabel = (value: string) => priorityLabels.value[value] ?? value
+const placementLabel = (value: TaskbarPlacement) => placementLabels.value[value]
+const priorityLabel = (value: TaskbarOverlapPriority) => priorityLabels.value[value]
 </script>
 
 <template>

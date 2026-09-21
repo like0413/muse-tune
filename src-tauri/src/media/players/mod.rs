@@ -11,7 +11,6 @@ use super::MediaPlayer;
 
 /// 隔离单个播放器差异的适配器接口。
 trait PlayerAdapter: Sync {
-    /// 返回稳定的播放器标识。
     fn player(&self) -> MediaPlayer;
 
     /// 判断 GSMTC 来源标识是否属于该播放器。
@@ -61,19 +60,16 @@ impl IdentifiedPlayer {
         self.adapter.map_or(&[], PlayerAdapter::executable_names)
     }
 
-    /// 返回当前播放器主窗口的稳定类名。
     pub(super) fn preferred_window_classes(&self) -> &'static [&'static str] {
         self.adapter
             .map_or(&[], PlayerAdapter::preferred_window_classes)
     }
 
-    /// 返回会让重新启动入口失效的插件模块片段。
     pub(super) fn relaunch_blocking_module_fragments(&self) -> &'static [&'static str] {
         self.adapter
             .map_or(&[], PlayerAdapter::relaunch_blocking_module_fragments)
     }
 
-    /// 返回播放器官方启动入口的文件名。
     pub(super) fn relaunch_entry_names(&self) -> &'static [&'static str] {
         self.adapter
             .map_or(&[], PlayerAdapter::relaunch_entry_names)
@@ -101,4 +97,21 @@ pub(super) fn selection_hold_after_title_change(player: MediaPlayer) -> Option<D
         .copied()
         .find(|adapter| adapter.player() == player)
         .and_then(PlayerAdapter::selection_hold_after_title_change)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::media::supported_players;
+
+    /// 适配器表必须覆盖全部已接入播放器：漏掉一个会让该平台的会话完全无法被识别与修正。
+    #[test]
+    fn adapters_cover_every_supported_player() {
+        for player in supported_players() {
+            assert!(
+                ADAPTERS.iter().any(|adapter| adapter.player() == *player),
+                "已接入的 {player:?} 缺少媒体适配器"
+            );
+        }
+    }
 }

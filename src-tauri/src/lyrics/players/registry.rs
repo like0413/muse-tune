@@ -396,3 +396,19 @@ fn kugou_changed_paths_affect_track(
 ) -> bool {
     kugou_music::changed_paths_affect_track(track, paths)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 歌词适配器必须覆盖全部已接入播放器：漏掉一个会让该平台永远拿不到歌词能力。
+    #[test]
+    fn adapters_cover_every_supported_player() {
+        for player in crate::media::supported_players() {
+            assert!(
+                ADAPTERS.iter().any(|adapter| adapter.player == *player),
+                "已接入的 {player:?} 缺少歌词适配器"
+            );
+        }
+    }
+}

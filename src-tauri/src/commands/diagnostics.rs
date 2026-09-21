@@ -2,6 +2,7 @@ use tauri::{AppHandle, State};
 
 use crate::{
     diagnostics::{self, DiagnosticsSnapshot},
+    ipc::IpcError,
     lyrics::LyricsService,
     media::MediaService,
 };
@@ -13,12 +14,18 @@ pub async fn collect_diagnostics(
     app: AppHandle,
     media: State<'_, MediaService>,
     lyrics: State<'_, LyricsService>,
-) -> Result<DiagnosticsSnapshot, String> {
+) -> Result<DiagnosticsSnapshot, IpcError> {
     let media = media.inner().clone();
     let lyrics = lyrics.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         diagnostics::collect(&app, &media, &lyrics, refresh_storage.unwrap_or(true))
     })
     .await
-    .map_err(|error| format!("等待诊断采集结果失败: {error}"))
+    .map_err(|error| {
+        IpcError::new(
+            "diagnostics.collect",
+            format!("等待诊断采集结果失败: {error}"),
+            true,
+        )
+    })
 }

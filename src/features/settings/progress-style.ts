@@ -32,13 +32,11 @@ export async function getTaskbarProgressVisible(): Promise<boolean> {
   return typeof visible === 'boolean' ? visible : DEFAULT_TASKBAR_PROGRESS_VISIBLE
 }
 
-/** 保存进度条显隐并通知任务栏窗口。 */
 export async function setTaskbarProgressVisible(visible: boolean): Promise<void> {
   await settingsStore.set(TASKBAR_PROGRESS_VISIBLE_KEY, visible)
   await emit(TASKBAR_PROGRESS_VISIBLE_CHANGED_EVENT, visible)
 }
 
-/** 监听进度条显隐变更。 */
 export async function listenTaskbarProgressVisibleChange(
   handler: (visible: boolean) => void,
 ): Promise<UnlistenFn> {
@@ -65,7 +63,6 @@ export async function getTaskbarProgressStyle(): Promise<TaskbarProgressStyle> {
   return isTaskbarProgressStyle(style) ? style : DEFAULT_TASKBAR_PROGRESS_STYLE
 }
 
-/** 持久化播放进度样式，并通知全部任务栏窗口立即切换。 */
 export async function setTaskbarProgressStyle(style: TaskbarProgressStyle): Promise<void> {
   await settingsStore.set(TASKBAR_PROGRESS_STYLE_KEY, style)
   await emit(TASKBAR_PROGRESS_STYLE_CHANGED_EVENT, style)
@@ -77,13 +74,11 @@ export async function getTaskbarProgressPosition(): Promise<TaskbarProgressPosit
   return isTaskbarProgressPosition(position) ? position : DEFAULT_TASKBAR_PROGRESS_POSITION
 }
 
-/** 持久化横条位置，并通知全部任务栏窗口。 */
 export async function setTaskbarProgressPosition(position: TaskbarProgressPosition): Promise<void> {
   await settingsStore.set(TASKBAR_PROGRESS_POSITION_KEY, position)
   await emit(TASKBAR_PROGRESS_POSITION_CHANGED_EVENT, position)
 }
 
-/** 监听设置窗口发出的播放进度样式变更。 */
 export async function listenTaskbarProgressStyleChange(
   handler: (style: TaskbarProgressStyle) => void,
 ): Promise<UnlistenFn> {
@@ -94,7 +89,6 @@ export async function listenTaskbarProgressStyleChange(
   })
 }
 
-/** 监听横条进度位置变更。 */
 export async function listenTaskbarProgressPositionChange(
   handler: (position: TaskbarProgressPosition) => void,
 ): Promise<UnlistenFn> {

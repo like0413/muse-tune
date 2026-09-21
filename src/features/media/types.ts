@@ -1,3 +1,10 @@
+/**
+ * GSMTC 会话的播放状态，与原生侧枚举一一对应。
+ *
+ * 前端只区分两种：`playing` 是唯一的“正在播放”判据（播放/暂停图标、封面旋转、歌词推进
+ * 都只认它），`paused` 只被任务栏自动隐藏策略单独识别。其余 `closed` / `opened` /
+ * `changing` / `stopped` / `unknown` 一律按“未在播放”处理，不区分也不显示。
+ */
 export type MediaPlaybackStatus =
   | 'closed'
   | 'opened'
@@ -66,6 +73,7 @@ export interface MediaSessionSnapshot {
 }
 
 export interface MediaVolumeSnapshot {
+  /** 应用音频会话的标量音量，原生侧钳制在 0–1；与静音相互独立，静音时该值不会归零。 */
   level: number
   muted: boolean
 }

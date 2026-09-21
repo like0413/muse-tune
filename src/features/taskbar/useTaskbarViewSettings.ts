@@ -1,21 +1,18 @@
-import type { UnlistenFn } from '@tauri-apps/api/event'
-
-import { reportBackgroundFailure } from '@/features/feedback/errors'
+import { useEventState } from '@/features/ipc/useEventState'
 import {
   DEFAULT_TASKBAR_BACKGROUND_STYLE,
   getTaskbarBackgroundStyle,
   listenTaskbarBackgroundStyleChange,
-  type TaskbarBackgroundStyle,
 } from '@/features/settings/background-style'
 import {
   getTaskbarBackgroundTransparency,
   listenTaskbarBackgroundTransparencyChange,
 } from '@/features/settings/background-transparency'
+import { DEFAULT_TASKBAR_BACKGROUND_TRANSPARENCY } from '@/features/settings/defaults'
 import {
   DEFAULT_TASKBAR_ELEMENT_ORDER,
   getTaskbarElementOrder,
   listenTaskbarElementOrderChange,
-  type TaskbarElement,
 } from '@/features/settings/element-order'
 import {
   DEFAULT_TASKBAR_PROGRESS_POSITION,
@@ -27,99 +24,58 @@ import {
   listenTaskbarProgressPositionChange,
   listenTaskbarProgressStyleChange,
   listenTaskbarProgressVisibleChange,
-  type TaskbarProgressPosition,
-  type TaskbarProgressStyle,
 } from '@/features/settings/progress-style'
 
-interface SettingBinding<T> {
-  load: () => Promise<T>
-  listen: (handler: (value: T) => void) => Promise<UnlistenFn>
-  apply: (value: T) => void
-  failureMessage: string
-}
-
-/** 同步任务栏窗口使用的设置，并统一处理异步监听注册与卸载竞态。 */
+/** 同步任务栏窗口使用的设置，每一项独立订阅，单项失败不阻断其他设置。 */
 export function useTaskbarViewSettings() {
-  const backgroundTransparency = shallowRef(0)
-  const backgroundStyle = shallowRef<TaskbarBackgroundStyle>(DEFAULT_TASKBAR_BACKGROUND_STYLE)
-  const progressStyle = shallowRef<TaskbarProgressStyle>(DEFAULT_TASKBAR_PROGRESS_STYLE)
-  const progressVisible = shallowRef(DEFAULT_TASKBAR_PROGRESS_VISIBLE)
-  const progressPosition = shallowRef<TaskbarProgressPosition>(DEFAULT_TASKBAR_PROGRESS_POSITION)
-  const elementOrder = shallowRef<TaskbarElement[]>([...DEFAULT_TASKBAR_ELEMENT_ORDER])
-  const unlisteners: UnlistenFn[] = []
-  let disposed = false
-
-  /** 先订阅再读取；事件先到达时，过期读取不得覆盖较新的设置。 */
-  async function bindSetting<T>(binding: SettingBinding<T>): Promise<void> {
-    let eventRevision = 0
-    try {
-      const unlisten = await binding.listen((value) => {
-        eventRevision += 1
-        binding.apply(value)
-      })
-      if (disposed) {
-        unlisten()
-        return
-      }
-      unlisteners.push(unlisten)
-
-      const revisionBeforeRead = eventRevision
-      const saved = await binding.load()
-      if (!disposed && eventRevision === revisionBeforeRead) {
-        binding.apply(saved)
-      }
-    } catch (error) {
-      reportBackgroundFailure(binding.failureMessage, error)
-    }
-  }
-
-  /** 并行初始化彼此独立的设置绑定，单项失败不阻断其他设置。 */
-  function initialize() {
-    void Promise.all([
-      bindSetting({
-        load: getTaskbarBackgroundStyle,
-        listen: listenTaskbarBackgroundStyleChange,
-        apply: (value) => (backgroundStyle.value = value),
-        failureMessage: '初始化任务栏背景样式失败',
-      }),
-      bindSetting({
-        load: getTaskbarBackgroundTransparency,
-        listen: listenTaskbarBackgroundTransparencyChange,
-        apply: (value) => (backgroundTransparency.value = value),
-        failureMessage: '初始化任务栏背景透明度失败',
-      }),
-      bindSetting({
-        load: getTaskbarProgressStyle,
-        listen: listenTaskbarProgressStyleChange,
-        apply: (value) => (progressStyle.value = value),
-        failureMessage: '初始化播放进度样式失败',
-      }),
-      bindSetting({
-        load: getTaskbarProgressVisible,
-        listen: listenTaskbarProgressVisibleChange,
-        apply: (value) => (progressVisible.value = value),
-        failureMessage: '初始化进度条显隐失败',
-      }),
-      bindSetting({
-        load: getTaskbarProgressPosition,
-        listen: listenTaskbarProgressPositionChange,
-        apply: (value) => (progressPosition.value = value),
-        failureMessage: '初始化播放进度位置失败',
-      }),
-      bindSetting({
-        load: getTaskbarElementOrder,
-        listen: listenTaskbarElementOrderChange,
-        apply: (value) => (elementOrder.value = value),
-        failureMessage: '初始化任务栏区块顺序失败',
-      }),
-    ])
-  }
-
-  onMounted(initialize)
-  onUnmounted(() => {
-    disposed = true
-    unlisteners.splice(0).forEach((unlisten) => unlisten())
-  })
+  const backgroundTransparency = useEventState(
+    {
+      read: getTaskbarBackgroundTransparency,
+      subscribe: listenTaskbarBackgroundTransparencyChange,
+      failureMessage: '初始化任务栏背景透明度失败',
+    },
+    DEFAULT_TASKBAR_BACKGROUND_TRANSPARENCY,
+  )
+  const backgroundStyle = useEventState(
+    {
+      read: getTaskbarBackgroundStyle,
+      subscribe: listenTaskbarBackgroundStyleChange,
+      failureMessage: '初始化任务栏背景样式失败',
+    },
+    DEFAULT_TASKBAR_BACKGROUND_STYLE,
+  )
+  const progressStyle = useEventState(
+    {
+      read: getTaskbarProgressStyle,
+      subscribe: listenTaskbarProgressStyleChange,
+      failureMessage: '初始化播放进度样式失败',
+    },
+    DEFAULT_TASKBAR_PROGRESS_STYLE,
+  )
+  const progressVisible = useEventState(
+    {
+      read: getTaskbarProgressVisible,
+      subscribe: listenTaskbarProgressVisibleChange,
+      failureMessage: '初始化进度条显隐失败',
+    },
+    DEFAULT_TASKBAR_PROGRESS_VISIBLE,
+  )
+  const progressPosition = useEventState(
+    {
+      read: getTaskbarProgressPosition,
+      subscribe: listenTaskbarProgressPositionChange,
+      failureMessage: '初始化播放进度位置失败',
+    },
+    DEFAULT_TASKBAR_PROGRESS_POSITION,
+  )
+  const elementOrder = useEventState(
+    {
+      read: getTaskbarElementOrder,
+      subscribe: listenTaskbarElementOrderChange,
+      failureMessage: '初始化任务栏区块顺序失败',
+    },
+    [...DEFAULT_TASKBAR_ELEMENT_ORDER],
+  )
 
   return {
     backgroundStyle: readonly(backgroundStyle),

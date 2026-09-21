@@ -1,10 +1,11 @@
 use crate::{
+    error::Error,
     lyrics::LyricsDiagnostics,
     media::{
         MediaPlaybackStatus, MediaPlayer, MediaRuntimeDiagnostics, MediaSessionSelectionStrategy,
         MediaSnapshotDiagnostics,
     },
-    taskbar::TaskbarDisplay,
+    taskbar::{TaskbarDisplay, TaskbarOverlapPriority, TaskbarPlacement, TaskbarWidthMode},
 };
 
 /// 设置页一次读取的完整应用诊断。
@@ -41,10 +42,10 @@ pub struct TaskbarDiagnostics {
     pub visible_bar_window_count: usize,
     pub content_visible: bool,
     pub display_target: String,
-    pub placement: String,
-    pub overlap_priority: String,
+    pub placement: TaskbarPlacement,
+    pub overlap_priority: TaskbarOverlapPriority,
     pub content_width_dip: i32,
-    pub width_mode: String,
+    pub width_mode: TaskbarWidthMode,
     pub displays: Vec<TaskbarDisplay>,
     pub windows: Vec<TaskbarWindowDiagnostics>,
 }
@@ -121,9 +122,9 @@ pub struct MediaSessionDiagnostics {
 impl MediaDiagnostics {
     pub(super) fn from_snapshots(
         snapshot: Option<MediaSnapshotDiagnostics>,
-        runtime: Result<MediaRuntimeDiagnostics, String>,
+        runtime: Result<MediaRuntimeDiagnostics, Error>,
     ) -> Self {
-        let runtime_error = runtime.as_ref().err().cloned();
+        let runtime_error = runtime.as_ref().err().map(ToString::to_string);
         let (
             discovered_session_count,
             selection_strategy,

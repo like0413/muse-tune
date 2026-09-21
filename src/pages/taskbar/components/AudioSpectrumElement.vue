@@ -60,7 +60,6 @@ function resizeCanvas(width: number, height: number) {
   requestDraw()
 }
 
-/** 把已计算的高度追加为一条批量路径。 */
 function appendSpectrumPath(
   context: CanvasRenderingContext2D,
   count: number,
@@ -79,7 +78,6 @@ function appendSpectrumPath(
   }
 }
 
-/** 计算进度分界线在当前频谱画布内的位置。 */
 function getPlayedBoundary(): number {
   if (!props.overlapsProgressGradient) return 0
   const availableWidth = taskbarWidth || logicalWidth
@@ -93,6 +91,8 @@ function getPlayedBoundary(): number {
 function drawSpectrum() {
   const element = canvas.value
   if (!element || logicalWidth <= 0 || logicalHeight <= 0) return
+  // alpha 保留透明画布以叠在背景之上；desynchronized 让 WebView2 不必等合成器帧同步即可上屏，
+  // 代价是画布可能与 DOM 短暂不一致，因此这一层只自绘、不参与与其它层的逐帧对齐。
   context ??= element.getContext('2d', { alpha: true, desynchronized: true })
   if (!context) return
 
@@ -103,6 +103,8 @@ function drawSpectrum() {
   if (frameIsSilent && lastDrawnFrameWasSilent) return
   lastDrawnFrameWasSilent = frameIsSilent
   const count = currentSettings.barCount
+  // 间隙不超过每柱平均槽宽的 1/3，且最多 2px；柱宽保底 0.5、圆角不超过 2 且不超过半个柱宽，
+  // 否则柱子变多或变窄时会被间隙吃光、或圆角把柱体削成非矩形。
   const gap = Math.min(MAX_BAR_GAP, logicalWidth / (count * 3))
   const barWidth = Math.max(0.5, (logicalWidth - gap * (count - 1)) / count)
   const radius = Math.min(2, barWidth / 2)
@@ -124,6 +126,8 @@ function drawSpectrum() {
     const smoothing = currentSettings.smoothing / 100
     const smoothedLevel = smoothedLevels[index]! * smoothing + targetLevel * (1 - smoothing)
     smoothedLevels[index] = smoothedLevel
+    // 0.002 以下的电平直接归零：平滑是递归加权，残留的小数会永远衰减不到 0。
+    // 1 / ratio 是 1 个物理像素对应的 CSS 高度，保证有能量时柱体至少可见。
     barHeights[index] =
       smoothedLevel <= 0.002 ? 0 : Math.max(1 / ratio, logicalHeight * smoothedLevel)
   }

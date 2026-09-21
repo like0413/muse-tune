@@ -1,6 +1,10 @@
 import type { LyricsDiagnostics } from '@/features/lyrics/types'
 import type { MediaPlaybackStatus, MediaPlayer } from '@/features/media/types'
-import type { TaskbarDisplay } from '@/features/taskbar/contracts'
+import type {
+  TaskbarDisplay,
+  TaskbarOverlapPriority,
+  TaskbarPlacement,
+} from '@/features/taskbar/contracts'
 
 export interface ApplicationDiagnostics {
   name: string
@@ -18,8 +22,8 @@ export interface TaskbarDiagnostics {
   visibleBarWindowCount: number
   contentVisible: boolean
   displayTarget: string
-  placement: string
-  overlapPriority: string
+  placement: TaskbarPlacement
+  overlapPriority: TaskbarOverlapPriority
   contentWidthDip: number
   displays: TaskbarDisplay[]
   windows: Array<{ label: string; visible: boolean }>

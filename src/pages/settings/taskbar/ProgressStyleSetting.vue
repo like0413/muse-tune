@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { Activity } from '@lucide/vue'
-import type { UnlistenFn } from '@tauri-apps/api/event'
 
-import CollapsibleItem from '@/components/settings/CollapsibleItem.vue'
 import {
   Field,
   FieldContent,
@@ -14,6 +12,7 @@ import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
+import { useEventState } from '@/features/ipc/useEventState'
 import { setCompatibleTaskbarProgressStyle } from '@/features/settings/background-style'
 import {
   DEFAULT_TASKBAR_PROGRESS_POSITION,
@@ -50,7 +49,14 @@ const progressPositionOptions = computed(
     ] as const satisfies ReadonlyArray<{ value: TaskbarProgressPosition; label: string }>,
 )
 
-const selectedProgressStyle = shallowRef<TaskbarProgressStyle>(DEFAULT_TASKBAR_PROGRESS_STYLE)
+const selectedProgressStyle = useEventState(
+  {
+    read: getTaskbarProgressStyle,
+    subscribe: listenTaskbarProgressStyleChange,
+    failureMessage: '读取播放进度样式失败',
+  },
+  DEFAULT_TASKBAR_PROGRESS_STYLE,
+)
 const selectedProgressVisible = shallowRef(DEFAULT_TASKBAR_PROGRESS_VISIBLE)
 const selectedProgressPosition = shallowRef<TaskbarProgressPosition>(
   DEFAULT_TASKBAR_PROGRESS_POSITION,
@@ -59,30 +65,18 @@ const progressStyleSaving = shallowRef(false)
 const progressPositionSaving = shallowRef(false)
 const progressVisibilitySaving = shallowRef(false)
 const showCompatibilityNotice = shallowRef(false)
-let unlistenStyle: UnlistenFn | undefined
-let styleRevision = 0
-let disposed = false
 
-/** 恢复已保存的播放进度样式。 */
-async function loadProgressStyle() {
+/** 恢复进度条显隐与位置；这两项没有实时事件，只在进入设置页时读取一次。 */
+async function loadProgressVisibilityAndPosition() {
   try {
-    const stop = await listenTaskbarProgressStyleChange((style) => {
-      styleRevision += 1
-      selectedProgressStyle.value = style
-    })
-    if (disposed) return stop()
-    unlistenStyle = stop
-    const revision = styleRevision
-    const [savedStyle, savedPosition, savedVisible] = await Promise.all([
-      getTaskbarProgressStyle(),
+    const [savedPosition, savedVisible] = await Promise.all([
       getTaskbarProgressPosition(),
       getTaskbarProgressVisible(),
     ])
-    if (!disposed && revision === styleRevision) selectedProgressStyle.value = savedStyle
-    if (!disposed) selectedProgressPosition.value = savedPosition
-    if (!disposed) selectedProgressVisible.value = savedVisible
+    selectedProgressPosition.value = savedPosition
+    selectedProgressVisible.value = savedVisible
   } catch (error) {
-    reportBackgroundFailure('读取播放进度样式失败', error)
+    reportBackgroundFailure('读取播放进度显隐与位置失败', error)
   }
 }
 
@@ -155,11 +149,7 @@ async function selectProgressStyle(value: unknown) {
   }
 }
 
-onMounted(loadProgressStyle)
-onUnmounted(() => {
-  disposed = true
-  unlistenStyle?.()
-})
+onMounted(() => void loadProgressVisibilityAndPosition())
 </script>
 
 <template>

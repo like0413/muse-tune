@@ -193,7 +193,6 @@ pub(super) fn is_bar_attached_to_taskbar(bar: HWND, taskbar: HWND) -> bool {
         && !ex_style.contains(WS_EX_APPWINDOW)
 }
 
-/// 判断播放器窗口是否仍处于置顶状态。
 pub(super) fn is_bar_topmost(bar: HWND) -> bool {
     extended_window_style(bar).contains(WS_EX_TOPMOST)
 }
@@ -278,13 +277,11 @@ pub(super) fn hide_bar(bar: HWND) {
     }
 }
 
-/// 判断窗口句柄当前是否仍有效。
 pub(super) fn is_window_alive(window: HWND) -> bool {
     // SAFETY: 句柄仅用于只读有效性检查。
     unsafe { IsWindow(Some(window)).as_bool() }
 }
 
-/// 判断窗口当前是否可见。
 pub(super) fn is_window_visible(window: HWND) -> bool {
     // SAFETY: 句柄仅用于只读可见性检查。
     unsafe { IsWindowVisible(window).as_bool() }
@@ -312,7 +309,6 @@ fn is_shell_surface(window: HWND) -> bool {
     )
 }
 
-/// 读取窗口类名。
 fn window_class_name(window: HWND) -> Option<String> {
     let mut buffer = [0_u16; 256];
     // SAFETY: `buffer` 的完整长度均可写，`window` 是借用的有效句柄。
@@ -324,7 +320,6 @@ fn window_class_name(window: HWND) -> Option<String> {
     String::from_utf16(&buffer[..length as usize]).ok()
 }
 
-/// 读取窗口扩展样式。
 fn extended_window_style(window: HWND) -> WINDOW_EX_STYLE {
     // SAFETY: 从借用句柄读取窗口样式不会改变窗口状态。
     WINDOW_EX_STYLE(unsafe { GetWindowLongPtrW(window, GWL_EXSTYLE) } as u32)

@@ -11,12 +11,17 @@ use std::{
 use tauri::{AppHandle, Runtime};
 
 use super::{WorkerMessage, metrics, metrics::WorkerSender, worker::run_worker};
+use crate::error::Error;
 use crate::media::{
     MediaControlAction, MediaRuntimeDiagnostics, MediaSessionSelectionPolicy, MediaSessionSnapshot,
     MediaSnapshotDiagnostics, MediaSnapshotSubscriber, MediaVolumeSnapshot,
 };
 
+/// 常规请求（控制、播放器窗口、音量、频谱、策略）的等待上限：超时只把该次调用变成文本错误，
+/// 不向 worker 发任何取消消息——worker 可能只是在处理慢事件或正被 WinRT 阻塞，仍会继续服务后续请求。
 const WORKER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
+/// 诊断查询的等待上限：它由设置页按需拉取，宁可快速失败也不让界面一直等采集结果，因此只给 1 秒；
+/// 同样只影响这一次调用，worker 不受影响。
 const DIAGNOSTICS_RESPONSE_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// 面向 Tauri command 的线程安全媒体服务句柄。
@@ -76,7 +81,6 @@ impl MediaService {
         self.inner.shutdown();
     }
 
-    /// 返回最近发布的媒体会话快照。
     pub fn snapshot(&self) -> Option<MediaSessionSnapshot> {
         self.inner
             .snapshot
@@ -100,7 +104,7 @@ impl MediaService {
     }
 
     /// 从媒体线程读取会话选择、应用音频和频谱绑定状态。
-    pub(crate) fn runtime_diagnostics(&self) -> Result<MediaRuntimeDiagnostics, String> {
+    pub(crate) fn runtime_diagnostics(&self) -> Result<MediaRuntimeDiagnostics, Error> {
         self.request(
             WorkerMessage::GetDiagnostics,
             DIAGNOSTICS_RESPONSE_TIMEOUT,
@@ -109,7 +113,7 @@ impl MediaService {
     }
 
     /// 将控制请求串行投递给持有当前 WinRT 会话的线程。
-    pub fn control(&self, action: MediaControlAction) -> Result<bool, String> {
+    pub fn control(&self, action: MediaControlAction) -> Result<bool, Error> {
         self.request(
             |sender| WorkerMessage::Control(action, sender),
             WORKER_RESPONSE_TIMEOUT,
@@ -118,7 +122,7 @@ impl MediaService {
     }
 
     /// 开关当前选中会话所属的播放器主窗口：已在前台时关闭，最小化或隐藏时还原或显示。
-    pub fn toggle_player_window(&self) -> Result<(), String> {
+    pub fn toggle_player_window(&self) -> Result<(), Error> {
         self.request(
             WorkerMessage::TogglePlayerWindow,
             WORKER_RESPONSE_TIMEOUT,
@@ -127,7 +131,7 @@ impl MediaService {
     }
 
     /// 更新多播放器会话选择策略，并立即重新计算控制目标。
-    pub fn set_selection_policy(&self, policy: MediaSessionSelectionPolicy) -> Result<(), String> {
+    pub fn set_selection_policy(&self, policy: MediaSessionSelectionPolicy) -> Result<(), Error> {
         self.request(
             |sender| WorkerMessage::SelectionPolicyChanged(policy, sender),
             WORKER_RESPONSE_TIMEOUT,
@@ -136,7 +140,7 @@ impl MediaService {
     }
 
     /// 返回当前播放器的 Windows 单应用音量。
-    pub fn volume(&self) -> Result<Option<MediaVolumeSnapshot>, String> {
+    pub fn volume(&self) -> Result<Option<MediaVolumeSnapshot>, Error> {
         self.request(
             WorkerMessage::GetVolume,
             WORKER_RESPONSE_TIMEOUT,
@@ -145,7 +149,7 @@ impl MediaService {
     }
 
     /// 设置当前播放器的 Windows 单应用音量。
-    pub fn set_volume(&self, level: f32) -> Result<MediaVolumeSnapshot, String> {
+    pub fn set_volume(&self, level: f32) -> Result<MediaVolumeSnapshot, Error> {
         self.request(
             |sender| WorkerMessage::SetVolume(level, sender),
             WORKER_RESPONSE_TIMEOUT,
@@ -154,7 +158,7 @@ impl MediaService {
     }
 
     /// 切换当前播放器的 Windows 单应用静音状态。
-    pub fn toggle_mute(&self) -> Result<MediaVolumeSnapshot, String> {
+    pub fn toggle_mute(&self) -> Result<MediaVolumeSnapshot, Error> {
         self.request(
             WorkerMessage::ToggleMute,
             WORKER_RESPONSE_TIMEOUT,
@@ -163,7 +167,7 @@ impl MediaService {
     }
 
     /// 启用或停止当前播放器的真实音频频谱采集。
-    pub fn set_spectrum_enabled(&self, enabled: bool, frame_rate: u16) -> Result<(), String> {
+    pub fn set_spectrum_enabled(&self, enabled: bool, frame_rate: u16) -> Result<(), Error> {
         self.request(
             |sender| WorkerMessage::SpectrumEnabled(enabled, frame_rate, sender),
             WORKER_RESPONSE_TIMEOUT,
@@ -177,15 +181,15 @@ impl MediaService {
         message: impl FnOnce(mpsc::SyncSender<T>) -> WorkerMessage,
         timeout: Duration,
         timeout_message: &str,
-    ) -> Result<T, String> {
+    ) -> Result<T, Error> {
         let (result_sender, result_receiver) = mpsc::sync_channel(1);
         self.inner
             .sender
             .send(message(result_sender))
-            .map_err(|_| "媒体会话监控线程不可用".to_owned())?;
+            .map_err(|_| Error::Message("媒体会话监控线程不可用".to_owned()))?;
         result_receiver
             .recv_timeout(timeout)
-            .map_err(|_| timeout_message.to_owned())
+            .map_err(|_| Error::Message(timeout_message.to_owned()))
     }
 }
 

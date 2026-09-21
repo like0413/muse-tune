@@ -27,15 +27,13 @@ export async function getTaskbarOverlapPriority(): Promise<TaskbarOverlapPriorit
 /**
  * 立即应用任务栏元素遮挡优先级，并在成功后持久化选择。
  *
- * 必须经由本函数写入：原生侧只在启动时读取存储，运行期间不再同步该键。
- * 绕过它直接写 `settingsStore` 会让原生保持旧值，而设置界面显示新值（见 `defaults.ts` 的写入契约）。
+ * 必须经由本函数写入：原生侧只在启动时读取该键（写入契约见 `defaults.ts`）。
  */
 export async function setTaskbarOverlapPriority(priority: TaskbarOverlapPriority): Promise<void> {
   await applyTaskbarOverlapPriority(priority)
   await settingsStore.set(TASKBAR_OVERLAP_PRIORITY_KEY, priority)
 }
 
-/** 将任务栏元素遮挡优先级同步到原生任务栏定位线程。 */
 export async function applyTaskbarOverlapPriority(priority: TaskbarOverlapPriority): Promise<void> {
   await applyNativeTaskbarOverlapPriority(priority)
 }

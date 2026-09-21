@@ -3,8 +3,8 @@ import { PlugZap } from '@lucide/vue'
 import type { DeepReadonly } from 'vue'
 
 import { Badge } from '@/components/ui/badge'
-import { getPlayerLabel } from '@/features/diagnostics/labels'
 import type { LyricsAdapterDiagnostics } from '@/features/lyrics/types'
+import { getMediaPlayerLabel } from '@/features/media/players'
 
 import DiagnosticsCard from './DiagnosticsCard.vue'
 
@@ -25,7 +25,7 @@ defineProps<{ adapters: DeepReadonly<LyricsAdapterDiagnostics[]> }>()
         :key="adapter.player"
         class="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 rounded-md border p-3"
       >
-        <span class="font-medium">{{ getPlayerLabel(adapter.player) }}</span>
+        <span class="font-medium">{{ getMediaPlayerLabel(adapter.player) }}</span>
         <span class="text-muted-foreground min-w-0 break-all">
           {{ adapter.cachePath ?? t('diagnostics.adapters.notDiscovered') }}
         </span>

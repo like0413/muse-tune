@@ -13,6 +13,7 @@ use windows::{
 };
 
 use super::{metrics::WorkerSender, pending_events::WorkerEvent};
+use crate::error::Error;
 use crate::media::{
     MediaControlAction, MediaMetadata, MediaPlayback, MediaPlaybackControls, MediaSessionSnapshot,
     MediaTimeline, players::identify, source_icon::read_source_icon_data_url,
@@ -317,64 +318,44 @@ pub(super) fn read_timeline(
 pub(super) fn control(
     registration: Option<&SessionRegistration>,
     action: MediaControlAction,
-) -> Result<bool, String> {
+) -> Result<bool, Error> {
     let session = &registration
-        .ok_or_else(|| "当前没有可控制的 Windows 媒体会话".to_owned())?
+        .ok_or_else(|| Error::Message("当前没有可控制的 Windows 媒体会话".to_owned()))?
         .session;
-    let playback = session
-        .GetPlaybackInfo()
-        .map_err(|error| error.to_string())?;
-    let controls = playback.Controls().map_err(|error| error.to_string())?;
+    let playback = session.GetPlaybackInfo()?;
+    let controls = playback.Controls()?;
     let operation = match action {
         MediaControlAction::TogglePlayPause => {
-            if controls
-                .IsPlayPauseToggleEnabled()
-                .map_err(|error| error.to_string())?
-            {
+            if controls.IsPlayPauseToggleEnabled()? {
                 session.TryTogglePlayPauseAsync()
-            } else if playback
-                .PlaybackStatus()
-                .map_err(|error| error.to_string())?
+            } else if playback.PlaybackStatus()?
                 == windows::Media::Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing
             {
-                if controls
-                    .IsPauseEnabled()
-                    .map_err(|error| error.to_string())?
-                {
+                if controls.IsPauseEnabled()? {
                     session.TryPauseAsync()
                 } else {
                     return Ok(false);
                 }
-            } else if controls
-                .IsPlayEnabled()
-                .map_err(|error| error.to_string())?
-            {
+            } else if controls.IsPlayEnabled()? {
                 session.TryPlayAsync()
             } else {
                 return Ok(false);
             }
         }
         MediaControlAction::SkipNext => {
-            if controls
-                .IsNextEnabled()
-                .map_err(|error| error.to_string())?
-            {
+            if controls.IsNextEnabled()? {
                 session.TrySkipNextAsync()
             } else {
                 return Ok(false);
             }
         }
         MediaControlAction::SkipPrevious => {
-            if controls
-                .IsPreviousEnabled()
-                .map_err(|error| error.to_string())?
-            {
+            if controls.IsPreviousEnabled()? {
                 session.TrySkipPreviousAsync()
             } else {
                 return Ok(false);
             }
         }
-    }
-    .map_err(|error| error.to_string())?;
-    operation.get().map_err(|error| error.to_string())
+    }?;
+    Ok(operation.get()?)
 }

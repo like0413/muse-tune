@@ -13,7 +13,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_log::{Builder, RotationStrategy, Target, TargetKind, TimezoneStrategy};
 use time::{format_description::FormatItem, macros::format_description};
 
-use crate::filesystem;
+use crate::{error::Error, filesystem};
 
 pub const LOG_FILE_MAX_BYTES: u64 = 512 * 1024;
 pub const LOG_ARCHIVE_FILE_LIMIT: usize = 9;
@@ -148,29 +148,30 @@ pub fn warn_throttled(key: &'static str, message: impl FnOnce() -> String) {
 }
 
 /// 删除轮转历史文件并保留当前日志句柄对应的活动文件。
-pub fn clear_history<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+pub fn clear_history<R: Runtime>(app: &AppHandle<R>) -> Result<(), Error> {
     let log_directory = app
         .path()
         .app_log_dir()
-        .map_err(|error| format!("无法定位日志目录: {error}"))?;
+        .map_err(|error| Error::Message(format!("无法定位日志目录: {error}")))?;
     match filesystem::ensure_directory(&log_directory) {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(format!("日志目录边界检查失败: {error}")),
+        Err(error) => return Err(Error::Message(format!("日志目录边界检查失败: {error}"))),
     }
     let entries = match fs::read_dir(&log_directory) {
         Ok(entries) => entries,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(format!("无法读取日志目录: {error}")),
+        Err(error) => return Err(Error::Message(format!("无法读取日志目录: {error}"))),
     };
     let active_file_name = OsString::from(format!("{}.log", app.package_info().name));
     log::logger().flush();
     for entry in entries {
-        let entry = entry.map_err(|error| format!("无法读取日志文件: {error}"))?;
+        let entry = entry.map_err(|error| Error::Message(format!("无法读取日志文件: {error}")))?;
         let metadata = filesystem::entry_metadata_without_reparse(&entry)
-            .map_err(|error| format!("日志文件边界检查失败: {error}"))?;
+            .map_err(|error| Error::Message(format!("日志文件边界检查失败: {error}")))?;
         if metadata.is_file() && entry.file_name() != active_file_name {
-            fs::remove_file(entry.path()).map_err(|error| format!("无法删除历史日志: {error}"))?;
+            fs::remove_file(entry.path())
+                .map_err(|error| Error::Message(format!("无法删除历史日志: {error}")))?;
         }
     }
     Ok(())

@@ -122,6 +122,10 @@ pub struct ParsedLyricsCache {
     cache_path: PathBuf,
     diagnostics: Mutex<CacheDiagnosticsState>,
     /// 每个键最近一次写入所属的解析代数，用于拒绝被取代的旧写入。
+    ///
+    /// 只增不删：任何路径都不会移除或清空条目（`clear` 也只删磁盘文件），因此它随本次运行
+    /// 播放过的曲目键单调增长。单条记录很小（键 + u64），但长时间运行且频繁切歌时内存不会回落，
+    /// 这也是它刻意与缓存淘汰逻辑解耦的代价。
     write_generations: Mutex<HashMap<String, u64>>,
 }
 

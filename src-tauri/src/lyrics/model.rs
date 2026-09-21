@@ -59,11 +59,11 @@ pub enum LyricsResolutionOutcome {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LyricsOnlineStrategy {
-    /// 同时查询所有可用来源，缩短兜底等待时间，但会产生更多网络请求。
+    /// 并行查询用户勾选的在线接口，按用户排定的顺序发起。
     #[default]
     Parallel,
-    /// 先查询当前播放器，未获得可靠逐字歌词时再并发查询其他来源。
-    CurrentPlayerFirst,
+    /// 只查询当前正在播放的平台自己的在线接口，不使用其他平台兜底。
+    CurrentPlayerOnly,
 }
 
 /// 解析步骤的来源标识。
@@ -79,22 +79,10 @@ pub enum LyricsResolutionSite {
     Local,
     /// 当前播放器的在线歌词。
     Online,
-    /// 当前播放器的在线歌词，且处于“当前播放器优先”策略的首轮。
-    OnlinePreferred,
     /// 备用平台的在线歌词。
     OnlineFallback,
     /// 已有可展示缓存时在后台尝试的本地精度升级。
     LocalUpgrade,
-}
-
-/// 并发阶段标识；同一阶段的步骤是同时执行的，不能显示成先后顺序。
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum LyricsParallelGroup {
-    /// 所有在线来源并发查询。
-    Online,
-    /// 其他在线来源并发兜底。
-    OnlineFallback,
 }
 
 /// 最近一次解析的有界步骤记录，仅保留诊断所需摘要。
@@ -104,7 +92,8 @@ pub struct LyricsResolutionStep {
     pub site: LyricsResolutionSite,
     pub outcome: LyricsResolutionOutcome,
     pub detail: Option<String>,
-    pub group: Option<LyricsParallelGroup>,
+    /// 该步骤属于并发查询多个来源的阶段：同阶段的步骤是同时执行的，不能显示成先后顺序。
+    pub parallel: bool,
 }
 
 /// Muse Tune 规范化歌词缓存的磁盘状态。

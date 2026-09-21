@@ -56,7 +56,6 @@ function scheduleClose() {
   }, VOLUME_POPUP_HOVER_BRIDGE_MS)
 }
 
-/** 按按钮在 bar 内的中心坐标定位悬浮窗。 */
 async function openPopup() {
   if (!anchor.value || !volume.value) return
   cancelClose()

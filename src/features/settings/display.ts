@@ -20,7 +20,6 @@ export async function getTaskbarDisplayTarget(): Promise<string> {
     : ALL_TASKBAR_DISPLAYS
 }
 
-/** 枚举当前由 Windows 创建了任务栏的显示器。 */
 export async function listTaskbarDisplays(): Promise<TaskbarDisplay[]> {
   return listNativeTaskbarDisplays()
 }
@@ -28,15 +27,13 @@ export async function listTaskbarDisplays(): Promise<TaskbarDisplay[]> {
 /**
  * 立即切换目标显示器，并在成功后持久化选择。
  *
- * 必须经由本函数写入：原生侧只在启动时读取存储，运行期间不再同步该键。
- * 绕过它直接写 `settingsStore` 会让原生保持旧值，而设置界面显示新值（见 `defaults.ts` 的写入契约）。
+ * 必须经由本函数写入：原生侧只在启动时读取该键（写入契约见 `defaults.ts`）。
  */
 export async function setTaskbarDisplayTarget(target: string): Promise<void> {
   await applyTaskbarDisplayTarget(target)
   await settingsStore.set(TASKBAR_DISPLAY_TARGET_KEY, target)
 }
 
-/** 将目标显示器同步到原生多任务栏窗口管理线程。 */
 export async function applyTaskbarDisplayTarget(target: string): Promise<void> {
   await applyNativeTaskbarDisplayTarget(target)
 }

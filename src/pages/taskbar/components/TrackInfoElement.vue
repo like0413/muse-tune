@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import type { UnlistenFn } from '@tauri-apps/api/event'
-
-import { reportBackgroundFailure } from '@/features/feedback/errors'
+import { useEventState } from '@/features/ipc/useEventState'
 import type { MediaSessionSnapshot } from '@/features/media/types'
 import {
   DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT,
@@ -12,8 +10,6 @@ import {
   listenTaskbarTrackInfoAlignmentChange,
   listenTaskbarTrackInfoScrollingChange,
   listenTaskbarTrackInfoVisibleChange,
-  type TaskbarTrackInfoAlignment,
-  type TaskbarTrackInfoScrolling,
 } from '@/features/settings/track-info'
 
 import ScrollingTrackTitle from './ScrollingTrackTitle.vue'
@@ -23,26 +19,30 @@ const props = defineProps<{
   /** 所在内容层是否可见；仅在可见时才继续运行标题滚动动画。 */
   active: boolean
 }>()
-const alignment = shallowRef<TaskbarTrackInfoAlignment>(DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT)
-const scrolling = shallowRef<TaskbarTrackInfoScrolling>({
-  ...DEFAULT_TASKBAR_TRACK_INFO_SCROLLING,
-})
-const visible = shallowRef(true)
-let unlistenAlignmentChange: UnlistenFn | undefined
-let unlistenScrollingChange: UnlistenFn | undefined
-let unlistenVisibleChange: UnlistenFn | undefined
-
-/** 恢复并订阅歌曲信息整体显隐。 */
-async function initializeVisibility() {
-  try {
-    unlistenVisibleChange = await listenTaskbarTrackInfoVisibleChange((value) => {
-      visible.value = value
-    })
-    visible.value = await getTaskbarTrackInfoVisible()
-  } catch (error) {
-    reportBackgroundFailure('初始化歌曲信息显隐失败', error)
-  }
-}
+const alignment = useEventState(
+  {
+    read: getTaskbarTrackInfoAlignment,
+    subscribe: listenTaskbarTrackInfoAlignmentChange,
+    failureMessage: '初始化歌曲信息对齐方式失败',
+  },
+  DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT,
+)
+const scrolling = useEventState(
+  {
+    read: getTaskbarTrackInfoScrolling,
+    subscribe: listenTaskbarTrackInfoScrollingChange,
+    failureMessage: '初始化歌名滚动配置失败',
+  },
+  { ...DEFAULT_TASKBAR_TRACK_INFO_SCROLLING },
+)
+const visible = useEventState(
+  {
+    read: getTaskbarTrackInfoVisible,
+    subscribe: listenTaskbarTrackInfoVisibleChange,
+    failureMessage: '初始化歌曲信息显隐失败',
+  },
+  true,
+)
 
 /** 歌手字段缺失时依次使用专辑歌手与副标题，最后显示空态。 */
 const artist = computed(
@@ -55,39 +55,6 @@ const artist = computed(
 
 const { t } = useI18n({ useScope: 'global' })
 const title = computed(() => props.session?.metadata.title || t('media.nothingPlaying'))
-
-/** 恢复歌曲信息对齐方式，并接收设置窗口的实时更新。 */
-async function initializeAlignment() {
-  try {
-    unlistenAlignmentChange = await listenTaskbarTrackInfoAlignmentChange((value) => {
-      alignment.value = value
-    })
-    alignment.value = await getTaskbarTrackInfoAlignment()
-  } catch (error) {
-    reportBackgroundFailure('初始化歌曲信息对齐方式失败', error)
-  }
-}
-
-/** 恢复歌名滚动配置，并接收设置窗口的实时更新与速度预览。 */
-async function initializeScrolling() {
-  try {
-    unlistenScrollingChange = await listenTaskbarTrackInfoScrollingChange((value) => {
-      scrolling.value = value
-    })
-    scrolling.value = await getTaskbarTrackInfoScrolling()
-  } catch (error) {
-    reportBackgroundFailure('初始化歌名滚动配置失败', error)
-  }
-}
-
-onMounted(initializeAlignment)
-onMounted(initializeScrolling)
-onMounted(initializeVisibility)
-onUnmounted(() => {
-  unlistenAlignmentChange?.()
-  unlistenScrollingChange?.()
-  unlistenVisibleChange?.()
-})
 </script>
 
 <template>
