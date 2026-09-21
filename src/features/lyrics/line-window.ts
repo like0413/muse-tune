@@ -8,6 +8,8 @@ import type { LyricLine } from './types'
 export const LYRICS_AVAILABLE_HEIGHT_PX = 40
 /** 单行切换动画时长，同时作为 `--lyric-duration-ms` 暴露给样式。 */
 export const LINE_TRANSITION_DURATION_MS = 300
+/** 原地渐隐渐显的时长。*/
+export const FADE_TRANSITION_DURATION_MS = 500
 
 /** 字号等于歌曲信息的标题字号时复用其行高，保持一致的行距节奏。 */
 const TRACK_INFO_FONT_SIZE = 14
@@ -16,12 +18,21 @@ const TRACK_INFO_ARTIST_LINE_HEIGHT_PX = 15
 /** 第二行字号相对第一行缩小 2px，并保底 10px。 */
 const SECONDARY_FONT_SIZE_OFFSET_STEP = 2
 const MIN_FONT_SIZE = 10
-// 300ms 动画加 30ms 刷新余量，使切换在人声时间戳前完成。
-const LINE_TRANSITION_LEAD_MS = LINE_TRANSITION_DURATION_MS + 30
+/** 动画结束到人声时间戳之间保留的刷新余量。 */
+const TRANSITION_LEAD_MARGIN_MS = 30
+
+/** 当前动画的切换时长：交叉淡化靠中间态重叠来体现，需要比位移动画更长。 */
+export function resolveTransitionDurationMs(animation: TaskbarLyricsSettings['animation']): number {
+  return animation === 'fade' ? FADE_TRANSITION_DURATION_MS : LINE_TRANSITION_DURATION_MS
+}
 
 /** 换行触发点的提前量；未开启动画或未开预滚时必须精确按时间戳切换。 */
-export function resolveTransitionLeadMs(animated: boolean, animationPreRoll: boolean): number {
-  return animated && animationPreRoll ? LINE_TRANSITION_LEAD_MS : 0
+export function resolveTransitionLeadMs(
+  animated: boolean,
+  animationPreRoll: boolean,
+  durationMs: number,
+): number {
+  return animated && animationPreRoll ? durationMs + TRANSITION_LEAD_MARGIN_MS : 0
 }
 
 /**

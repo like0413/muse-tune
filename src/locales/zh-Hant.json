@@ -224,6 +224,7 @@
         "animationDescription": "切換到下一句時的移動與漸層方式",
         "animationPlaceholder": "選擇動畫",
         "animationUp": "向上漸層",
+        "animationFade": "原地漸隱漸顯",
         "preRoll": "提前完成動畫",
         "preRollOn": "開啟：在人聲前完成動畫，更貼合節拍，但連續演唱時上一句會提前離場；",
         "preRollOff": "關閉：依時間戳記切換，不提前上一句，但動畫會與人聲同時開始",

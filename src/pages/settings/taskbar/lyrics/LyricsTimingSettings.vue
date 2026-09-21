@@ -43,6 +43,7 @@ const animationOptions = computed(
     [
       { value: 'none', label: t('common.none') },
       { value: 'up', label: t('settings.taskbar.lyrics.animationUp') },
+      { value: 'fade', label: t('settings.taskbar.lyrics.animationFade') },
     ] as const,
 )
 

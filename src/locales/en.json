@@ -224,6 +224,7 @@
         "animationDescription": "Movement and fade used when advancing to the next line",
         "animationPlaceholder": "Select an animation",
         "animationUp": "Move upward",
+        "animationFade": "Fade in place",
         "preRoll": "Complete animation early",
         "preRollOn": "On: complete before vocals for tighter timing, but the previous line may leave early during continuous singing.",
         "preRollOff": "Off: switch at the timestamp without moving the previous line early; animation starts with the vocals.",

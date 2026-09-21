@@ -3,9 +3,9 @@ import type { CSSProperties, DeepReadonly } from 'vue'
 
 import { resolveTaskbarLyricsAppearance } from '@/features/lyrics/appearance'
 import {
-  LINE_TRANSITION_DURATION_MS,
   resolveCurrentLineIndex,
   resolveLayoutMetrics,
+  resolveTransitionDurationMs,
   resolveTransitionLeadMs,
   selectSecondaryContent,
   type SecondaryContent,
@@ -39,12 +39,19 @@ interface DisplayLine {
   rowTop: number
 }
 
+/** 当前动画的切换时长；交叉淡化比位移动画更慢，见 `resolveTransitionDurationMs`。 */
+const transitionDurationMs = computed(() => resolveTransitionDurationMs(props.settings.animation))
+
 /** 二分定位当前行；换行触发点的提前规则见 `line-window.ts`。 */
 const currentLineIndex = computed(() =>
   resolveCurrentLineIndex(
     props.lyrics.lines,
     props.positionMs,
-    resolveTransitionLeadMs(lyricsAnimationEnabled.value, props.settings.animationPreRoll),
+    resolveTransitionLeadMs(
+      lyricsAnimationEnabled.value,
+      props.settings.animationPreRoll,
+      transitionDurationMs.value,
+    ),
   ),
 )
 
@@ -84,15 +91,28 @@ const layoutMetrics = computed(() =>
   resolveLayoutMetrics(props.settings.fontSize, hasSecondaryLine.value),
 )
 
-/** 生成最多两行稳定标识的数据，使下一句能够准确移动到第一行槽位。 */
+/**
+ * 行标识。
+ *
+ * `up` 的滚动感来自"同一行从第二槽位升到第一槽位"，两个槽位必须共用一个 key 才会被复用。
+ * `fade` 要求任何一行都不位移，于是把槽位并进 key：切换时两个槽位各自渐隐渐显，元素永不复用，
+ * 也就不会出现跨槽位的补间。
+ */
+function lineKey(slot: 'primary' | 'secondary', content: string): string {
+  const trackKey = props.lyrics.trackKey ?? 'unknown'
+  return props.settings.animation === 'fade'
+    ? `${trackKey}:${slot}:${content}`
+    : `${trackKey}:${content}`
+}
+
+/** 生成最多两行稳定标识的数据；key 的取舍见 `lineKey`。 */
 const displayLines = computed<DisplayLine[]>(() => {
   const index = activeLineIndex.value
   const current = props.lyrics.lines[index]
   if (!current) return []
-  const trackKey = props.lyrics.trackKey ?? 'unknown'
   const lines: DisplayLine[] = [
     {
-      key: `${trackKey}:${index}:original`,
+      key: lineKey('primary', `${index}:original`),
       line: current,
       text: current.text,
       primary: true,
@@ -106,10 +126,10 @@ const displayLines = computed<DisplayLine[]>(() => {
   const secondary = currentSecondaryContent(index)
   if (secondary) {
     lines.push({
-      key:
-        secondary.kind === 'translation'
-          ? `${trackKey}:${index}:translation`
-          : `${trackKey}:${index + 1}:original`,
+      key: lineKey(
+        'secondary',
+        secondary.kind === 'translation' ? `${index}:translation` : `${index + 1}:original`,
+      ),
       line: secondary.line,
       text: secondary.text,
       primary: false,
@@ -131,7 +151,7 @@ const displayStyle = computed<CSSProperties>(() => {
   const { transitionStep, blockTop } = layoutMetrics.value
   return {
     '--lyric-line-step': `${transitionStep}px`,
-    '--lyric-duration-ms': `${LINE_TRANSITION_DURATION_MS}ms`,
+    '--lyric-duration-ms': `${transitionDurationMs.value}ms`,
     '--lyric-played-color': appearance.value.playedColor,
     '--lyric-unplayed-color': appearance.value.unplayedColor,
     fontFamily: appearance.value.fontFamily,
@@ -196,5 +216,28 @@ const displayStyle = computed<CSSProperties>(() => {
 .lyrics-up-leave-to {
   opacity: 0;
   transform: translateY(calc(-1 * var(--lyric-line-step)));
+}
+
+/*
+ * 原地渐隐渐显：只做透明度，任何一行都不平移。
+ *
+ * key 里带了槽位（见 `lineKey`），切换时两个槽位都是"旧行离开 + 新行进入"，
+ * 不存在跨槽位复用的元素，因此不会产生位移补间，也不需要 move 类。
+ */
+.lyrics-fade-enter-active,
+.lyrics-fade-leave-active {
+  transition: opacity var(--lyric-duration-ms) ease;
+}
+
+/* 离开行固定在原槽位，把位置让给淡入的新行；两者叠在同一槽位完成交叉淡变。 */
+.lyrics-fade-leave-active {
+  position: absolute;
+  top: var(--lyric-row-top);
+  width: 100%;
+}
+
+.lyrics-fade-enter-from,
+.lyrics-fade-leave-to {
+  opacity: 0;
 }
 </style>

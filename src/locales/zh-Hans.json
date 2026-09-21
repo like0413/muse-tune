@@ -224,6 +224,7 @@
         "animationDescription": "切换到下一句时的移动和渐变方式",
         "animationPlaceholder": "选择动画",
         "animationUp": "向上渐变",
+        "animationFade": "原地渐隐渐显",
         "preRoll": "动画提前完成",
         "preRollOn": "开启：人声前完成动画，更跟拍，但连续演唱时上一句会提前离场；",
         "preRollOff": "关闭：按时间戳切换，不提前上一句，但动画会与人声同时开始",
