@@ -81,9 +81,9 @@
         "description": "Use the theme background or blurred artwork as the component background",
         "theme": "Theme background",
         "coverBlur": "Blurred album art",
-        "compatibilityTitle": "Compatibility notice",
-        "progressFallback": "Blurred artwork and full-height progress cannot be used together. Enabling blurred artwork switches progress to the bottom bar.",
-        "backgroundFallback": "Full-height progress and blurred artwork cannot be used together. Enabling full-height progress switches to the theme background."
+        "compatibilityTitle": "Confirm change",
+        "progressFallback": "Blurred artwork and full-height progress cannot be used together. Continuing will switch progress to the bottom bar.",
+        "backgroundFallback": "Full-height progress and blurred artwork cannot be used together. Continuing will switch to the theme background."
       },
       "width": {
         "title": "Component width",
@@ -233,11 +233,10 @@
         "localOnly": "Local and cache only",
         "onlineStrategy": "Online resolution strategy",
         "parallel": "Parallel lookup",
-        "parallelDescription": "Queries multiple enabled sources at once. This is usually faster but makes more network requests.",
+        "parallelDescription": "Queries multiple sources at once. This is usually faster but makes more network requests. The current player's service always takes part and moves to the front when it is not selected.",
         "currentOnly": "Current player only",
-        "currentOnlyDescription": "Queries only the platform of the current player, with no fallback to other platforms.",
         "onlineSources": "Online sources",
-        "onlineSourcesDescription": "Choose which online sources may be queried and drag to set their priority; disabled sources receive no requests"
+        "onlineSourcesDescription": "Choose which online sources may be queried and drag to set their priority; disabled sources receive no requests, except the current player's service"
       },
       "mediaSession": {
         "title": "Player selection",
@@ -387,7 +386,6 @@
     "player": "Muse Tune taskbar player",
     "lyrics": {
       "current": "Current lyrics",
-      "instrumental": "Instrumental — enjoy the music",
       "noLyrics": "No lyrics available"
     },
     "menu": {

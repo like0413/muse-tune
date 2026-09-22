@@ -54,7 +54,7 @@ function reorderOnlineSources(order: MediaPlayer[]) {
   emit('updateSettings', { onlineSourceOrder: order })
 }
 
-/** 勾选或取消一个在线接口；未勾选的接口不会发起在线请求。 */
+/** 勾选或取消一个在线接口；未勾选的接口不会发起在线请求（当前播放平台除外，由原生侧隐式补上）。 */
 function toggleOnlineSource(player: MediaPlayer, enabled: boolean) {
   const enabledOnlineSources = enabled
     ? uniq([...props.settings.enabledOnlineSources, player])
@@ -89,10 +89,7 @@ function toggleOnlineSource(player: MediaPlayer, enabled: boolean) {
   >
     <FieldContent>
       <FieldTitle>{{ t('settings.taskbar.lyrics.onlineStrategy') }}</FieldTitle>
-      <FieldDescription>
-        <div>{{ t('settings.taskbar.lyrics.parallelDescription') }}</div>
-        <div>{{ t('settings.taskbar.lyrics.currentOnlyDescription') }}</div>
-      </FieldDescription>
+      <FieldDescription>{{ t('settings.taskbar.lyrics.parallelDescription') }}</FieldDescription>
     </FieldContent>
     <Tabs :model-value="settings.onlineStrategy" @update:model-value="selectOnlineStrategy">
       <TabsList>

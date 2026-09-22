@@ -223,7 +223,12 @@ export function getTaskbarLyricsSettings(): Promise<TaskbarLyricsSettings> {
   return loadVersionedSetting(lyricsStorage)
 }
 
-/** 计算生效的在线接口：按偏好顺序取与启用集合的交集，未启用的平台不会发起请求。 */
+/**
+ * 计算生效的在线接口：按偏好顺序取与启用集合的交集。
+ *
+ * 这个集合只服务于并行策略：当前播放平台不在这里补（原生侧会隐式补在最前，未勾选也会查询），
+ * 仅当前平台策略则完全忽略它。
+ */
 function resolveOnlineSources(settings: TaskbarLyricsSettings): MediaPlayer[] {
   const enabled = new Set(settings.enabledOnlineSources)
   return settings.onlineSourceOrder.filter((player) => enabled.has(player))

@@ -18,6 +18,7 @@ use crate::lyrics::{
     model::{
         LyricsLookupOutcome, LyricsPrecision, LyricsResolutionMethod, LyricsResolutionOutcome,
         LyricsResolutionSite, LyricsSnapshot, LyricsStatus, ResolvedLyrics, has_word_timing,
+        platform_notice,
     },
     network::ResolutionDeadline,
     players,
@@ -282,7 +283,7 @@ impl LyricsService {
 
     /// 执行本地阶段：当前播放器的本地歌词是同一首歌最可信的来源。
     ///
-    /// 返回 `false` 表示本轮解析到此结束（已发布逐字结果、被取消或代际作废）。
+    /// 返回 `false` 表示本轮解析到此结束（已发布逐字或语义结论、被取消或代际作废）。
     fn run_local_stage(
         &self,
         track: &TrackDescriptor,
@@ -301,6 +302,17 @@ impl LyricsService {
                 RecordedAttempt::Candidate(candidate)
                     if candidate.resolved.source.player == track.player
                         && has_word_timing(&candidate.resolved.lines) =>
+                {
+                    self.publish_candidate(track, candidate, generation);
+                    return false;
+                }
+                // 占位文案（“此歌曲为没有填词的纯音乐，请您欣赏”）是播放器对这首歌给出的结论，
+                // 与缓存里的语义结论等价：同一平台的在线接口只会返回同一句话，其他平台的歌词
+                // 也推不翻已展示的结论（结论型缓存本来就不联网复核）。本地已给出结论就地收口，
+                // 不再发起在线查询。
+                RecordedAttempt::Candidate(candidate)
+                    if candidate.resolved.source.player == track.player
+                        && platform_notice(&candidate.resolved.lines).is_some() =>
                 {
                     self.publish_candidate(track, candidate, generation);
                     return false;

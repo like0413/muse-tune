@@ -5,7 +5,7 @@ use lyrics_parsers::parsers::{krc_parser, lrc_parser, qrc_parser, yrc_parser};
 
 use super::{
     error::LyricsError,
-    model::{LyricLine, LyricWord},
+    model::{LyricLine, LyricWord, notice_text_without_timeline},
 };
 
 const DEFAULT_LINE_DURATION_MS: u64 = 5_000;
@@ -49,7 +49,22 @@ fn parse_lines(
     }
     let parsed = catch_unwind(AssertUnwindSafe(|| parser(sanitized)))
         .map_err(|_| LyricsError::InvalidData(format!("第三方 {format} 解析器发生异常")))?;
-    Ok(normalize_parsed_lines(parsed))
+    let lines = normalize_parsed_lines(parsed);
+    if lines.is_empty()
+        && let Some(text) = notice_text_without_timeline(sanitized)
+    {
+        // 纯音乐占位文案不带任何时间戳，会被逐行解析整段丢弃，必须在这里补一行承载它；
+        // 下游的占位识别随后会把它转成不携带时间轴的语义结论。
+        return Ok(vec![LyricLine {
+            start_ms: 0,
+            end_ms: DEFAULT_LINE_DURATION_MS,
+            text,
+            translation: None,
+            romanization: None,
+            words: Vec::new(),
+        }]);
+    }
+    Ok(lines)
 }
 
 /// 把第三方解析库的数据收敛为 Muse Tune 的稳定模型。
@@ -199,4 +214,28 @@ fn select_translation(translations: &std::collections::HashMap<String, String>) 
         .filter(|value| is_content_text(value))
         .or_else(|| translations.values().find(|value| is_content_text(value)))
         .cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lyrics::model::{PlatformNotice, platform_notice};
+
+    /// QQ 音乐给纯音乐曲目返回的整段歌词不带时间戳，逐行解析会把它整段丢掉；补出的那一行
+    /// 必须能让统一的占位识别判成纯音乐，否则这首歌既不显示歌词也判不出结论。
+    #[test]
+    fn untimed_platform_notice_survives_parsing() {
+        let lines = parse_lrc_lines("此歌曲为没有填词的纯音乐，请您欣赏").expect("解析不应失败");
+        assert_eq!(platform_notice(&lines), Some(PlatformNotice::Instrumental));
+    }
+
+    /// 没有时间戳的真实歌词同样解析不出行，不能因此被误判成占位文案。
+    #[test]
+    fn untimed_real_lyrics_are_still_dropped() {
+        assert!(
+            parse_lrc_lines("让我们一起摇摆")
+                .expect("解析不应失败")
+                .is_empty()
+        );
+    }
 }

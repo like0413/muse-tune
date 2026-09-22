@@ -369,6 +369,38 @@ pub(super) fn platform_notice(lines: &[LyricLine]) -> Option<PlatformNotice> {
     lines.iter().find_map(|line| notice_kind(&line.text))
 }
 
+/// 从没有时间轴的原始歌词文本中找出平台占位文案。
+///
+/// QQ 音乐给纯音乐曲目返回的整段歌词就是一句“此歌曲为没有填词的纯音乐，请您欣赏”，
+/// 一个时间戳都没有；逐行解析只会把它整段丢掉，于是这首歌既不显示歌词、也判不出纯音乐。
+/// 这里在原始文本上剥离方括号标记后按同一套形态规则再识别一次，行数与长度限制保持不变。
+pub(super) fn notice_text_without_timeline(input: &str) -> Option<String> {
+    let texts = input
+        .lines()
+        .map(strip_bracket_segments)
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>();
+    if texts.is_empty() || texts.len() > PLATFORM_NOTICE_MAX_LINES {
+        return None;
+    }
+    texts.into_iter().find(|text| notice_kind(text).is_some())
+}
+
+/// 去掉方括号内的标记（时间轴、"纯音乐"以外的 `[ti:]` 等元数据），只留正文。
+fn strip_bracket_segments(line: &str) -> String {
+    let mut text = String::new();
+    let mut inside_bracket = false;
+    for character in line.chars() {
+        match character {
+            '[' => inside_bracket = true,
+            ']' => inside_bracket = false,
+            _ if !inside_bracket => text.push(character),
+            _ => {}
+        }
+    }
+    text.trim().to_owned()
+}
+
 fn notice_kind(text: &str) -> Option<PlatformNotice> {
     let normalized = normalize_text(text);
     if normalized.is_empty() || normalized.chars().count() > PLATFORM_NOTICE_MAX_CHARS {
@@ -469,6 +501,43 @@ mod tests {
     #[test]
     fn notice_detection_ignores_empty_input() {
         assert_eq!(platform_notice(&[]), None);
+    }
+
+    /// 整段占位文案可能一个时间戳都没有（QQ 音乐纯音乐曲目就是如此），
+    /// 必须在解析丢行之前先在原始文本上识别出来。
+    #[test]
+    fn notice_detection_works_without_timeline() {
+        assert_eq!(
+            notice_text_without_timeline("此歌曲为没有填词的纯音乐，请您欣赏"),
+            Some("此歌曲为没有填词的纯音乐，请您欣赏".to_owned())
+        );
+        assert_eq!(
+            notice_text_without_timeline("[00:00.00]纯音乐，请欣赏"),
+            Some("纯音乐，请欣赏".to_owned())
+        );
+        assert_eq!(notice_text_without_timeline("让我们一起摇摆"), None);
+        assert_eq!(notice_text_without_timeline(""), None);
+    }
+
+    /// 端到端：QQ 音乐那种整段没有时间戳的占位文案必须落成 instrumental，
+    /// 而不是因为"解析不出歌词行"被判成不可用。
+    #[test]
+    fn untimed_notice_becomes_instrumental_snapshot() {
+        let lines = crate::lyrics::parser::parse_lrc_lines("此歌曲为没有填词的纯音乐，请您欣赏")
+            .expect("解析不应失败");
+        let snapshot = LyricsSnapshot::from_resolved(
+            "track-key".to_owned(),
+            ResolvedLyrics {
+                source: LyricsSource {
+                    player: MediaPlayer::QqMusic,
+                    kind: LyricsSourceKind::Online,
+                    song_id: None,
+                },
+                lines,
+            },
+        );
+        assert_eq!(snapshot.status, LyricsStatus::Instrumental);
+        assert!(snapshot.lines.is_empty());
     }
 
     /// 只有绝大多数行都有完整逐字覆盖才算逐字歌词，否则前端高亮会大面积缺失。

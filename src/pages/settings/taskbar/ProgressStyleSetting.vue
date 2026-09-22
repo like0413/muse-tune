@@ -13,7 +13,10 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import { useEventState } from '@/features/ipc/useEventState'
-import { setCompatibleTaskbarProgressStyle } from '@/features/settings/background-style'
+import {
+  getTaskbarBackgroundStyle,
+  setCompatibleTaskbarProgressStyle,
+} from '@/features/settings/background-style'
 import {
   DEFAULT_TASKBAR_PROGRESS_POSITION,
   DEFAULT_TASKBAR_PROGRESS_STYLE,
@@ -30,7 +33,7 @@ import {
   type TaskbarProgressStyle,
 } from '@/features/settings/progress-style'
 
-import CompatibilityNoticeDialog from './components/CompatibilityNoticeDialog.vue'
+import CompatibilityConfirmDialog from './components/CompatibilityConfirmDialog.vue'
 
 const { t } = useI18n({ useScope: 'global' })
 
@@ -64,7 +67,13 @@ const selectedProgressPosition = shallowRef<TaskbarProgressPosition>(
 const progressStyleSaving = shallowRef(false)
 const progressPositionSaving = shallowRef(false)
 const progressVisibilitySaving = shallowRef(false)
-const showCompatibilityNotice = shallowRef(false)
+const pendingProgressStyle = shallowRef<TaskbarProgressStyle | null>(null)
+const compatibilityDialogOpen = computed({
+  get: () => pendingProgressStyle.value !== null,
+  set: (open: boolean) => {
+    if (!open) pendingProgressStyle.value = null
+  },
+})
 
 /** 恢复进度条显隐与位置；这两项没有实时事件，只在进入设置页时读取一次。 */
 async function loadProgressVisibilityAndPosition() {
@@ -119,25 +128,15 @@ async function selectProgressPosition(value: unknown) {
   }
 }
 
-/** 保存播放进度样式，并在失败时恢复原来的持久化值与任务栏显示。 */
-async function selectProgressStyle(value: unknown) {
-  if (
-    progressStyleSaving.value ||
-    !isTaskbarProgressStyle(value) ||
-    value === selectedProgressStyle.value
-  ) {
-    return
-  }
-
+/** 保存已经确认的播放进度样式，并在失败时恢复持久化值与任务栏显示。 */
+async function saveProgressStyle(value: TaskbarProgressStyle) {
   const previousStyle = selectedProgressStyle.value
-  selectedProgressStyle.value = value
   progressStyleSaving.value = true
 
   try {
-    const replacedBackground = await setCompatibleTaskbarProgressStyle(value)
-    if (replacedBackground) showCompatibilityNotice.value = true
+    await setCompatibleTaskbarProgressStyle(value)
+    selectedProgressStyle.value = value
   } catch (error) {
-    selectedProgressStyle.value = previousStyle
     notifySettingSaveFailed(t('settings.taskbar.progress.title'), error)
     try {
       await setCompatibleTaskbarProgressStyle(previousStyle)
@@ -147,6 +146,44 @@ async function selectProgressStyle(value: unknown) {
   } finally {
     progressStyleSaving.value = false
   }
+}
+
+/** 冲突选择只打开确认弹窗，当前设置与任务栏显示保持不变。 */
+async function selectProgressStyle(value: unknown) {
+  if (
+    progressStyleSaving.value ||
+    !isTaskbarProgressStyle(value) ||
+    value === selectedProgressStyle.value
+  ) {
+    return
+  }
+  if (value === 'bottom') {
+    await saveProgressStyle(value)
+    return
+  }
+
+  progressStyleSaving.value = true
+  try {
+    const backgroundStyle = await getTaskbarBackgroundStyle()
+    if (backgroundStyle !== 'theme') {
+      pendingProgressStyle.value = value
+      return
+    }
+  } catch (error) {
+    notifySettingSaveFailed(t('settings.taskbar.progress.title'), error)
+    return
+  } finally {
+    progressStyleSaving.value = false
+  }
+  await saveProgressStyle(value)
+}
+
+/** 仅由弹窗确认按钮调用，应用并清空待确认进度样式。 */
+function confirmPendingProgressStyle() {
+  const style = pendingProgressStyle.value
+  if (!style) return
+  pendingProgressStyle.value = null
+  void saveProgressStyle(style)
 }
 
 onMounted(() => void loadProgressVisibilityAndPosition())
@@ -225,8 +262,9 @@ onMounted(() => void loadProgressVisibilityAndPosition())
       </FieldGroup>
     </template>
   </CollapsibleItem>
-  <CompatibilityNoticeDialog
-    v-model:open="showCompatibilityNotice"
+  <CompatibilityConfirmDialog
+    v-model:open="compatibilityDialogOpen"
     :description="t('settings.taskbar.backgroundStyle.backgroundFallback')"
+    @confirm="confirmPendingProgressStyle"
   />
 </template>

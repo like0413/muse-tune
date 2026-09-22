@@ -1,5 +1,5 @@
 use crate::lyrics::model::{
-    LyricsPrecision, LyricsSnapshot, LyricsStatus, ResolvedLyrics, has_word_timing,
+    LyricsPrecision, LyricsSnapshot, LyricsStatus, ResolvedLyrics, has_word_timing, platform_notice,
 };
 
 use super::pipeline::auxiliary_content_quality;
@@ -23,11 +23,13 @@ pub(super) fn should_check_local_upgrade(snapshot: &LyricsSnapshot) -> bool {
 pub(super) fn local_result_is_upgrade(cached: &LyricsSnapshot, local: &ResolvedLyrics) -> bool {
     // 纯音乐与“没有歌词”缓存都不携带歌词行，本地只要产出可展示歌词就构成升级：这是推翻误判的
     // 唯一机会，所以不能拿辅助内容覆盖率去比较（空行集的覆盖率恒为 0，反而会把升级挡掉）。
+    // 但本地内容本身就是平台占位文案时（播放器把“此歌曲为没有填词的纯音乐”原样写进本地歌词
+    // 文件）同样没有歌词行，不算升级，否则每次命中缓存都会“升级”成同一个结论。
     if matches!(
         cached.status,
         LyricsStatus::Instrumental | LyricsStatus::NoLyrics
     ) {
-        return !local.lines.is_empty();
+        return !local.lines.is_empty() && platform_notice(&local.lines).is_none();
     }
     has_word_timing(&local.lines)
         || auxiliary_content_quality(&local.lines) > auxiliary_content_quality(&cached.lines)
@@ -111,7 +113,8 @@ mod tests {
         )));
     }
 
-    /// 语义结论不携带歌词行，本地只要产出可展示歌词就是升级——这是推翻误判的唯一机会。
+    /// 语义结论不携带歌词行，本地只要产出可展示歌词就是升级——这是推翻误判的唯一机会；
+    /// 但本地自己也是平台占位文案时并没有歌词行，不能当成升级。
     #[test]
     fn local_lyrics_override_semantic_conclusions() {
         let instrumental = snapshot(LyricsStatus::Instrumental, None);
@@ -120,6 +123,10 @@ mod tests {
             &local(vec![line(0, 1_000, "第一句")])
         ));
         assert!(!local_result_is_upgrade(&instrumental, &local(Vec::new())));
+        assert!(!local_result_is_upgrade(
+            &instrumental,
+            &local(vec![line(0, 1_000, "此歌曲为没有填词的纯音乐，请您欣赏")])
+        ));
     }
 
     /// 已展示逐行时，本地逐字构成升级。

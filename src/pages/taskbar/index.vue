@@ -88,16 +88,11 @@ const isCompact = computed(
 const hasTimedLyrics = computed(
   () => lyrics.value.status === 'ready' && lyrics.value.lines.length > 0,
 )
-// 平台已给出结论、不需要歌词行的状态：纯音乐与“没有歌词”。
-const hasNoticeOnly = computed(
-  () => lyrics.value.status === 'instrumental' || lyrics.value.status === 'no_lyrics',
-)
+// 纯音乐没有可展示内容，直接回退普通模式（见 `hasLyricsContent`）；
+// 只剩“没有歌词”还留在歌词模式里给提示。
+const hasNoticeOnly = computed(() => lyrics.value.status === 'no_lyrics')
 /** 结论型状态的提示文案；与 `hasNoticeOnly` 覆盖的状态一一对应。 */
-const lyricsNoticeText = computed(() =>
-  lyrics.value.status === 'no_lyrics'
-    ? t('taskbar.lyrics.noLyrics')
-    : t('taskbar.lyrics.instrumental'),
-)
+const lyricsNoticeText = computed(() => t('taskbar.lyrics.noLyrics'))
 const hasLyricsContent = computed(() => hasTimedLyrics.value || hasNoticeOnly.value)
 /** 歌词是否需要持续推进时间轴；与刷新是否平滑无关。 */
 const needsLyricsTimeline = computed(
@@ -182,18 +177,15 @@ const coverBackgroundActive = computed(() => backgroundMode.value !== 'theme')
 const effectiveBackgroundTransparency = computed(() =>
   coverBackgroundActive.value ? 0 : backgroundTransparency.value,
 )
-const { foregroundColor, isSystemForegroundActive } = useTaskbarForegroundColor(
-  effectiveBackgroundTransparency,
-)
+const { foregroundColor } = useTaskbarForegroundColor(effectiveBackgroundTransparency)
 const activeForegroundColor = computed(() =>
   coverBackgroundActive.value ? 'oklch(1 0 0)' : foregroundColor.value,
 )
+/** 歌手、默认歌词未播放文字和第二行统一使用 96% 前景强度，并保留浅色背景对比度。 */
 const activeSecondaryForegroundColor = computed(() =>
   coverBackgroundActive.value
     ? 'oklch(0.96 0 0)'
-    : isSystemForegroundActive.value
-      ? `color-mix(in srgb, ${activeForegroundColor.value} 90%, transparent)`
-      : 'var(--taskbar-secondary-foreground)',
+    : `color-mix(in srgb, ${activeForegroundColor.value} 96%, var(--taskbar-background))`,
 )
 
 /** 设置数组就是任务栏从左到右的最终 DOM 顺序。 */

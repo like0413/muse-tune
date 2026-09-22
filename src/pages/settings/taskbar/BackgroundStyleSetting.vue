@@ -18,9 +18,11 @@ import {
   isTaskbarBackgroundStyle,
   listenTaskbarBackgroundStyleChange,
   setTaskbarBackgroundStyle,
+  type TaskbarBackgroundStyle,
 } from '@/features/settings/background-style'
+import { getTaskbarProgressStyle } from '@/features/settings/progress-style'
 
-import CompatibilityNoticeDialog from './components/CompatibilityNoticeDialog.vue'
+import CompatibilityConfirmDialog from './components/CompatibilityConfirmDialog.vue'
 
 const { t } = useI18n({ useScope: 'global' })
 /** 当前背景样式；订阅变更以接收另一项设置触发的兼容模式切换。 */
@@ -33,23 +35,57 @@ const selectedStyle = useEventState(
   DEFAULT_TASKBAR_BACKGROUND_STYLE,
 )
 const saving = shallowRef(false)
-const showCompatibilityNotice = shallowRef(false)
+const pendingStyle = shallowRef<TaskbarBackgroundStyle | null>(null)
+const compatibilityDialogOpen = computed({
+  get: () => pendingStyle.value !== null,
+  set: (open: boolean) => {
+    if (!open) pendingStyle.value = null
+  },
+})
 
-/** 保存背景样式；发生兼容切换后提示用户。 */
-async function selectStyle(value: unknown) {
-  if (saving.value || !isTaskbarBackgroundStyle(value) || value === selectedStyle.value) return
-  const previousStyle = selectedStyle.value
+/** 保存已经确认的背景样式；未确认值不会进入持久化或事件链路。 */
+async function saveStyle(value: TaskbarBackgroundStyle) {
   saving.value = true
   try {
-    const replacedProgress = await setTaskbarBackgroundStyle(value)
+    await setTaskbarBackgroundStyle(value)
     selectedStyle.value = value
-    if (replacedProgress) showCompatibilityNotice.value = true
   } catch (error) {
-    selectedStyle.value = previousStyle
     notifySettingSaveFailed(t('settings.taskbar.backgroundStyle.title'), error)
   } finally {
     saving.value = false
   }
+}
+
+/** 冲突选择只打开确认弹窗，当前设置与任务栏显示保持不变。 */
+async function selectStyle(value: unknown) {
+  if (saving.value || !isTaskbarBackgroundStyle(value) || value === selectedStyle.value) return
+  if (value === 'theme') {
+    await saveStyle(value)
+    return
+  }
+
+  saving.value = true
+  try {
+    const progressStyle = await getTaskbarProgressStyle()
+    if (progressStyle === 'vertical-gradient') {
+      pendingStyle.value = value
+      return
+    }
+  } catch (error) {
+    notifySettingSaveFailed(t('settings.taskbar.backgroundStyle.title'), error)
+    return
+  } finally {
+    saving.value = false
+  }
+  await saveStyle(value)
+}
+
+/** 仅由弹窗确认按钮调用，应用并清空待确认背景样式。 */
+function confirmPendingStyle() {
+  const style = pendingStyle.value
+  if (!style) return
+  pendingStyle.value = null
+  void saveStyle(style)
 }
 </script>
 
@@ -73,8 +109,9 @@ async function selectStyle(value: unknown) {
       </Tabs>
     </ItemActions>
   </Item>
-  <CompatibilityNoticeDialog
-    v-model:open="showCompatibilityNotice"
+  <CompatibilityConfirmDialog
+    v-model:open="compatibilityDialogOpen"
     :description="t('settings.taskbar.backgroundStyle.progressFallback')"
+    @confirm="confirmPendingStyle"
   />
 </template>

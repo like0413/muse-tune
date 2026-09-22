@@ -34,8 +34,12 @@ impl ResolutionPlan {
     /// 编译一次解析计划。
     ///
     /// 只生成真正能执行的尝试：本地歌词只查当前播放器（其他播放器的本地缓存与正在播放的这首
-    /// 歌没有确定关系）；在线来源严格按用户勾选并排定的顺序生成，未勾选的平台不会被请求，
-    /// 没有在线能力的平台也不会产生永不成功的空尝试。
+    /// 歌没有确定关系）；没有对应能力的平台不会产生永不成功的空尝试。
+    ///
+    /// 两种在线策略与勾选集合的关系，彼此互不影响：
+    /// - 仅当前平台：只查当前平台自己的接口，勾选集合被完全忽略；
+    /// - 并行：勾选的平台并发执行；当前平台未勾选时隐式补在最前（它就是这首歌最直接的在线
+    ///   来源），已勾选时按用户排定的位置，不重复插入。
     pub(super) fn new(
         current_player: MediaPlayer,
         strategy: LyricsOnlineStrategy,
@@ -52,9 +56,9 @@ impl ResolutionPlan {
         };
 
         let online_stages = match strategy {
-            // 仅当前平台：不引入任何其他平台的来源；当前平台的接口没勾选时完全不发起在线检索。
+            // 仅当前平台：只查当前平台自己的接口；勾选集合只服务于并行策略，这里完全不看它。
             LyricsOnlineStrategy::CurrentPlayerOnly => {
-                if online_sources.contains(&current_player) && players::has_online(current_player) {
+                if players::has_online(current_player) {
                     vec![ResolutionStage {
                         parallel: false,
                         attempts: vec![ResolutionAttempt {
@@ -67,9 +71,17 @@ impl ResolutionPlan {
                     Vec::new()
                 }
             }
-            // 并行：勾选的平台放在同一阶段并发执行，阶段内顺序即用户排定的请求顺序。
+            // 并行：当前平台始终参与并排在最前，其余勾选的平台按用户排定的顺序紧随其后，
+            // 同一阶段内并发执行。
             LyricsOnlineStrategy::Parallel => {
-                let attempts = online_sources
+                let mut planned = online_sources.to_vec();
+                // 当前平台是这首歌最直接的在线来源：未勾选时也隐式补在最前；勾选后完全按用户
+                // 排定的位置，不重复插入。
+                if !online_sources.contains(&current_player) && players::has_online(current_player)
+                {
+                    planned.insert(0, current_player);
+                }
+                let attempts = planned
                     .iter()
                     .copied()
                     .filter(|player| players::has_online(*player))
@@ -146,7 +158,8 @@ mod tests {
         );
     }
 
-    /// 未勾选的平台不能被请求，否则用户关掉某个接口后它仍然会被访问。
+    /// 未勾选的备用平台不能被请求，否则用户关掉某个接口后它仍然会被访问；
+    /// 当前平台是唯一例外（见下一个用例）。
     #[test]
     fn parallel_plan_skips_unchecked_sources() {
         let plan = ResolutionPlan::new(
@@ -163,10 +176,38 @@ mod tests {
         );
     }
 
-    /// 一个接口都没勾选时不产生在线阶段，而不是留下空阶段让调度器空转一轮。
+    /// 当前平台的接口未勾选时也要隐式参与并行查询，并排在最前：它就是这首歌最直接的在线来源。
+    #[test]
+    fn parallel_plan_always_queries_the_current_player_first() {
+        let plan = ResolutionPlan::new(
+            MediaPlayer::QqMusic,
+            LyricsOnlineStrategy::Parallel,
+            &[MediaPlayer::KugouMusic, MediaPlayer::NeteaseCloudMusic],
+        );
+
+        assert_eq!(plan.online_stages.len(), 1);
+        assert!(plan.online_stages[0].parallel);
+        assert_eq!(
+            sites(&plan.online_stages[0].attempts),
+            vec![
+                (LyricsResolutionSite::Online, MediaPlayer::QqMusic),
+                (
+                    LyricsResolutionSite::OnlineFallback,
+                    MediaPlayer::KugouMusic
+                ),
+                (
+                    LyricsResolutionSite::OnlineFallback,
+                    MediaPlayer::NeteaseCloudMusic
+                ),
+            ]
+        );
+    }
+
+    /// 一个接口都没勾选、当前平台又没有在线能力时不产生在线阶段，
+    /// 而不是留下空阶段让调度器空转一轮。
     #[test]
     fn parallel_plan_without_sources_has_no_online_stage() {
-        let plan = ResolutionPlan::new(MediaPlayer::QqMusic, LyricsOnlineStrategy::Parallel, &[]);
+        let plan = ResolutionPlan::new(MediaPlayer::Other, LyricsOnlineStrategy::Parallel, &[]);
 
         assert!(plan.online_stages.is_empty());
     }
@@ -192,13 +233,30 @@ mod tests {
         );
     }
 
-    /// 当前平台的接口被取消勾选时，仅当前平台策略不发起任何在线检索。
+    /// 当前平台的接口被取消勾选时，仅当前平台策略依然只查它自己：勾选集合不适用于这个策略。
     #[test]
-    fn current_player_only_with_unchecked_current_player_has_no_online_stage() {
+    fn current_player_only_ignores_the_configured_sources() {
         let plan = ResolutionPlan::new(
             MediaPlayer::QqMusic,
             LyricsOnlineStrategy::CurrentPlayerOnly,
             &[MediaPlayer::KugouMusic],
+        );
+
+        assert_eq!(plan.online_stages.len(), 1);
+        assert!(!plan.online_stages[0].parallel);
+        assert_eq!(
+            sites(&plan.online_stages[0].attempts),
+            vec![(LyricsResolutionSite::Online, MediaPlayer::QqMusic)]
+        );
+    }
+
+    /// 当前平台没有在线能力时，仅当前平台策略不产生空阶段。
+    #[test]
+    fn current_player_only_without_online_capability_has_no_online_stage() {
+        let plan = ResolutionPlan::new(
+            MediaPlayer::Other,
+            LyricsOnlineStrategy::CurrentPlayerOnly,
+            &[],
         );
 
         assert!(plan.online_stages.is_empty());

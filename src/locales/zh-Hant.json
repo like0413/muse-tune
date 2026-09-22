@@ -81,9 +81,9 @@
         "description": "選擇主題背景或模糊封面作為元件背景",
         "theme": "主題背景",
         "coverBlur": "模糊封面",
-        "compatibilityTitle": "相容性提示",
-        "progressFallback": "模糊封面與全高漸層進度不能同時使用。啟用模糊封面時，進度樣式會切換為底部進度列。",
-        "backgroundFallback": "全高漸層進度與模糊封面不能同時使用。啟用全高漸層時，背景會切換為主題背景。"
+        "compatibilityTitle": "確認變更",
+        "progressFallback": "模糊封面與全高漸層進度不能同時使用。繼續後，進度樣式將切換為底部進度列。",
+        "backgroundFallback": "全高漸層進度與模糊封面不能同時使用。繼續後，背景將切換為主題背景。"
       },
       "width": {
         "title": "元件寬度",
@@ -233,11 +233,10 @@
         "localOnly": "僅本機與快取",
         "onlineStrategy": "線上解析策略",
         "parallel": "平行查詢",
-        "parallelDescription": "同時查詢多個來源，通常較快，但會產生更多網路要求。",
+        "parallelDescription": "同時查詢多個來源，通常較快，但會產生更多網路要求。目前播放平台的介面一律參與，未勾選時也會自動排在最前。",
         "currentOnly": "僅目前平台",
-        "currentOnlyDescription": "只查詢目前播放器所屬平台，不使用其他平台作為備用來源。",
         "onlineSources": "線上介面",
-        "onlineSourcesDescription": "選擇允許使用的線上來源，並拖曳調整優先順序；未選來源不會發起查詢"
+        "onlineSourcesDescription": "選擇允許使用的線上來源，並拖曳調整優先順序；未選來源不會發起查詢，目前播放平台除外"
       },
       "mediaSession": {
         "title": "播放器選擇",
@@ -385,7 +384,7 @@
   },
   "taskbar": {
     "player": "Muse Tune 工作列播放器",
-    "lyrics": { "current": "目前歌詞", "instrumental": "純音樂，請欣賞", "noLyrics": "暫無歌詞" },
+    "lyrics": { "current": "目前歌詞", "noLyrics": "暫無歌詞" },
     "menu": {
       "normalCover": "一般模式封面",
       "lyricsCover": "歌詞模式封面",

@@ -1,8 +1,8 @@
 use crate::lyrics::{
     model::{
         LyricLine, LyricsLookupMiss, LyricsLookupOutcome, LyricsResolutionMethod,
-        LyricsResolutionOutcome, LyricsSnapshot, LyricsSourceKind, LyricsStatus, ResolvedLyrics,
-        has_word_timing, platform_notice,
+        LyricsResolutionOutcome, LyricsSnapshot, LyricsSourceKind, LyricsStatus, PlatformNotice,
+        ResolvedLyrics, has_word_timing, platform_notice,
     },
     track::TrackDescriptor,
 };
@@ -210,15 +210,23 @@ pub(super) const fn player_label(player: MediaPlayer) -> &'static str {
 }
 
 pub(super) fn source_summary(resolved: &ResolvedLyrics) -> String {
-    let precision = if has_word_timing(&resolved.lines) {
-        "逐字"
-    } else {
-        "逐行"
-    };
     let player = player_label(resolved.source.player);
     let source_kind = match resolved.source.kind {
         LyricsSourceKind::Local => "本地",
         LyricsSourceKind::Online => "在线",
+    };
+    // 占位文案没有时间轴，写成“逐行”会让人以为拿到了歌词；这一步真正取得的是结论。
+    if let Some(notice) = platform_notice(&resolved.lines) {
+        let conclusion = match notice {
+            PlatformNotice::Instrumental => "纯音乐",
+            PlatformNotice::NoLyrics => "没有歌词",
+        };
+        return format!("{player} · {source_kind} · {conclusion}");
+    }
+    let precision = if has_word_timing(&resolved.lines) {
+        "逐字"
+    } else {
+        "逐行"
     };
     format!("{player} · {source_kind} · {precision}")
 }
@@ -709,6 +717,16 @@ mod tests {
             lines: vec![word_line(0, 1_000, "a")],
         };
         assert_eq!(source_summary(&local_word), "酷狗音乐 · 本地 · 逐字");
+        // 占位文案没有时间轴：这一步取得的是结论，不能写成“逐行”。
+        let local_notice = ResolvedLyrics {
+            source: LyricsSource {
+                player: MediaPlayer::QqMusic,
+                kind: LyricsSourceKind::Local,
+                song_id: None,
+            },
+            lines: vec![line(0, 1_000, "此歌曲为没有填词的纯音乐，请您欣赏")],
+        };
+        assert_eq!(source_summary(&local_notice), "QQ 音乐 · 本地 · 纯音乐");
     }
 
     /// 择优权重必须跟随用户排定的在线接口顺序：越靠前权重越高，不在列表里的平台最低。
