@@ -13,10 +13,8 @@ const TASKBAR_AUDIO_SPECTRUM_CHANGED_EVENT = 'settings://taskbar-audio-spectrum-
 
 export const TASKBAR_SPECTRUM_BAR_COUNT_MIN = 8
 export const TASKBAR_SPECTRUM_BAR_COUNT_MAX = 48
-export const TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MIN = 20
-export const TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MAX = 100
-export const TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MIN = 0
-export const TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MAX = 100
+export const TASKBAR_SPECTRUM_WIDTH_MIN = 40
+export const TASKBAR_SPECTRUM_WIDTH_MAX = 80
 export const TASKBAR_SPECTRUM_SENSITIVITY_MIN = 50
 export const TASKBAR_SPECTRUM_SENSITIVITY_MAX = 200
 export const TASKBAR_SPECTRUM_SMOOTHING_MIN = 0
@@ -31,9 +29,8 @@ export type TaskbarSpectrumFrameRate = (typeof TASKBAR_SPECTRUM_FRAME_RATES)[num
 export interface TaskbarAudioSpectrumSettings {
   visible: boolean
   barCount: number
-  widthPercentage: number
+  width: number
   alignment: TaskbarSpectrumAlignment
-  horizontalPosition: number
   sensitivity: number
   smoothing: number
   frameRate: TaskbarSpectrumFrameRate
@@ -65,21 +62,15 @@ export function normalizeTaskbarAudioSpectrumSettings(
       TASKBAR_SPECTRUM_BAR_COUNT_MAX,
       DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS.barCount,
     ),
-    widthPercentage: normalizeInteger(
-      record.widthPercentage,
-      TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MIN,
-      TASKBAR_SPECTRUM_WIDTH_PERCENTAGE_MAX,
-      DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS.widthPercentage,
+    width: normalizeInteger(
+      record.width,
+      TASKBAR_SPECTRUM_WIDTH_MIN,
+      TASKBAR_SPECTRUM_WIDTH_MAX,
+      DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS.width,
     ),
     alignment: isTaskbarSpectrumAlignment(record.alignment)
       ? record.alignment
       : DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS.alignment,
-    horizontalPosition: normalizeInteger(
-      record.horizontalPosition,
-      TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MIN,
-      TASKBAR_SPECTRUM_HORIZONTAL_POSITION_MAX,
-      DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS.horizontalPosition,
-    ),
     sensitivity: normalizeInteger(
       record.sensitivity,
       TASKBAR_SPECTRUM_SENSITIVITY_MIN,

@@ -171,13 +171,12 @@ export const DEFAULT_TASKBAR_TRACK_INFO_SCROLLING: TaskbarTrackInfoScrolling = {
   mode: 'loop',
 }
 
-/** 频谱默认隐藏、底部对齐、24 条、占据 45% 宽度。 */
+/** 频谱默认隐藏、底部对齐、24 条，固定在播放器最右侧且宽 64px。 */
 export const DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS: TaskbarAudioSpectrumSettings = {
   visible: false,
   barCount: 24,
-  widthPercentage: 45,
+  width: 64,
   alignment: 'bottom',
-  horizontalPosition: 100,
   sensitivity: 100,
   smoothing: 55,
   frameRate: 20,

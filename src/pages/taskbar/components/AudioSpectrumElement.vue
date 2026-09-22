@@ -10,7 +10,7 @@ import { useAudioSpectrum } from '@/features/media/useAudioSpectrum'
 import type { TaskbarAudioSpectrumSettings } from '@/features/settings/audio-spectrum'
 
 const MAX_BAR_GAP = 2
-const SPECTRUM_OPACITY = 0.34
+const SPECTRUM_OPACITY = 0.7
 const SPECTRUM_CONTRAST_OPACITY = 0.7
 
 const props = defineProps<{
@@ -32,17 +32,16 @@ const smoothedLevels = new Float32Array(MEDIA_SPECTRUM_SOURCE_BAND_COUNT)
 let logicalWidth = 0
 let logicalHeight = 0
 let taskbarWidth = 0
+let spectrumOffsetLeft = 0
 let contrastColor = ''
 let context: CanvasRenderingContext2D | null = null
 let lastDrawnFrameWasSilent = false
 
 /** 频谱只设置低频变化的布局属性，音频帧不会触发 Vue 模板更新。 */
-const canvasStyle = computed<CSSProperties>(() => ({
-  width: `${settings.value.widthPercentage}%`,
-  left: `${settings.value.horizontalPosition}%`,
-  transform: `translateX(-${settings.value.horizontalPosition}%)`,
-  color: `color-mix(in srgb, ${props.themeColor} 68%, ${props.foregroundColor} 32%)`,
-}))
+const wrapperStyle = computed<CSSProperties>(() => {
+  const color = `color-mix(in srgb, ${props.themeColor} 68%, ${props.foregroundColor} 32%)`
+  return { width: `${settings.value.width}px`, color }
+})
 
 /** 按设备像素比同步画布缓冲区，避免缩放或高 DPI 下模糊。 */
 function resizeCanvas(width: number, height: number) {
@@ -81,10 +80,8 @@ function appendSpectrumPath(
 function getPlayedBoundary(): number {
   if (!props.overlapsProgressGradient) return 0
   const availableWidth = taskbarWidth || logicalWidth
-  const positionRatio = settings.value.horizontalPosition / 100
-  const wrapperOffset = Math.max(0, availableWidth - logicalWidth) * positionRatio
   const progressRatio = Math.min(100, Math.max(0, props.progress)) / 100
-  return Math.min(logicalWidth, Math.max(0, availableWidth * progressRatio - wrapperOffset))
+  return Math.min(logicalWidth, Math.max(0, availableWidth * progressRatio - spectrumOffsetLeft))
 }
 
 /** 把固定 64 频带聚合进 Canvas，并在已播放区域叠加同主题对比色阶。 */
@@ -163,63 +160,73 @@ const requestDraw = useThrottleFn(
   true,
 )
 
-/** 缓存布局宽度和浏览器解析后的对比色，避免每个音频帧读取计算样式。 */
-function refreshVisualContext() {
+/** 仅在尺寸变化时缓存频谱相对任务栏的位置，音频帧不读取布局。 */
+function refreshLayoutContext() {
   const element = wrapper.value
   if (!element) return
-  taskbarWidth = element.parentElement?.clientWidth ?? logicalWidth
+  const parent = element.parentElement
+  taskbarWidth = parent?.clientWidth ?? logicalWidth
+  spectrumOffsetLeft = parent
+    ? Math.max(0, element.getBoundingClientRect().left - parent.getBoundingClientRect().left)
+    : 0
+}
+
+/** 仅在主题变化时读取浏览器解析后的混合色，避免尺寸变化触发样式计算。 */
+function refreshContrastColor() {
+  const element = wrapper.value
+  if (!element) return
   contrastColor = getComputedStyle(element).color || props.themeColor
 }
 
 useResizeObserver(canvas, ([entry]) => {
-  if (entry) resizeCanvas(entry.contentRect.width, entry.contentRect.height)
+  if (entry) {
+    refreshLayoutContext()
+    resizeCanvas(entry.contentRect.width, entry.contentRect.height)
+  }
 })
 
 useResizeObserver(taskbarContainer, () => {
-  refreshVisualContext()
+  refreshLayoutContext()
   requestDraw()
 })
 
 watch(sourceBands, requestDraw, { flush: 'sync' })
 // 进度只影响叠加在频谱上的已播放分界线；不叠加时重绘结果与上一帧逐像素相同。
 watch(() => (props.overlapsProgressGradient ? props.progress : 0), requestDraw, { flush: 'sync' })
-watch(() => props.overlapsProgressGradient, requestDraw, { flush: 'sync' })
+// DPR 改变只需重建 Canvas 缓冲区；逻辑尺寸已由 ResizeObserver 缓存，无需再次读取 DOM。
+watch(pixelRatio, () => resizeCanvas(logicalWidth, logicalHeight), { flush: 'post' })
 watch(
-  [pixelRatio, () => props.themeColor, () => props.foregroundColor],
+  [() => props.themeColor, () => props.foregroundColor],
   () => {
-    nextTick(() => {
-      refreshVisualContext()
-      const bounds = canvas.value?.getBoundingClientRect()
-      if (bounds) resizeCanvas(bounds.width, bounds.height)
-    })
+    refreshContrastColor()
+    requestDraw()
   },
   { flush: 'post' },
 )
+// 以下参数只改变 Canvas 像素，不参与 DOM 布局。
 watch(
   () => [
-    settings.value.visible,
-    settings.value.widthPercentage,
     settings.value.barCount,
     settings.value.alignment,
-    settings.value.horizontalPosition,
     settings.value.sensitivity,
     settings.value.smoothing,
   ],
-  () => nextTick(requestDraw),
-  { flush: 'post' },
+  requestDraw,
+  { flush: 'sync' },
 )
 
 onMounted(() => {
   taskbarContainer.value = wrapper.value?.parentElement ?? null
-  refreshVisualContext()
+  refreshLayoutContext()
+  refreshContrastColor()
 })
 </script>
 
 <template>
   <div
     ref="wrapper"
-    class="pointer-events-none absolute inset-y-1 z-1"
-    :style="canvasStyle"
+    class="pointer-events-none absolute inset-y-1 right-2 z-1"
+    :style="wrapperStyle"
     aria-hidden="true"
   >
     <canvas ref="canvas" class="size-full" />

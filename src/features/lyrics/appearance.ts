@@ -1,5 +1,6 @@
-import type { TaskbarLyricsSettings } from '@/features/settings/lyrics'
+import type { DeepReadonly } from 'vue'
 
+import type { TaskbarLyricsSettings } from '@/features/settings/lyrics'
 interface ResolvedLyricsAppearance {
   playedColor: string
   unplayedColor: string
@@ -14,7 +15,7 @@ function quoteFontFamily(fontFamily: string): string | undefined {
 
 /** 解析颜色和字体；空字体不覆写任务栏原有字体。 */
 export function resolveTaskbarLyricsAppearance(
-  settings: Readonly<TaskbarLyricsSettings>,
+  settings: DeepReadonly<TaskbarLyricsSettings>,
   themeColor: string,
 ): ResolvedLyricsAppearance {
   const usesCustomColors = settings.colorScheme === 'custom'

@@ -12,12 +12,7 @@ import {
   type TaskbarAudioSpectrumSettings,
 } from '@/features/settings/audio-spectrum'
 
-type SpectrumSliderKey =
-  | 'barCount'
-  | 'widthPercentage'
-  | 'horizontalPosition'
-  | 'sensitivity'
-  | 'smoothing'
+type SpectrumSliderKey = 'barCount' | 'width' | 'sensitivity' | 'smoothing'
 
 /** 管理任务栏频谱设置的预览、持久化和失败回滚。 */
 export function useAudioSpectrumSetting() {
@@ -97,14 +92,9 @@ export function useAudioSpectrumSetting() {
     updateSliderPreview('barCount', values?.[0])
   }
 
-  /** 更新频谱相对 bar 宽度的百分比并实时预览。 */
-  function updateWidthPercentage(values: number[] | undefined) {
-    updateSliderPreview('widthPercentage', values?.[0])
-  }
-
-  /** 更新频谱水平位置草稿并实时预览。 */
-  function updateHorizontalPosition(values: number[] | undefined) {
-    updateSliderPreview('horizontalPosition', values?.[0])
+  /** 更新最右侧频谱的固定宽度并实时预览。 */
+  function updateWidth(values: number[] | undefined) {
+    updateSliderPreview('width', values?.[0])
   }
 
   /** 更新频谱输入增益草稿并实时预览。 */
@@ -131,8 +121,7 @@ export function useAudioSpectrumSetting() {
     selectAlignment,
     selectFrameRate,
     updateBarCount,
-    updateWidthPercentage,
-    updateHorizontalPosition,
+    updateWidth,
     updateSensitivity,
     updateSmoothing,
     commitSlider,

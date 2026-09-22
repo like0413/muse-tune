@@ -139,6 +139,13 @@ const showLyrics = computed(
     hasLyricsContent.value &&
     !isTaskbarHovered.value,
 )
+/** 只缩短歌词层，普通层始终保持完整宽度；0.5rem 与元素间距保持一致。 */
+const lyricsLayerStyle = computed<CSSProperties>(() => ({
+  right:
+    spectrumSettingsReady.value && spectrumSettings.value.visible
+      ? `calc(${spectrumSettings.value.width}px + 0.5rem)`
+      : 0,
+}))
 const normalCoverVisible = computed(() =>
   isTaskbarCoverVisibleInMode(coverAppearance.value.visibility, 'normal'),
 )
@@ -297,15 +304,6 @@ onMounted(refreshCoverAnchors)
       "
       :image="coverImage"
     />
-    <AudioSpectrumElement
-      v-if="spectrumSettingsReady && taskbarContentVisible && spectrumSettings.visible"
-      :settings="spectrumSettings"
-      :theme-color="progressColor"
-      :foreground-color="activeForegroundColor"
-      :progress="progress"
-      :overlaps-progress-gradient="progressStyle === 'vertical-gradient'"
-    />
-
     <div ref="contentRoot" class="relative z-10 min-w-0 flex-1 self-stretch">
       <div
         ref="normalLayer"
@@ -340,6 +338,7 @@ onMounted(refreshCoverAnchors)
       <div
         class="taskbar-mode-layer pointer-events-none"
         :class="showLyrics ? 'opacity-100' : 'opacity-0'"
+        :style="lyricsLayerStyle"
         :aria-hidden="!showLyrics"
       >
         <template v-for="element in resolvedElementOrder.lyrics" :key="element">
@@ -388,6 +387,15 @@ onMounted(refreshCoverAnchors)
         />
       </div>
     </div>
+
+    <AudioSpectrumElement
+      v-if="spectrumSettingsReady && taskbarContentVisible && spectrumSettings.visible"
+      :settings="spectrumSettings"
+      :theme-color="progressColor"
+      :foreground-color="activeForegroundColor"
+      :progress="progress"
+      :overlaps-progress-gradient="progressStyle === 'vertical-gradient'"
+    />
 
     <div
       v-if="timeline && progressVisible"
