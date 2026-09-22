@@ -10,6 +10,7 @@ import {
 } from '@/features/settings/background-transparency'
 import { DEFAULT_TASKBAR_BACKGROUND_TRANSPARENCY } from '@/features/settings/defaults'
 import {
+  cloneTaskbarElementOrder,
   DEFAULT_TASKBAR_ELEMENT_ORDER,
   getTaskbarElementOrder,
   listenTaskbarElementOrderChange,
@@ -74,7 +75,7 @@ export function useTaskbarViewSettings() {
       subscribe: listenTaskbarElementOrderChange,
       failureMessage: '初始化任务栏区块顺序失败',
     },
-    [...DEFAULT_TASKBAR_ELEMENT_ORDER],
+    cloneTaskbarElementOrder(DEFAULT_TASKBAR_ELEMENT_ORDER),
   )
 
   return {

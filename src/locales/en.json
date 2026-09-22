@@ -134,7 +134,9 @@
       },
       "elementOrder": {
         "title": "Element order",
-        "description": "Drag to reorder artwork, track information, and playback controls"
+        "description": "Set element order independently for normal and lyrics modes",
+        "normal": "Normal mode",
+        "lyrics": "Lyrics mode"
       },
       "progress": {
         "title": "Playback progress",

@@ -134,7 +134,9 @@
       },
       "elementOrder": {
         "title": "元素排列",
-        "description": "拖动调整封面、歌曲信息与控制按钮的排列顺序"
+        "description": "分别调整普通模式与歌词模式中的元素顺序",
+        "normal": "普通模式",
+        "lyrics": "歌词模式"
       },
       "progress": {
         "title": "进度条",

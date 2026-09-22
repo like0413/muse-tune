@@ -5,7 +5,7 @@ import {
   useMutationObserver,
   useThrottleFn,
 } from '@vueuse/core'
-import type { CSSProperties } from 'vue'
+import type { CSSProperties, VNodeRef } from 'vue'
 
 import { reportBackgroundFailure } from '@/features/feedback/errors'
 import { useLyrics } from '@/features/lyrics/useLyrics'
@@ -18,7 +18,7 @@ import { useReducedMotionPreference } from '@/features/motion/useReducedMotionPr
 import { useTaskbarAudioSpectrumSettings } from '@/features/settings/audio-spectrum'
 import { TASKBAR_WIDTH_PRESETS } from '@/features/settings/bar-width'
 import { isTaskbarCoverVisibleInMode } from '@/features/settings/cover'
-import { type TaskbarElement } from '@/features/settings/element-order'
+import { normalizeTaskbarElementOrder } from '@/features/settings/element-order'
 import { useTaskbarAutoHide } from '@/features/taskbar/useTaskbarAutoHide'
 import { useTaskbarCoverAppearance } from '@/features/taskbar/useTaskbarCoverAppearance'
 import { useTaskbarDisplayedThumbnail } from '@/features/taskbar/useTaskbarDisplayedThumbnail'
@@ -49,8 +49,18 @@ const { appearance: coverAppearance } = useTaskbarCoverAppearance()
 const taskbarRoot = useTemplateRef<HTMLElement>('taskbarRoot')
 const contentRoot = useTemplateRef<HTMLElement>('contentRoot')
 const normalLayer = useTemplateRef<HTMLElement>('normalLayer')
-const normalCoverAnchor = useTemplateRef<HTMLElement>('normalCoverAnchor')
-const lyricsCoverAnchor = useTemplateRef<HTMLElement>('lyricsCoverAnchor')
+const normalCoverAnchor = shallowRef<HTMLElement | null>(null)
+const lyricsCoverAnchor = shallowRef<HTMLElement | null>(null)
+
+/** v-for 内的封面锚点仍保持单元素引用，避免模板 ref 被收集成数组。 */
+const setNormalCoverAnchor: VNodeRef = (element) => {
+  normalCoverAnchor.value = element instanceof HTMLElement ? element : null
+}
+
+/** 歌词层同样只有一个封面锚点。 */
+const setLyricsCoverAnchor: VNodeRef = (element) => {
+  lyricsCoverAnchor.value = element instanceof HTMLElement ? element : null
+}
 const isTaskbarHovered = useElementHover(taskbarRoot)
 const {
   backgroundTransparency,
@@ -179,12 +189,8 @@ const activeSecondaryForegroundColor = computed(() =>
       : 'var(--taskbar-secondary-foreground)',
 )
 
-/** 普通层始终保持最终排列；封面位置由同尺寸锚点预留。 */
-const normalElementStyle = computed<Record<TaskbarElement, CSSProperties>>(() => ({
-  cover: { order: elementOrder.value.indexOf('cover') },
-  'track-info': { order: elementOrder.value.indexOf('track-info') },
-  controls: { order: elementOrder.value.indexOf('controls') },
-}))
+/** 设置数组就是任务栏从左到右的最终 DOM 顺序。 */
+const resolvedElementOrder = computed(() => normalizeTaskbarElementOrder(elementOrder.value))
 
 /** 把唯一的真实封面移动到当前模式的锚点，两个内容层中不会产生封面副本。 */
 const coverMotionStyle = computed<CSSProperties>(() => {
@@ -217,7 +223,7 @@ const refreshCoverAnchors = useThrottleFn(
 )
 
 useMutationObserver(normalLayer, refreshCoverAnchors, { childList: true, subtree: true })
-watch([elementOrder, () => coverAppearance.value.visibility], refreshCoverAnchors)
+watch([resolvedElementOrder, () => coverAppearance.value.visibility], refreshCoverAnchors)
 
 /** 封面模式使用不透明深色底层，白色前景不受系统模式和封面明度影响。 */
 const backgroundStyle = computed<CSSProperties>(() => ({
@@ -308,26 +314,27 @@ onMounted(refreshCoverAnchors)
         :aria-hidden="showLyrics"
         :inert="showLyrics || undefined"
       >
-        <div
-          v-if="normalCoverVisible"
-          ref="normalCoverAnchor"
-          class="size-8 shrink-0"
-          :style="normalElementStyle.cover"
-          aria-hidden="true"
-        />
-        <TrackInfoElement
-          :session="mediaSession"
-          :active="!showLyrics"
-          :style="normalElementStyle['track-info']"
-        />
-        <PlaybackControlsElement
-          :session="mediaSession"
-          :pending="controlPending"
-          :theme-color="progressColor"
-          :compact="isCompact"
-          :style="normalElementStyle.controls"
-          @control="control"
-        />
+        <template v-for="element in resolvedElementOrder.normal" :key="element">
+          <div
+            v-if="element === 'cover' && normalCoverVisible"
+            :ref="setNormalCoverAnchor"
+            class="size-8 shrink-0"
+            aria-hidden="true"
+          />
+          <TrackInfoElement
+            v-else-if="element === 'track-info'"
+            :session="mediaSession"
+            :active="!showLyrics"
+          />
+          <PlaybackControlsElement
+            v-else-if="element === 'controls'"
+            :session="mediaSession"
+            :pending="controlPending"
+            :theme-color="progressColor"
+            :compact="isCompact"
+            @control="control"
+          />
+        </template>
       </div>
 
       <div
@@ -335,26 +342,38 @@ onMounted(refreshCoverAnchors)
         :class="showLyrics ? 'opacity-100' : 'opacity-0'"
         :aria-hidden="!showLyrics"
       >
-        <div
-          v-if="lyricsCoverVisible"
-          ref="lyricsCoverAnchor"
-          class="size-8 shrink-0"
-          aria-hidden="true"
-        />
-        <LyricsElement
-          v-if="taskbarContentVisible && lyricsSettings.enabled && lyrics.status === 'ready'"
-          :key="lyrics.trackKey ?? 'no-track'"
-          :lyrics="lyrics"
-          :position-ms="lyricsPositionMs"
-          :settings="lyricsSettings"
-          :theme-color="progressColor"
-        />
-        <LyricsNoticeElement
-          v-else-if="taskbarContentVisible && lyricsSettings.enabled && hasNoticeOnly"
-          :text="lyricsNoticeText"
-          :settings="lyricsSettings"
-          :theme-color="progressColor"
-        />
+        <template v-for="element in resolvedElementOrder.lyrics" :key="element">
+          <div
+            v-if="element === 'cover' && lyricsCoverVisible"
+            :ref="setLyricsCoverAnchor"
+            class="size-8 shrink-0"
+            aria-hidden="true"
+          />
+          <LyricsElement
+            v-else-if="
+              element === 'lyrics' &&
+              taskbarContentVisible &&
+              lyricsSettings.enabled &&
+              lyrics.status === 'ready'
+            "
+            :key="lyrics.trackKey ?? 'no-track'"
+            :lyrics="lyrics"
+            :position-ms="lyricsPositionMs"
+            :settings="lyricsSettings"
+            :theme-color="progressColor"
+          />
+          <LyricsNoticeElement
+            v-else-if="
+              element === 'lyrics' &&
+              taskbarContentVisible &&
+              lyricsSettings.enabled &&
+              hasNoticeOnly
+            "
+            :text="lyricsNoticeText"
+            :settings="lyricsSettings"
+            :theme-color="progressColor"
+          />
+        </template>
       </div>
 
       <div
