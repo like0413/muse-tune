@@ -41,6 +41,7 @@ const progressStyleOptions = computed(
   () =>
     [
       { value: 'bottom', label: t('settings.taskbar.progress.bar') },
+      { value: 'cover-ring', label: t('settings.taskbar.progress.coverRing') },
       { value: 'vertical-gradient', label: t('settings.taskbar.progress.gradient') },
     ] as const satisfies ReadonlyArray<{ value: TaskbarProgressStyle; label: string }>,
 )
@@ -157,7 +158,7 @@ async function selectProgressStyle(value: unknown) {
   ) {
     return
   }
-  if (value === 'bottom') {
+  if (value !== 'vertical-gradient') {
     await saveProgressStyle(value)
     return
   }

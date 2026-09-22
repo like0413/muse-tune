@@ -50,8 +50,12 @@ pub(super) fn refresh_metadata(entries: &mut [SessionEntry], session_id: u64) ->
         .thumbnail
         .as_ref()
         .and_then(|thumbnail| read_thumbnail_data_url(thumbnail).ok().flatten());
-    // 只有真正取到封面才记录内容键，使“封面晚于标题到达”的播放器能在下一次刷新补上。
-    entry.thumbnail_key = thumbnail_data_url.as_ref().map(|_| properties.text.clone());
+    // 只有确实换成另一张封面才落键，否则这个文本键会被写死在上一首的封面上（判据见 `is_new_thumbnail`）。
+    let thumbnail_is_new = is_new_thumbnail(
+        thumbnail_data_url.as_deref(),
+        entry.snapshot.metadata.thumbnail_data_url.as_deref(),
+    );
+    entry.thumbnail_key = thumbnail_is_new.then(|| properties.text.clone());
 
     let metadata = MediaMetadata {
         title: properties.text.title,
@@ -75,6 +79,18 @@ pub(super) fn refresh_metadata(entries: &mut [SessionEntry], session_id: u64) ->
         changed: true,
         track_boundary: title_changed,
     }
+}
+
+/// 这次读到的封面是否可以记为新文本键的封面。
+///
+/// 文本键本身证明不了封面的归属：切歌瞬间播放器可能已经把标题改成新歌、封面仍是上一首的
+/// （汽水音乐即如此），此时读到的是上一首的图。若把它记成新文本键的封面，紧接着到达的真封面
+/// 会被上面的快速路径挡掉，封面就永远落后一首；不记录则后续每次刷新都会重读，等真封面到达
+/// 再落键，之后恢复跳过。封面确实与上一首相同的歌只会多读几次，不会显示成错误内容。
+/// 完全取不到封面（播放器没提供或读取失败）时同样不能落键，否则“封面晚于标题到达”的播放器
+/// 再也没有重读机会。
+fn is_new_thumbnail(read: Option<&str>, displayed: Option<&str>) -> bool {
+    read.is_some_and(|read| displayed != Some(read))
 }
 
 /// 该会话是否正处于“标题已换、时间线尚未确认新曲”的窗口。
@@ -195,5 +211,31 @@ pub(super) fn refresh_timeline(entries: &mut [SessionEntry], session_id: u64) ->
         changed: true,
         availability_changed,
         track_boundary,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 切歌瞬间读到与当前展示完全相同的封面，说明播放器还没把新封面写进 SMTC：
+    /// 这张图不能记成新文本键的封面，否则真封面到达时会被快速路径挡掉，封面永远落后一首。
+    #[test]
+    fn carried_over_thumbnail_does_not_claim_the_new_text_key() {
+        assert!(!is_new_thumbnail(Some("cover-a"), Some("cover-a")));
+    }
+
+    /// 封面确实换了、或此前根本没有封面时，都可以落键，之后恢复跳过重复解码。
+    #[test]
+    fn changed_or_first_thumbnail_claims_the_text_key() {
+        assert!(is_new_thumbnail(Some("cover-b"), Some("cover-a")));
+        assert!(is_new_thumbnail(Some("cover-a"), None));
+    }
+
+    /// 完全取不到封面时不能落键，否则“封面晚于标题到达”的播放器再也没有重读机会。
+    #[test]
+    fn missing_thumbnail_never_claims_the_text_key() {
+        assert!(!is_new_thumbnail(None, Some("cover-a")));
+        assert!(!is_new_thumbnail(None, None));
     }
 }

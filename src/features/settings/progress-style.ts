@@ -8,7 +8,7 @@ import {
 } from './defaults'
 import { settingsStore } from './store'
 
-const TASKBAR_PROGRESS_STYLES = ['bottom', 'vertical-gradient'] as const
+const TASKBAR_PROGRESS_STYLES = ['bottom', 'cover-ring', 'vertical-gradient'] as const
 const TASKBAR_PROGRESS_POSITIONS = ['top', 'bottom'] as const
 const TASKBAR_PROGRESS_STYLE_KEY = 'taskbar.progressStyle'
 const TASKBAR_PROGRESS_POSITION_KEY = 'taskbar.progressPosition'

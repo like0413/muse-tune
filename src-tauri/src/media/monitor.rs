@@ -56,7 +56,10 @@ struct SessionEntry {
     id: u64,
     registration: SessionRegistration,
     snapshot: MediaSessionSnapshot,
-    /// 当前封面所对应的文本元数据键；用于跳过未变内容的封面重复解码。
+    /// 当前展示的封面所对应的文本元数据键，用于跳过未变内容的封面重复解码。
+    ///
+    /// 只在读到“与展示中的封面不同”的图时才记录：文本键本身证明不了封面归属，
+    /// 切歌瞬间读到的可能还是上一首的图（见 `playback::is_new_thumbnail`）。
     thumbnail_key: Option<session::MediaMetadataText>,
     activity_order: u64,
     selection_hold_until: Option<Instant>,

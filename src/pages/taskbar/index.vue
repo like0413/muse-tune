@@ -376,6 +376,11 @@ onMounted(refreshCoverAnchors)
           :session="mediaSession"
           :appearance="coverAppearance"
           :thumbnail-data-url="displayedThumbnail?.source ?? null"
+          :progress="progress"
+          :progress-color="progressColor"
+          :show-progress-ring="
+            Boolean(timeline) && progressVisible && progressStyle === 'cover-ring'
+          "
         />
       </div>
     </div>
@@ -404,7 +409,11 @@ onMounted(refreshCoverAnchors)
         :class="progressBarPositionClass"
         :style="barProgressStyle"
       />
-      <div v-else class="absolute inset-y-0 left-0 z-0" :style="verticalProgressStyle" />
+      <div
+        v-else-if="progressStyle === 'vertical-gradient'"
+        class="absolute inset-y-0 left-0 z-0"
+        :style="verticalProgressStyle"
+      />
     </div>
   </main>
 </template>

@@ -4,12 +4,16 @@ import type { DeepReadonly } from 'vue'
 import type { MediaSessionSnapshot } from '@/features/media/types'
 import type { TaskbarCoverAppearance } from '@/features/settings/cover'
 
+import CoverProgressRing from './CoverProgressRing.vue'
 import PlayerSourceBadge from './PlayerSourceBadge.vue'
 
 const props = defineProps<{
   session: MediaSessionSnapshot | null
   appearance: DeepReadonly<TaskbarCoverAppearance>
   thumbnailDataUrl: string | null
+  progress: number
+  progressColor: string
+  showProgressRing: boolean
 }>()
 
 /** 依据保存的形状与播放状态生成封面图层类名。 */
@@ -34,6 +38,12 @@ const shapeClass = computed(() => ({
       <img v-if="thumbnailDataUrl" class="size-full object-cover" :src="thumbnailDataUrl" alt="" />
       <span v-else>♪</span>
     </div>
+    <CoverProgressRing
+      v-if="showProgressRing"
+      :progress="progress"
+      :color="progressColor"
+      :shape="appearance.shape"
+    />
     <PlayerSourceBadge
       v-if="appearance.showPlayerSource && session"
       :player="session.player"
