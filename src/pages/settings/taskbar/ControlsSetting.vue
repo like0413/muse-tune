@@ -13,8 +13,21 @@ import {
 } from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
+import {
+  notifyActionFailed,
+  notifySettingSaveFailed,
+  reportBackgroundFailure,
+} from '@/features/feedback/errors'
+import { setCurrentMediaVolume } from '@/features/media/client'
 import {
   DEFAULT_TASKBAR_CONTROLS_VISIBILITY,
   getTaskbarControlsVisibility,
@@ -22,6 +35,15 @@ import {
   type TaskbarControlButton,
   type TaskbarControlsVisibility,
 } from '@/features/settings/controls'
+import {
+  DEFAULT_VOLUME_CONTROL_TARGET,
+  getVolumeControlTarget,
+  isVolumeControlTarget,
+  setVolumeControlTarget,
+  type VolumeControlTarget,
+} from '@/features/settings/volume-control'
+
+import VolumeTargetConfirmDialog from './components/VolumeTargetConfirmDialog.vue'
 
 const { t } = useI18n({ useScope: 'global' })
 
@@ -39,6 +61,16 @@ const committedVisibility = shallowRef<TaskbarControlsVisibility>({
   ...DEFAULT_TASKBAR_CONTROLS_VISIBILITY,
 })
 const visibilitySaving = shallowRef(false)
+const selectedVolumeTarget = shallowRef(DEFAULT_VOLUME_CONTROL_TARGET)
+const committedVolumeTarget = shallowRef(DEFAULT_VOLUME_CONTROL_TARGET)
+const volumeTargetSaving = shallowRef(false)
+const pendingSystemVolumeSwitch = shallowRef(false)
+const volumeTargetDialogOpen = computed({
+  get: () => pendingSystemVolumeSwitch.value,
+  set: (open: boolean) => {
+    if (!open && !volumeTargetSaving.value) pendingSystemVolumeSwitch.value = false
+  },
+})
 const selectedOrder = shallowRef<TaskbarControlButton[]>([
   ...DEFAULT_TASKBAR_CONTROLS_VISIBILITY.order,
 ])
@@ -67,6 +99,17 @@ async function loadVisibility() {
   }
 }
 
+/** 恢复已保存的音量控制对象。 */
+async function loadVolumeTarget() {
+  try {
+    const target = await getVolumeControlTarget()
+    selectedVolumeTarget.value = target
+    committedVolumeTarget.value = target
+  } catch (error) {
+    reportBackgroundFailure('读取音量控制对象失败', error)
+  }
+}
+
 /** 合并并持久化一次按钮配置变更，失败时恢复最近成功值。 */
 async function updateVisibility(patch: Partial<TaskbarControlsVisibility>) {
   if (visibilitySaving.value) return
@@ -88,6 +131,55 @@ async function updateVisibility(patch: Partial<TaskbarControlsVisibility>) {
 /** 将 Checkbox 值规范为布尔值并更新单个按钮。 */
 function updateButton(key: TaskbarControlButton, value: boolean | 'indeterminate') {
   void updateVisibility({ [key]: value === true })
+}
+
+/** 保存音量控制对象，失败时恢复最近一次成功值。 */
+async function saveVolumeTarget(value: VolumeControlTarget): Promise<boolean> {
+  if (volumeTargetSaving.value) return false
+  selectedVolumeTarget.value = value
+  volumeTargetSaving.value = true
+  try {
+    await setVolumeControlTarget(value)
+    committedVolumeTarget.value = value
+    return true
+  } catch (error) {
+    selectedVolumeTarget.value = committedVolumeTarget.value
+    notifySettingSaveFailed(t('settings.taskbar.controls.volumeTarget'), error)
+    return false
+  } finally {
+    volumeTargetSaving.value = false
+  }
+}
+
+/** 切换到系统主音量前先让用户决定是否恢复播放器的独立音量。 */
+function selectVolumeTarget(value: unknown) {
+  if (
+    !isVolumeControlTarget(value) ||
+    value === selectedVolumeTarget.value ||
+    volumeTargetSaving.value
+  ) {
+    return
+  }
+  if (value === 'system') {
+    pendingSystemVolumeSwitch.value = true
+    return
+  }
+  void saveVolumeTarget(value)
+}
+
+/** 完成系统主音量切换，并按用户选择恢复当前播放器音量。 */
+async function completeSystemVolumeSwitch(restoreApplicationVolume: boolean) {
+  if (volumeTargetSaving.value) return
+  pendingSystemVolumeSwitch.value = false
+  if (!(await saveVolumeTarget('system')) || !restoreApplicationVolume) return
+
+  try {
+    await setCurrentMediaVolume(1)
+  } catch (error) {
+    notifyActionFailed(t('settings.taskbar.controls.volumeRestoreFailed'), error, {
+      context: '恢复当前播放器音量失败',
+    })
+  }
 }
 
 /** 拖动结束后一次性保存完整按钮顺序。 */
@@ -119,7 +211,9 @@ async function saveOrder(order: TaskbarControlButton[]) {
   }
 }
 
-onMounted(loadVisibility)
+onMounted(() => {
+  void Promise.all([loadVisibility(), loadVolumeTarget()])
+})
 </script>
 
 <template>
@@ -176,7 +270,45 @@ onMounted(loadVisibility)
             </div>
           </div>
         </Field>
+
+        <Field
+          v-if="selectedVisibility.volume"
+          orientation="horizontal"
+          :data-disabled="!selectedVisibility.visible"
+        >
+          <FieldContent>
+            <FieldTitle>{{ t('settings.taskbar.controls.volumeTarget') }}</FieldTitle>
+            <FieldDescription>{{
+              t('settings.taskbar.controls.volumeTargetDescription')
+            }}</FieldDescription>
+          </FieldContent>
+          <Select
+            :model-value="selectedVolumeTarget"
+            :disabled="volumeTargetSaving || !selectedVisibility.visible"
+            @update:model-value="selectVolumeTarget"
+          >
+            <SelectTrigger class="w-52" :aria-label="t('settings.taskbar.controls.volumeTarget')">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="application">
+                  {{ t('settings.taskbar.controls.applicationVolume') }}
+                </SelectItem>
+                <SelectItem value="system">
+                  {{ t('settings.taskbar.controls.systemVolume') }}
+                </SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
       </FieldGroup>
     </template>
   </CollapsibleItem>
+  <VolumeTargetConfirmDialog
+    v-model:open="volumeTargetDialogOpen"
+    :disabled="volumeTargetSaving"
+    @keep="completeSystemVolumeSwitch(false)"
+    @restore="completeSystemVolumeSwitch(true)"
+  />
 </template>

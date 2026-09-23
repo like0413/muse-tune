@@ -11,10 +11,13 @@ use std::{
 use tauri::{AppHandle, Runtime};
 use windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager;
 
-use crate::media::{
-    MediaRuntimeDiagnostics, MediaRuntimeSessionDiagnostics, MediaSessionSelectionPolicy,
-    MediaSessionSnapshot, MediaSnapshotSubscriber, spectrum::AudioSpectrumController,
-    volume::ApplicationVolumeController,
+use crate::{
+    error::Error,
+    media::{
+        MediaRuntimeDiagnostics, MediaRuntimeSessionDiagnostics, MediaSessionSelectionPolicy,
+        MediaSessionSnapshot, MediaSnapshotSubscriber, spectrum::AudioSpectrumController,
+        system_volume::SystemVolumeController, volume::ApplicationVolumeController,
+    },
 };
 
 use super::{
@@ -26,7 +29,9 @@ use super::{
         refresh_all_playback, refresh_metadata, refresh_playback, refresh_timeline,
         reset_stale_timeline_at_track_boundary, timeline_pending_new_track,
     },
-    publisher::{MediaSnapshotPublisher, publish_selected_timeline, publish_volume},
+    publisher::{
+        MediaSnapshotPublisher, publish_selected_timeline, publish_system_volume, publish_volume,
+    },
     registry::{non_empty_metadata, synchronize_sessions},
     selection::{
         normalize_selection_policy, reconcile_selection_and_volume, toggle_selected_player_window,
@@ -133,6 +138,7 @@ struct WorkerState<'a, R: Runtime> {
     next_session_id: u64,
     next_activity_order: u64,
     selection_policy: MediaSessionSelectionPolicy,
+    system_volume: Option<SystemVolumeController>,
 }
 
 impl<'a, R: Runtime> WorkerState<'a, R> {
@@ -149,6 +155,9 @@ impl<'a, R: Runtime> WorkerState<'a, R> {
             volume: ApplicationVolumeController::new(sender.clone()),
             spectrum: AudioSpectrumController::new(app.clone()),
         };
+        let system_volume = SystemVolumeController::new(sender.clone())
+            .inspect_err(|error| log::warn!("初始化 Windows 系统主音量失败: {error}"))
+            .ok();
         let mut state = Self {
             manager,
             sender,
@@ -161,6 +170,7 @@ impl<'a, R: Runtime> WorkerState<'a, R> {
             // 从 1 起：会话条目的 `activity_order` 用 0 表示“没有活动记录”，不能被真实序号占用。
             next_activity_order: 1,
             selection_policy: MediaSessionSelectionPolicy::default(),
+            system_volume,
         };
         state.synchronize(false);
         state.reconcile(true);
@@ -235,6 +245,35 @@ impl<'a, R: Runtime> WorkerState<'a, R> {
                 }
                 let _ = result_sender.send(result);
             }
+            WorkerMessage::GetSystemVolume(result_sender) => {
+                let _ = result_sender.send(
+                    self.system_volume
+                        .as_ref()
+                        .and_then(SystemVolumeController::snapshot),
+                );
+            }
+            WorkerMessage::SetSystemVolume(level, result_sender) => {
+                let result = self
+                    .system_volume
+                    .as_ref()
+                    .ok_or_else(|| Error::Message("系统主音量控制当前不可用".to_owned()))
+                    .and_then(|controller| controller.set_level(level));
+                if let Ok(next) = result {
+                    publish_system_volume(self.publisher.app, Some(next));
+                }
+                let _ = result_sender.send(result);
+            }
+            WorkerMessage::ToggleSystemMute(result_sender) => {
+                let result = self
+                    .system_volume
+                    .as_ref()
+                    .ok_or_else(|| Error::Message("系统主音量控制当前不可用".to_owned()))
+                    .and_then(SystemVolumeController::toggle_muted);
+                if let Ok(next) = result {
+                    publish_system_volume(self.publisher.app, Some(next));
+                }
+                let _ = result_sender.send(result);
+            }
             WorkerMessage::GetDiagnostics(result_sender) => {
                 let _ = result_sender.send(self.diagnostics());
             }
@@ -286,6 +325,25 @@ impl<'a, R: Runtime> WorkerState<'a, R> {
             self.metrics
                 .record_event_processed(WorkerMessageKind::VolumeChanged);
             self.handle_volume_changed(target_id);
+        }
+        if events.system_volume_changed {
+            self.metrics
+                .record_event_processed(WorkerMessageKind::SystemVolumeChanged);
+        }
+        if events.default_audio_endpoint_changed {
+            self.metrics
+                .record_event_processed(WorkerMessageKind::DefaultAudioEndpointChanged);
+            if let Some(controller) = self.system_volume.as_mut() {
+                controller.rebind_default_endpoint();
+                publish_system_volume(self.publisher.app, controller.snapshot());
+            }
+        } else if events.system_volume_changed {
+            publish_system_volume(
+                self.publisher.app,
+                self.system_volume
+                    .as_ref()
+                    .and_then(SystemVolumeController::snapshot),
+            );
         }
     }
 

@@ -10,6 +10,7 @@ mod process;
 mod selector;
 mod source_icon;
 mod spectrum;
+mod system_volume;
 mod thumbnail;
 mod volume;
 

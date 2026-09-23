@@ -73,8 +73,8 @@ pub(super) fn handle_volume_rebind_due<R: Runtime>(
     publish_volume(app, volume);
     if volume.is_none() {
         if !deadlines.schedule_volume_rebind(target_id, attempt.saturating_add(1)) {
-            // 退避用尽仍未绑上，音量控制会一直是空的；重试过程本身不值得记，结论必须记。
-            log::warn!("绑定播放器应用音量失败：重试已用尽，仍未找到当前播放器的音频会话");
+            // 播放器未开始播放时没有 Core Audio 会话是正常状态；保留调试信息即可。
+            log::debug!("音量重绑已用尽，当前播放器尚未创建音频会话");
         }
     } else {
         deadlines.cancel_volume_rebind();

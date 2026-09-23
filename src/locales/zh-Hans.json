@@ -111,7 +111,16 @@
         "visibleDescription": "显示或隐藏整组播放控制按钮",
         "buttons": "显示的按钮",
         "buttonsDescription": "选择要显示的按钮，并拖动调整排列顺序",
-        "order": "控制按钮顺序"
+        "order": "控制按钮顺序",
+        "volumeTarget": "音量控制对象",
+        "volumeTargetDescription": "选择调节当前播放器的独立音频会话，或 Windows 默认播放设备的主音量",
+        "applicationVolume": "当前播放器音量",
+        "systemVolume": "系统主音量",
+        "volumeRestoreTitle": "恢复当前播放器音量？",
+        "volumeRestoreDescription": "切换为系统主音量后，任务栏将不再调节当前播放器的独立音量。是否先将其恢复为 100% 并解除静音？",
+        "keepAndSwitch": "保留并切换",
+        "restoreAndSwitch": "恢复并切换",
+        "volumeRestoreFailed": "未能恢复当前播放器音量"
       },
       "cover": {
         "title": "封面",
@@ -378,10 +387,12 @@
     "next": "下一曲",
     "volume": "音量",
     "controls": "播放控制",
-    "adjustVolume": "调节播放器音量",
+    "adjustPlayerVolume": "调节当前播放器音量",
+    "adjustSystemVolume": "调节系统主音量",
     "nothingPlaying": "暂无播放",
     "progress": "播放进度",
-    "playerVolume": "播放器音量"
+    "playerVolume": "当前播放器音量",
+    "systemVolume": "系统主音量"
   },
   "taskbar": {
     "player": "Muse Tune 任务栏播放器",

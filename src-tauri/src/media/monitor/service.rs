@@ -166,6 +166,33 @@ impl MediaService {
         )?
     }
 
+    /// 返回 Windows 默认播放设备的系统主音量。
+    pub fn system_volume(&self) -> Result<Option<MediaVolumeSnapshot>, Error> {
+        self.request(
+            WorkerMessage::GetSystemVolume,
+            WORKER_RESPONSE_TIMEOUT,
+            "媒体会话未返回系统主音量",
+        )
+    }
+
+    /// 设置 Windows 默认播放设备的系统主音量。
+    pub fn set_system_volume(&self, level: f32) -> Result<MediaVolumeSnapshot, Error> {
+        self.request(
+            |sender| WorkerMessage::SetSystemVolume(level, sender),
+            WORKER_RESPONSE_TIMEOUT,
+            "媒体会话未返回系统主音量设置结果",
+        )?
+    }
+
+    /// 切换 Windows 默认播放设备的系统静音状态。
+    pub fn toggle_system_mute(&self) -> Result<MediaVolumeSnapshot, Error> {
+        self.request(
+            WorkerMessage::ToggleSystemMute,
+            WORKER_RESPONSE_TIMEOUT,
+            "媒体会话未返回系统静音切换结果",
+        )?
+    }
+
     /// 启用或停止当前播放器的真实音频频谱采集。
     pub fn set_spectrum_enabled(&self, enabled: bool, frame_rate: u16) -> Result<(), Error> {
         self.request(

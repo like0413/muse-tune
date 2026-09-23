@@ -7,5 +7,8 @@ commands.allow = [
   "get_current_media_volume",
   "set_current_media_volume",
   "toggle_current_media_mute",
+  "get_system_volume",
+  "set_system_volume",
+  "toggle_system_mute",
   "hide_volume_popup",
 ]

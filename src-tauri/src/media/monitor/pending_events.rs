@@ -16,6 +16,8 @@ pub(in crate::media) enum WorkerEvent {
     TimelineProperties(u64),
     Volume(u64),
     VolumeSessions(u64),
+    SystemVolume,
+    DefaultAudioEndpoint,
 }
 
 impl WorkerEvent {
@@ -28,6 +30,8 @@ impl WorkerEvent {
             Self::TimelineProperties(_) => WorkerMessageKind::TimelinePropertiesChanged,
             Self::Volume(_) => WorkerMessageKind::VolumeChanged,
             Self::VolumeSessions(_) => WorkerMessageKind::VolumeSessionsChanged,
+            Self::SystemVolume => WorkerMessageKind::SystemVolumeChanged,
+            Self::DefaultAudioEndpoint => WorkerMessageKind::DefaultAudioEndpointChanged,
         }
     }
 }
@@ -42,6 +46,8 @@ pub(super) struct PendingWorkerEvents {
     timeline_properties_changed: HashSet<u64>,
     volume_changed: HashSet<u64>,
     volume_sessions_changed: HashSet<u64>,
+    system_volume_changed: bool,
+    default_audio_endpoint_changed: bool,
 }
 
 impl PendingWorkerEvents {
@@ -72,6 +78,10 @@ impl PendingWorkerEvents {
             WorkerEvent::VolumeSessions(target_id) => {
                 !self.volume_sessions_changed.insert(target_id)
             }
+            WorkerEvent::SystemVolume => std::mem::replace(&mut self.system_volume_changed, true),
+            WorkerEvent::DefaultAudioEndpoint => {
+                std::mem::replace(&mut self.default_audio_endpoint_changed, true)
+            }
         }
     }
 
@@ -85,6 +95,10 @@ impl PendingWorkerEvents {
             timeline_properties_changed: std::mem::take(&mut self.timeline_properties_changed),
             volume_changed: std::mem::take(&mut self.volume_changed),
             volume_sessions_changed: std::mem::take(&mut self.volume_sessions_changed),
+            system_volume_changed: std::mem::take(&mut self.system_volume_changed),
+            default_audio_endpoint_changed: std::mem::take(
+                &mut self.default_audio_endpoint_changed,
+            ),
         }
     }
 }
@@ -97,6 +111,8 @@ pub(super) struct WorkerEventBatch {
     pub(super) timeline_properties_changed: HashSet<u64>,
     pub(super) volume_changed: HashSet<u64>,
     pub(super) volume_sessions_changed: HashSet<u64>,
+    pub(super) system_volume_changed: bool,
+    pub(super) default_audio_endpoint_changed: bool,
 }
 
 #[cfg(test)]
@@ -150,6 +166,8 @@ mod tests {
         pending.merge(WorkerEvent::TimelineProperties(1));
         pending.merge(WorkerEvent::Volume(3));
         pending.merge(WorkerEvent::VolumeSessions(3));
+        pending.merge(WorkerEvent::SystemVolume);
+        pending.merge(WorkerEvent::DefaultAudioEndpoint);
         pending.wake_enqueued = true;
 
         let batch = pending.take_batch();
@@ -159,6 +177,8 @@ mod tests {
         assert_eq!(batch.timeline_properties_changed.len(), 1);
         assert_eq!(batch.volume_changed.len(), 1);
         assert_eq!(batch.volume_sessions_changed.len(), 1);
+        assert!(batch.system_volume_changed);
+        assert!(batch.default_audio_endpoint_changed);
         assert!(!pending.wake_enqueued);
 
         let drained = pending.take_batch();
@@ -168,6 +188,8 @@ mod tests {
         assert!(drained.timeline_properties_changed.is_empty());
         assert!(drained.volume_changed.is_empty());
         assert!(drained.volume_sessions_changed.is_empty());
+        assert!(!drained.system_volume_changed);
+        assert!(!drained.default_audio_endpoint_changed);
     }
 
     /// 不同会话的同类事件互不合并，否则多播放器并存时会漏掉其中一个的变化。

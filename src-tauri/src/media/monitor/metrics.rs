@@ -30,15 +30,20 @@ pub(super) enum WorkerMessageKind {
     GetVolume,
     SetVolume,
     ToggleMute,
+    GetSystemVolume,
+    SetSystemVolume,
+    ToggleSystemMute,
     GetDiagnostics,
     SpectrumEnabled,
     VolumeChanged,
     VolumeSessionsChanged,
+    SystemVolumeChanged,
+    DefaultAudioEndpointChanged,
     Shutdown,
 }
 
 impl WorkerMessageKind {
-    const ALL: [Self; 15] = [
+    const ALL: [Self; 20] = [
         Self::ManagerChanged,
         Self::MediaPropertiesChanged,
         Self::PlaybackInfoChanged,
@@ -49,10 +54,15 @@ impl WorkerMessageKind {
         Self::GetVolume,
         Self::SetVolume,
         Self::ToggleMute,
+        Self::GetSystemVolume,
+        Self::SetSystemVolume,
+        Self::ToggleSystemMute,
         Self::GetDiagnostics,
         Self::SpectrumEnabled,
         Self::VolumeChanged,
         Self::VolumeSessionsChanged,
+        Self::SystemVolumeChanged,
+        Self::DefaultAudioEndpointChanged,
         Self::Shutdown,
     ];
 
@@ -69,10 +79,15 @@ impl WorkerMessageKind {
             Self::GetVolume => "get_volume",
             Self::SetVolume => "set_volume",
             Self::ToggleMute => "toggle_mute",
+            Self::GetSystemVolume => "get_system_volume",
+            Self::SetSystemVolume => "set_system_volume",
+            Self::ToggleSystemMute => "toggle_system_mute",
             Self::GetDiagnostics => "get_diagnostics",
             Self::SpectrumEnabled => "spectrum_enabled",
             Self::VolumeChanged => "volume_changed",
             Self::VolumeSessionsChanged => "volume_sessions_changed",
+            Self::SystemVolumeChanged => "system_volume_changed",
+            Self::DefaultAudioEndpointChanged => "default_audio_endpoint_changed",
             Self::Shutdown => "shutdown",
         }
     }
@@ -87,6 +102,9 @@ impl WorkerMessageKind {
                 | Self::GetVolume
                 | Self::SetVolume
                 | Self::ToggleMute
+                | Self::GetSystemVolume
+                | Self::SetSystemVolume
+                | Self::ToggleSystemMute
                 | Self::GetDiagnostics
                 | Self::SpectrumEnabled
         )
@@ -108,6 +126,9 @@ impl WorkerMessage {
             Self::GetVolume(_) => WorkerMessageKind::GetVolume,
             Self::SetVolume(_, _) => WorkerMessageKind::SetVolume,
             Self::ToggleMute(_) => WorkerMessageKind::ToggleMute,
+            Self::GetSystemVolume(_) => WorkerMessageKind::GetSystemVolume,
+            Self::SetSystemVolume(_, _) => WorkerMessageKind::SetSystemVolume,
+            Self::ToggleSystemMute(_) => WorkerMessageKind::ToggleSystemMute,
             Self::GetDiagnostics(_) => WorkerMessageKind::GetDiagnostics,
             Self::SpectrumEnabled(_, _, _) => WorkerMessageKind::SpectrumEnabled,
             Self::Shutdown => WorkerMessageKind::Shutdown,

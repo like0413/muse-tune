@@ -111,7 +111,16 @@
         "visibleDescription": "Show or hide the entire group of playback controls",
         "buttons": "Visible buttons",
         "buttonsDescription": "Choose which buttons to show, then drag to reorder them",
-        "order": "Playback control order"
+        "order": "Playback control order",
+        "volumeTarget": "Volume control target",
+        "volumeTargetDescription": "Adjust the current player's audio session or the master volume of the default Windows playback device",
+        "applicationVolume": "Current player volume",
+        "systemVolume": "System master volume",
+        "volumeRestoreTitle": "Restore the current player volume?",
+        "volumeRestoreDescription": "After switching to system master volume, the taskbar will no longer adjust the current player's individual volume. Restore it to 100% and unmute it first?",
+        "keepAndSwitch": "Keep and switch",
+        "restoreAndSwitch": "Restore and switch",
+        "volumeRestoreFailed": "Could not restore the current player volume"
       },
       "cover": {
         "title": "Artwork",
@@ -378,10 +387,12 @@
     "next": "Next",
     "volume": "Volume",
     "controls": "Playback controls",
-    "adjustVolume": "Adjust player volume",
+    "adjustPlayerVolume": "Adjust current player volume",
+    "adjustSystemVolume": "Adjust system master volume",
     "nothingPlaying": "Nothing playing",
     "progress": "Playback progress",
-    "playerVolume": "Player volume"
+    "playerVolume": "Current player volume",
+    "systemVolume": "System master volume"
   },
   "taskbar": {
     "player": "Muse Tune taskbar player",

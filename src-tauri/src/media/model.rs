@@ -13,7 +13,7 @@ pub struct MediaSessionSnapshot {
     pub timeline: Option<MediaTimeline>,
 }
 
-/// 当前播放器 Windows 应用音频会话的音量状态。
+/// Windows Core Audio 应用会话或系统端点的音量状态。
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaVolumeSnapshot {

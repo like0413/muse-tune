@@ -10,6 +10,7 @@ import type {
 export const MEDIA_SESSION_CHANGED_EVENT = 'media://session-changed'
 export const MEDIA_TIMELINE_CHANGED_EVENT = 'media://timeline-changed'
 export const MEDIA_VOLUME_CHANGED_EVENT = 'media://volume-changed'
+export const SYSTEM_VOLUME_CHANGED_EVENT = 'media://system-volume-changed'
 export const MEDIA_SPECTRUM_CHANGED_EVENT = 'media://spectrum-changed'
 
 export function getCurrentMediaSession(): Promise<MediaSessionSnapshot | null> {
@@ -40,6 +41,18 @@ export function setCurrentMediaVolume(level: number): Promise<MediaVolumeSnapsho
 
 export function toggleCurrentMediaMute(): Promise<MediaVolumeSnapshot> {
   return invoke<MediaVolumeSnapshot>('toggle_current_media_mute')
+}
+
+export function getSystemVolume(): Promise<MediaVolumeSnapshot | null> {
+  return invoke<MediaVolumeSnapshot | null>('get_system_volume')
+}
+
+export function setSystemVolume(level: number): Promise<MediaVolumeSnapshot> {
+  return invoke<MediaVolumeSnapshot>('set_system_volume', { level })
+}
+
+export function toggleSystemMute(): Promise<MediaVolumeSnapshot> {
+  return invoke<MediaVolumeSnapshot>('toggle_system_mute')
 }
 
 export function setMediaSpectrumEnabled(enabled: boolean, frameRate: number): Promise<void> {

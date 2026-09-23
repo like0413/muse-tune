@@ -6,7 +6,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 
 import { Button } from '@/components/ui/button'
 import { reportBackgroundFailure } from '@/features/feedback/errors'
-import { useApplicationVolume } from '@/features/media/useApplicationVolume'
+import { useVolumeControl } from '@/features/media/useVolumeControl'
 import {
   VOLUME_POPUP_CLOSE_EVENT,
   VOLUME_POPUP_HOVER_BRIDGE_MS,
@@ -26,7 +26,7 @@ const anchor = useTemplateRef<HTMLElement>('anchor')
 const triggerHovered = shallowRef(false)
 const popupHovered = shallowRef(false)
 const currentWindow = getCurrentWebviewWindow()
-const { volume, adjustLevel, toggleMuted } = useApplicationVolume()
+const { target, volume, adjustLevel, toggleMuted } = useVolumeControl()
 let closeTimer: ReturnType<typeof setTimeout> | undefined
 let unlistenPopupHover: UnlistenFn | undefined
 let disposed = false
@@ -79,7 +79,7 @@ function handlePointerLeave() {
   scheduleClose()
 }
 
-/** 将滚轮方向转换为 2% 的应用音量步进。 */
+/** 将滚轮方向转换为 2% 的当前控制对象音量步进。 */
 function handleWheel(event: WheelEvent) {
   if (event.deltaY === 0) return
   adjustLevel(event.deltaY < 0 ? 1 : -1)
@@ -122,7 +122,9 @@ onUnmounted(() => {
       :size="controlSize"
       class="taskbar-volume-control"
       type="button"
-      :aria-label="t('media.adjustVolume')"
+      :aria-label="
+        t(target === 'application' ? 'media.adjustPlayerVolume' : 'media.adjustSystemVolume')
+      "
       :disabled="!volume"
       @click="toggleMuted"
     >

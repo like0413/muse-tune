@@ -9,6 +9,7 @@ use super::SessionEntry;
 const MEDIA_SESSION_CHANGED_EVENT: &str = "media://session-changed";
 const MEDIA_TIMELINE_CHANGED_EVENT: &str = "media://timeline-changed";
 const MEDIA_VOLUME_CHANGED_EVENT: &str = "media://volume-changed";
+const SYSTEM_VOLUME_CHANGED_EVENT: &str = "media://system-volume-changed";
 
 /// 聚合完整快照发布所需的只读依赖，不拥有媒体 worker 状态。
 pub(super) struct MediaSnapshotPublisher<'a, R: Runtime> {
@@ -21,6 +22,16 @@ pub(super) struct MediaSnapshotPublisher<'a, R: Runtime> {
 pub(super) fn publish_volume<R: Runtime>(app: &AppHandle<R>, volume: Option<MediaVolumeSnapshot>) {
     if let Err(error) = app.emit(MEDIA_VOLUME_CHANGED_EVENT, volume) {
         log::warn!("向任务栏广播播放器应用音量失败: {error}");
+    }
+}
+
+/// 广播 Windows 默认播放设备的系统主音量。
+pub(super) fn publish_system_volume<R: Runtime>(
+    app: &AppHandle<R>,
+    volume: Option<MediaVolumeSnapshot>,
+) {
+    if let Err(error) = app.emit(SYSTEM_VOLUME_CHANGED_EVENT, volume) {
+        log::warn!("向任务栏广播系统主音量失败: {error}");
     }
 }
 

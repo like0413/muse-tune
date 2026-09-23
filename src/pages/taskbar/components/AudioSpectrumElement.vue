@@ -99,6 +99,11 @@ function drawSpectrum() {
   const frameIsSilent = bands.every((level) => level === 0)
   if (frameIsSilent && lastDrawnFrameWasSilent) return
   lastDrawnFrameWasSilent = frameIsSilent
+  if (frameIsSilent) {
+    // 原生零帧表示采集已确认静音；此时继续套用平滑会让底部残留最小像素柱。
+    smoothedLevels.fill(0)
+    barHeights.fill(0)
+  }
   const count = currentSettings.barCount
   // 间隙不超过每柱平均槽宽的 1/3，且最多 2px；柱宽保底 0.5、圆角不超过 2 且不超过半个柱宽，
   // 否则柱子变多或变窄时会被间隙吃光、或圆角把柱体削成非矩形。

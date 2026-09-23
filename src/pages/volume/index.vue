@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { Slider } from '@/components/ui/slider'
-import { useApplicationVolume } from '@/features/media/useApplicationVolume'
+import { useVolumeControl } from '@/features/media/useVolumeControl'
 import { useVolumePopupLifecycle } from '@/features/media/useVolumePopupLifecycle'
 import { VOLUME_POPUP_TRANSITION_MS } from '@/features/media/volume-popup'
 
 const { t } = useI18n({ useScope: 'global' })
 
-const { volume, setLevel, adjustLevel } = useApplicationVolume()
+const { target, volume, setLevel, adjustLevel } = useVolumeControl()
 const { themeColor, entered, publishHover } = useVolumePopupLifecycle()
 
 const percentage = computed(() => Math.round((volume.value?.level ?? 0) * 100))
@@ -45,7 +45,7 @@ function handleWheel(event: WheelEvent) {
         :max="100"
         :step="1"
         :disabled="!volume"
-        :aria-label="t('media.playerVolume')"
+        :aria-label="t(target === 'application' ? 'media.playerVolume' : 'media.systemVolume')"
         class="volume-slider min-h-0! flex-1"
       />
       <output class="mt-2 text-xs leading-none font-medium tabular-nums">{{ percentage }}</output>

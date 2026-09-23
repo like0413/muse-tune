@@ -97,6 +97,56 @@ pub async fn toggle_current_media_mute(
     .await
 }
 
+/// 返回 Windows 默认播放设备的系统主音量。
+#[tauri::command]
+pub async fn get_system_volume(
+    service: State<'_, MediaService>,
+) -> Result<Option<MediaVolumeSnapshot>, IpcError> {
+    let service = service.inner().clone();
+    run_blocking(
+        "media.get-system-volume",
+        "等待系统主音量失败",
+        move || service.system_volume(),
+    )
+    .await
+}
+
+/// 设置 Windows 默认播放设备的系统主音量。
+#[tauri::command]
+pub async fn set_system_volume(
+    level: f32,
+    service: State<'_, MediaService>,
+) -> Result<MediaVolumeSnapshot, IpcError> {
+    if !level.is_finite() {
+        return Err(IpcError::new(
+            "media.set-system-volume",
+            "音量值无效",
+            false,
+        ));
+    }
+    let service = service.inner().clone();
+    run_blocking(
+        "media.set-system-volume",
+        "等待系统主音量设置结果失败",
+        move || service.set_system_volume(level),
+    )
+    .await
+}
+
+/// 切换 Windows 默认播放设备的系统静音状态。
+#[tauri::command]
+pub async fn toggle_system_mute(
+    service: State<'_, MediaService>,
+) -> Result<MediaVolumeSnapshot, IpcError> {
+    let service = service.inner().clone();
+    run_blocking(
+        "media.toggle-system-mute",
+        "等待系统静音切换结果失败",
+        move || service.toggle_system_mute(),
+    )
+    .await
+}
+
 /// 启用或停止当前播放器的按进程音频频谱采集。
 #[tauri::command]
 pub async fn set_media_spectrum_enabled(

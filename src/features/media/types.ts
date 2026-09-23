@@ -73,7 +73,7 @@ export interface MediaSessionSnapshot {
 }
 
 export interface MediaVolumeSnapshot {
-  /** 应用音频会话的标量音量，原生侧钳制在 0–1；与静音相互独立，静音时该值不会归零。 */
+  /** Core Audio 标量音量，原生侧钳制在 0–1；与静音相互独立，静音时该值不会归零。 */
   level: number
   muted: boolean
 }

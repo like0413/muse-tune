@@ -111,7 +111,16 @@
         "visibleDescription": "顯示或隱藏整組播放控制按鈕",
         "buttons": "顯示的按鈕",
         "buttonsDescription": "選擇要顯示的按鈕，並拖曳調整排列順序",
-        "order": "控制按鈕順序"
+        "order": "控制按鈕順序",
+        "volumeTarget": "音量控制對象",
+        "volumeTargetDescription": "選擇調整目前播放器的獨立音訊工作階段，或 Windows 預設播放裝置的主音量",
+        "applicationVolume": "目前播放器音量",
+        "systemVolume": "系統主音量",
+        "volumeRestoreTitle": "恢復目前播放器音量？",
+        "volumeRestoreDescription": "切換為系統主音量後，工作列將不再調整目前播放器的獨立音量。是否先將其恢復為 100% 並解除靜音？",
+        "keepAndSwitch": "保留並切換",
+        "restoreAndSwitch": "恢復並切換",
+        "volumeRestoreFailed": "無法恢復目前播放器音量"
       },
       "cover": {
         "title": "封面",
@@ -378,10 +387,12 @@
     "next": "下一首",
     "volume": "音量",
     "controls": "播放控制",
-    "adjustVolume": "調整播放器音量",
+    "adjustPlayerVolume": "調整目前播放器音量",
+    "adjustSystemVolume": "調整系統主音量",
     "nothingPlaying": "暫無播放",
     "progress": "播放進度",
-    "playerVolume": "播放器音量"
+    "playerVolume": "目前播放器音量",
+    "systemVolume": "系統主音量"
   },
   "taskbar": {
     "player": "Muse Tune 工作列播放器",
