@@ -34,9 +34,9 @@ const { t } = useI18n({ useScope: 'global' })
     <BackgroundTransparencySetting />
 
     <div class="pl-2 text-sm font-bold">{{ t('settings.taskbar.groups.content') }}</div>
+    <LyricsDisplaySetting />
     <CoverSetting />
     <TrackInfoSetting />
-    <LyricsDisplaySetting />
     <ControlsSetting />
     <ProgressStyleSetting />
     <AudioSpectrumSetting />

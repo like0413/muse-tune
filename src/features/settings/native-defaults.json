@@ -9,14 +9,16 @@
     "displayTarget": "all",
     "lyrics": {
       "enabled": true,
+      "chineseVariant": "follow_interface",
       "networkPolicy": "auto",
-      "onlineStrategy": "parallel"
+      "onlineStrategy": "parallel",
+      "onlineSources": ["qq_music", "netease_cloud_music", "soda_music", "kugou_music"]
     }
   },
   "media": {
     "selectionStrategy": "recent_playback",
     "onlySupportedPlayers": true,
-    "supportedPlayers": ["qq_music", "netease_cloud_music", "soda_music", "kugou_music"]
+    "supportedPlayers": ["qq_music", "netease_cloud_music", "soda_music", "kugou_music", "spotify"]
   },
   "versions": {
     "application": {

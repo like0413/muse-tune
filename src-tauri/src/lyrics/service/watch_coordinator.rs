@@ -126,7 +126,7 @@ impl LyricsService {
         self.refresh_watchers();
         // 该播放器的本地结果已随配置变化作废；当前展示的正来自它时，缓存条目也会被一并清除。
         let cache_cleared = self.inner.runtime_state.read().is_ok_and(|state| {
-            state.snapshot.source.as_ref().is_some_and(|source| {
+            state.source_snapshot.source.as_ref().is_some_and(|source| {
                 source.player == player && source.kind == LyricsSourceKind::Local
             })
         });
@@ -174,11 +174,11 @@ impl LyricsService {
             .runtime_state
             .read()
             .ok()
-            .filter(|state| state.snapshot.track_key.as_ref() == Some(&track.key))
+            .filter(|state| state.source_snapshot.track_key.as_ref() == Some(&track.key))
             .map_or((None, false), |state| {
                 (
-                    state.snapshot.source.clone(),
-                    has_word_timing(&state.snapshot.lines),
+                    state.source_snapshot.source.clone(),
+                    has_word_timing(&state.source_snapshot.lines),
                 )
             });
         if !watch_root_changed
@@ -248,10 +248,17 @@ impl LyricsService {
 
     /// 比较播放器事件后的本地结果与当前快照，忽略仅触碰文件但内容未变的事件。
     fn current_snapshot_matches(&self, track_key: &str, local: &ResolvedLyrics) -> bool {
+        let local = crate::lyrics::chinese_conversion::convert_snapshot(
+            crate::lyrics::model::LyricsSnapshot::from_resolved(
+                track_key.to_owned(),
+                local.clone(),
+            ),
+            self.preferences().chinese_variant,
+        );
         self.inner.runtime_state.read().is_ok_and(|state| {
-            state.snapshot.track_key.as_deref() == Some(track_key)
-                && state.snapshot.source.as_ref() == Some(&local.source)
-                && state.snapshot.lines == local.lines
+            state.source_snapshot.track_key.as_deref() == Some(track_key)
+                && state.source_snapshot.source == local.source
+                && state.source_snapshot.lines == local.lines
         })
     }
 }

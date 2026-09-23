@@ -8,6 +8,8 @@ import {
 import type { CSSProperties, VNodeRef } from 'vue'
 
 import { reportBackgroundFailure } from '@/features/feedback/errors'
+import { getApplicationLocaleTag } from '@/features/i18n/locales'
+import { useConvertedChineseTexts } from '@/features/lyrics/useConvertedChineseTexts'
 import { useLyrics } from '@/features/lyrics/useLyrics'
 import { useTaskbarLyricsSettings } from '@/features/lyrics/useTaskbarLyricsSettings'
 import { toggleCurrentMediaPlayer } from '@/features/media/client'
@@ -19,6 +21,7 @@ import { useTaskbarAudioSpectrumSettings } from '@/features/settings/audio-spect
 import { TASKBAR_WIDTH_PRESETS } from '@/features/settings/bar-width'
 import { isTaskbarCoverVisibleInMode } from '@/features/settings/cover'
 import { normalizeTaskbarElementOrder } from '@/features/settings/element-order'
+import { resolveLyricsChineseVariant } from '@/features/settings/lyrics'
 import { useTaskbarAutoHide } from '@/features/taskbar/useTaskbarAutoHide'
 import { useTaskbarCoverAppearance } from '@/features/taskbar/useTaskbarCoverAppearance'
 import { useTaskbarDisplayedThumbnail } from '@/features/taskbar/useTaskbarDisplayedThumbnail'
@@ -36,12 +39,32 @@ import LyricsElement from './components/LyricsElement.vue'
 import PlaybackControlsElement from './components/PlaybackControlsElement.vue'
 import TrackInfoElement from './components/TrackInfoElement.vue'
 
-const { t } = useI18n({ useScope: 'global' })
+const { locale, t } = useI18n({ useScope: 'global' })
 const reducedMotion = useReducedMotionPreference()
 
 const { session: mediaSession, timeline, controlPending, control } = useMediaSession()
 const playbackStatus = computed(() => mediaSession.value?.playback.status ?? 'unknown')
 const { settings: lyricsSettings } = useTaskbarLyricsSettings()
+/** 歌曲信息和歌词使用同一实际字形目标，跟随界面时由当前语言决定。 */
+const effectiveChineseVariant = computed(() =>
+  resolveLyricsChineseVariant(
+    lyricsSettings.value.chineseVariant,
+    getApplicationLocaleTag(locale.value),
+  ),
+)
+const rawTrackTexts = computed(() => {
+  const metadata = mediaSession.value?.metadata
+  return [
+    metadata?.title || t('media.nothingPlaying'),
+    metadata?.artist || metadata?.albumArtist || metadata?.subtitle || '—',
+  ]
+})
+const { convertedTexts: trackTexts } = useConvertedChineseTexts(
+  rawTrackTexts,
+  effectiveChineseVariant,
+)
+const trackTitle = computed(() => trackTexts.value[0] ?? rawTrackTexts.value[0] ?? '')
+const trackArtist = computed(() => trackTexts.value[1] ?? rawTrackTexts.value[1] ?? '—')
 const { lyrics } = useLyrics(computed(() => lyricsSettings.value.enabled))
 const { settings: spectrumSettings, ready: spectrumSettingsReady } =
   useTaskbarAudioSpectrumSettings()
@@ -313,7 +336,8 @@ onMounted(refreshCoverAnchors)
           />
           <TrackInfoElement
             v-else-if="element === 'track-info'"
-            :session="mediaSession"
+            :title="trackTitle"
+            :artist="trackArtist"
             :active="!showLyrics"
           />
           <PlaybackControlsElement

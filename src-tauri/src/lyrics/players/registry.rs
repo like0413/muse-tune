@@ -17,7 +17,7 @@ use super::super::{
     track::TrackDescriptor,
 };
 use super::registry_watch::RegistryWatchHandle;
-use super::{kugou_music, netease_cloud_music, qq_music, soda_music};
+use super::{kugou_music, netease_cloud_music, qq_music, soda_music, spotify};
 
 type LookupResult = Result<LyricsLookupOutcome, LyricsError>;
 type LocalResolver = fn(&TrackDescriptor, Option<&Path>) -> LookupResult;
@@ -171,8 +171,8 @@ impl LyricsAdapter {
     }
 }
 
-/// 四个播放器只在此处登记一次，新增平台能力时不再同步维护多组分发表。
-pub(super) const ADAPTERS: [LyricsAdapter; 4] = [
+/// 播放器只在此处登记一次，新增平台能力时不再同步维护多组分发表。
+pub(super) const ADAPTERS: [LyricsAdapter; 5] = [
     LyricsAdapter {
         player: MediaPlayer::QqMusic,
         local: Some(LocalLyricsCapability {
@@ -239,6 +239,22 @@ pub(super) const ADAPTERS: [LyricsAdapter; 4] = [
             configuration_file_name: Some("KuGou.ini"),
             invalidate_local_index: Some(kugou_music::invalidate_local_index),
             changed_paths_affect_track: kugou_changed_paths_affect_track,
+            watch_registry_settings: None,
+        },
+        preview: None,
+    },
+    LyricsAdapter {
+        player: MediaPlayer::Spotify,
+        local: Some(LocalLyricsCapability {
+            resolve: resolve_spotify_local,
+        }),
+        online: None,
+        storage: LyricsStorageCapability {
+            discover_cache_path: spotify::automatic_cache_path,
+            additional_watch_paths: spotify::additional_watch_paths,
+            configuration_file_name: None,
+            invalidate_local_index: None,
+            changed_paths_affect_track: spotify_changed_paths_affect_track,
             watch_registry_settings: None,
         },
         preview: None,
@@ -318,6 +334,10 @@ fn resolve_kugou_online(
     kugou_music::resolve_online(track, client, deadline).map(completed_lookup)
 }
 
+fn resolve_spotify_local(track: &TrackDescriptor, cache_path: Option<&Path>) -> LookupResult {
+    spotify::resolve(track, cache_path).map(completed_lookup)
+}
+
 fn no_additional_watch_paths() -> Vec<PathBuf> {
     Vec::new()
 }
@@ -395,6 +415,16 @@ fn kugou_changed_paths_affect_track(
     _current_has_word_timing: bool,
 ) -> bool {
     kugou_music::changed_paths_affect_track(track, paths)
+}
+
+fn spotify_changed_paths_affect_track(
+    track: &TrackDescriptor,
+    cache_path: Option<&Path>,
+    paths: &[PathBuf],
+    current_source: Option<&LyricsSource>,
+    _current_has_word_timing: bool,
+) -> bool {
+    spotify::changed_paths_affect_track(track, cache_path, paths, current_source)
 }
 
 #[cfg(test)]

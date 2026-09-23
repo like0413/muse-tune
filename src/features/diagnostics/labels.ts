@@ -40,6 +40,7 @@ const precisionKeys: Record<LyricsPrecision, string> = {
 
 const resolutionSiteKeys: Record<LyricsResolutionSite, string> = {
   application_cache: 'diagnostics.lyrics.sites.applicationCache',
+  application_cache_variant: 'diagnostics.lyrics.sites.applicationCacheVariant',
   local: 'diagnostics.lyrics.sites.local',
   online: 'diagnostics.lyrics.sites.online',
   online_fallback: 'diagnostics.lyrics.sites.onlineFallback',

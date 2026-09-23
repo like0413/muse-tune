@@ -28,11 +28,13 @@ use crate::media::{MediaPlayer, MediaSessionSnapshot};
 use super::settings::LyricsPreferences;
 use super::{
     cache::{CacheLookup, ParsedLyricsCache},
+    chinese_conversion,
     error::LyricsError,
     matcher::MAX_DURATION_DIFFERENCE_MS,
     model::{
-        LyricsLookupOutcome, LyricsOnlineStrategy, LyricsResolutionMethod, LyricsResolutionRecord,
-        LyricsResolutionStep, LyricsResolutionTrack, LyricsSnapshot, LyricsStatus,
+        LyricsChineseVariant, LyricsLookupOutcome, LyricsOnlineStrategy, LyricsResolutionMethod,
+        LyricsResolutionRecord, LyricsResolutionStep, LyricsResolutionTrack, LyricsSnapshot,
+        LyricsStatus,
     },
     players,
     track::TrackDescriptor,
@@ -110,6 +112,8 @@ struct ResolutionRequest {
 
 #[derive(Default)]
 struct LyricsRuntimeState {
+    /// 当前已按设置转换的歌词；与磁盘缓存保持相同字形，设置切换时从这里即时重绘。
+    source_snapshot: LyricsSnapshot,
     snapshot: LyricsSnapshot,
     resolution_method: LyricsResolutionMethod,
     trace_generation: u64,
@@ -240,19 +244,21 @@ impl LyricsService {
         Ok((track, generation))
     }
 
-    /// 原子更新歌词开关、联网能力、在线调度策略与在线接口集合。
+    /// 原子更新歌词开关、中文输出目标、联网能力、在线调度策略与在线接口集合。
     ///
     /// 策略与接口集合只决定“后续怎么选来源”，不会重解析当前歌曲、也不清缓存；
     /// 总开关与联网开关决定“现在还能不能用某项能力”，因此立即生效。
     pub fn set_preferences(
         &self,
         enabled: bool,
+        chinese_variant: LyricsChineseVariant,
         allow_online: bool,
         online_strategy: LyricsOnlineStrategy,
         online_sources: Vec<MediaPlayer>,
     ) -> Result<(), Error> {
         let next = LyricsPreferences {
             enabled,
+            chinese_variant,
             allow_online,
             online_strategy,
             online_sources: online_sources.clone(),
@@ -271,6 +277,7 @@ impl LyricsService {
             previous
         };
         let enabled_changed = previous.enabled != enabled;
+        let chinese_variant_changed = previous.chinese_variant != chinese_variant;
         let online_changed = previous.allow_online != allow_online;
         if !enabled {
             let (track_key, generation) = {
@@ -299,6 +306,9 @@ impl LyricsService {
         // 在线策略与接口集合只决定“后续怎么选来源”：已经拿到的歌词继续沿用，也不清缓存，
         // 否则每切换一次配置就要为当前歌曲重跑一轮在线检索。
         if enabled_changed || online_changed {
+            self.force_resolve_current()
+        } else if chinese_variant_changed {
+            // 新一轮会先命中同一缓存键：简繁切换原位改写缓存；无法逆转为原文时再读取来源。
             self.force_resolve_current()
         } else {
             (self.inner.diagnostics_notifier)();
@@ -407,9 +417,11 @@ impl LyricsService {
             });
         // 有任何可展示的缓存就先展示，过期与否都一样：重新解析期间让用户继续看上一版结果，
         // 比先空白再补上更稳。它同时仍作为本轮候选，拿到更好的来源会被正常替换。
-        let cached = self.inner.cache.load(&track.key);
+        let mut cached = self.inner.cache.load(&track.key);
+        self.prepare_cached_variant(&mut cached, generation);
         let displayable_cache = cached
             .as_ref()
+            .filter(|cached| !cached.requires_original_refresh)
             .filter(|cached| is_cached_snapshot_displayable(&track, &cached.snapshot));
         if let Some(cached) = displayable_cache {
             self.publish_if_current_with_method(
@@ -421,6 +433,41 @@ impl LyricsService {
             self.publish_if_current(LyricsSnapshot::loading(track.key.clone()), generation);
         }
         self.enqueue_resolution(track, generation, cached, cache_cleared);
+    }
+
+    /// 让缓存字形与当前设置一致；转换只覆盖同一键，且不改变来源刷新时间。
+    fn prepare_cached_variant(&self, cached: &mut Option<CacheLookup>, generation: u64) {
+        let Some(entry) = cached.as_mut() else {
+            return;
+        };
+        let target = self.preferences().chinese_variant;
+        if entry.chinese_variant == target {
+            return;
+        }
+        if target == LyricsChineseVariant::Original {
+            entry.requires_original_refresh = true;
+            return;
+        }
+
+        let previous = entry.chinese_variant;
+        let (snapshot, text_converted) =
+            chinese_conversion::convert_snapshot_with_outcome(entry.snapshot.clone(), target);
+        entry.snapshot = snapshot;
+        entry.variant_text_converted = text_converted;
+        entry.variant_rewrite_succeeded = match self.inner.cache.rewrite_variant(
+            &entry.snapshot,
+            target,
+            generation,
+            entry.refreshed_at_seconds,
+        ) {
+            Ok(()) => true,
+            Err(error) => {
+                log::warn!("更新缓存歌词字形失败: {error}");
+                false
+            }
+        };
+        entry.chinese_variant = target;
+        entry.variant_updated_from = Some(previous);
     }
 
     /// 读取一致的歌词偏好快照；锁损坏时回退到兼容旧版本的默认值。

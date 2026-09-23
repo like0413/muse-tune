@@ -58,6 +58,7 @@ pub fn run() {
             commands::media::toggle_current_media_mute,
             commands::media::toggle_system_mute,
             commands::lyrics::get_current_lyrics,
+            commands::lyrics::convert_chinese_texts,
             commands::lyrics::set_lyrics_preferences,
             commands::system::list_system_fonts,
             commands::system::get_system_accent_color,

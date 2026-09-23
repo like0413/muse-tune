@@ -210,6 +210,10 @@ fn is_lyrics_source_path(path: &Path) -> bool {
         value.eq_ignore_ascii_case("QueueCache")
             || value.eq_ignore_ascii_case("KuGou.ini")
             || value.eq_ignore_ascii_case("playingList")
+            || value.eq_ignore_ascii_case("context_player_state_restore")
+            || matches!(value, "data_1" | "data_2" | "data_3")
+            || value.starts_with("f_")
+            || value.ends_with("-user")
             || is_netease_cache_name(value)
     }) {
         return true;

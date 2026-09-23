@@ -1,18 +1,20 @@
 use tauri::Runtime;
 use tauri_plugin_store::StoreExt;
 
-use crate::media::{MediaPlayer, supported_players};
-use crate::native_defaults::{self, LyricsNetworkPolicy};
+use crate::media::MediaPlayer;
+use crate::native_defaults::{self, LyricsChineseVariantPreference, LyricsNetworkPolicy};
 use crate::settings_store::PATH as SETTINGS_STORE_PATH;
 
-use super::model::LyricsOnlineStrategy;
+use super::model::{LyricsChineseVariant, LyricsOnlineStrategy};
 
 const LYRICS_DISPLAY_KEY: &str = "taskbar.lyrics";
+const APPLICATION_LOCALE_KEY: &str = "application.locale";
 
 /// 需要作为一个快照提交和读取的歌词运行偏好。
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct LyricsPreferences {
     pub(super) enabled: bool,
+    pub(super) chinese_variant: LyricsChineseVariant,
     pub(super) allow_online: bool,
     pub(super) online_strategy: LyricsOnlineStrategy,
     /// 参与在线检索的平台，顺序即尝试顺序；只含用户勾选过的平台。
@@ -25,9 +27,11 @@ impl Default for LyricsPreferences {
         let defaults = &native_defaults::shared().taskbar.lyrics;
         Self {
             enabled: defaults.enabled,
+            // 应用默认语言是简体中文；存储不可用时仍与前端默认行为一致。
+            chinese_variant: defaults.chinese_variant.resolve("zh-Hans"),
             allow_online: defaults.network_policy.allows_online(),
             online_strategy: defaults.online_strategy,
-            online_sources: supported_players().to_vec(),
+            online_sources: defaults.online_sources.clone(),
         }
     }
 }
@@ -42,9 +46,9 @@ impl Default for LyricsPreferences {
 pub(super) fn restore_lyrics_preferences<R: Runtime>(app: &tauri::App<R>) -> LyricsPreferences {
     let shared = native_defaults::shared();
     let defaults = &shared.taskbar.lyrics;
-    let value = app
-        .store(SETTINGS_STORE_PATH)
-        .ok()
+    let store = app.store(SETTINGS_STORE_PATH).ok();
+    let value = store
+        .as_ref()
         .and_then(|store| store.get(LYRICS_DISPLAY_KEY))
         .filter(|stored| {
             stored.get("version").and_then(serde_json::Value::as_u64)
@@ -56,6 +60,17 @@ pub(super) fn restore_lyrics_preferences<R: Runtime>(app: &tauri::App<R>) -> Lyr
         .get("enabled")
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(defaults.enabled);
+    let chinese_variant_preference = value
+        .get("chineseVariant")
+        .and_then(|variant| {
+            serde_json::from_value::<LyricsChineseVariantPreference>(variant.clone()).ok()
+        })
+        .unwrap_or(defaults.chinese_variant);
+    let locale = store
+        .as_ref()
+        .and_then(|store| store.get(APPLICATION_LOCALE_KEY))
+        .and_then(|locale| locale.as_str().map(str::to_owned))
+        .unwrap_or_else(|| "zh-Hans".to_owned());
     let allow_online = value
         .get("networkPolicy")
         .and_then(|policy| serde_json::from_value::<LyricsNetworkPolicy>(policy.clone()).ok())
@@ -68,6 +83,7 @@ pub(super) fn restore_lyrics_preferences<R: Runtime>(app: &tauri::App<R>) -> Lyr
     let online_sources = restore_online_sources(&value);
     LyricsPreferences {
         enabled,
+        chinese_variant: chinese_variant_preference.resolve(&locale),
         allow_online,
         online_strategy,
         online_sources,
@@ -76,10 +92,14 @@ pub(super) fn restore_lyrics_preferences<R: Runtime>(app: &tauri::App<R>) -> Lyr
 
 /// 由持久化的“完整顺序 + 启用集合”解析出实际参与检索的平台。
 ///
-/// 规则与前端 `normalizeTaskbarLyricsSettings` 保持一致：顺序先补齐为全部已接入平台各一次，
+/// 规则与前端 `normalizeTaskbarLyricsSettings` 保持一致：顺序先补齐为全部在线平台各一次，
 /// 再与启用集合求交并保持顺序；任一项缺失或损坏时按“全部平台都启用”回退。
 fn restore_online_sources(value: &serde_json::Value) -> Vec<MediaPlayer> {
-    let supported = supported_players();
+    let supported = native_defaults::shared()
+        .taskbar
+        .lyrics
+        .online_sources
+        .as_slice();
     let order = value
         .get("onlineSourceOrder")
         .and_then(|order| serde_json::from_value::<Vec<MediaPlayer>>(order.clone()).ok())

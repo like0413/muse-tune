@@ -2,7 +2,10 @@ use std::collections::BTreeSet;
 
 use strsim::normalized_levenshtein;
 
-use super::track::{TrackDescriptor, normalize_text, split_artists};
+use super::{
+    chinese_conversion::{simplify_for_matching, simplify_owned_for_matching},
+    track::{TrackDescriptor, normalize_text, split_artists},
+};
 
 const VERSION_MARKERS: [(&str, &[&str]); 14] = [
     ("live", &["live", "现场"]),
@@ -37,15 +40,19 @@ pub struct TrackMatchKey<'a> {
     track: &'a TrackDescriptor,
     normalized_title: String,
     title_char_count: usize,
+    normalized_artists: BTreeSet<String>,
+    version_markers: BTreeSet<&'static str>,
 }
 
 impl<'a> TrackMatchKey<'a> {
-    /// 一次算好逐候选都需要的当前歌曲归一化标题。
+    /// 一次算好逐候选都需要的当前歌曲标题、歌手和版本标记。
     pub fn new(track: &'a TrackDescriptor) -> Self {
-        let normalized_title = normalize_text(&track.title);
+        let normalized_title = normalize_match_text(&track.title);
         Self {
             title_char_count: normalized_title.chars().count(),
             normalized_title,
+            normalized_artists: normalized_artist_set(&track.artists),
+            version_markers: version_markers(&track.title),
             track,
         }
     }
@@ -53,7 +60,7 @@ impl<'a> TrackMatchKey<'a> {
     /// 仅接受高置信度且不存在版本冲突的候选。
     pub fn score(&self, candidate: SongCandidate<'_>) -> Option<u8> {
         let track_title = &self.normalized_title;
-        let candidate_title = normalize_text(candidate.title);
+        let candidate_title = normalize_match_text(candidate.title);
         if track_title.is_empty() || candidate_title.is_empty() {
             return None;
         }
@@ -65,24 +72,24 @@ impl<'a> TrackMatchKey<'a> {
         let title_similarity = normalized_levenshtein(track_title, &candidate_title);
         // 只拒绝“候选引入了当前标题没有的版本语义”（例如当前是原版、候选是伴奏/现场版），
         // 这样既挡住误匹配到其他发行版的风险，又不会因为平台侧漏标某个标记而丢掉正确歌词。
-        let track_markers = version_markers(&self.track.title);
+        let track_markers = &self.version_markers;
         let candidate_markers = version_markers(candidate.title);
         if title_similarity < REQUIRED_TITLE_SIMILARITY
-            || !candidate_markers.is_subset(&track_markers)
+            || !candidate_markers.is_subset(track_markers)
         {
             return None;
         }
         // 候选缺少当前标题的标记时（如当前是现场版、平台标题未标注），版本语义依然不同：
         // 单看标题无法与“另一个发行版”区分，但时长可以，因此后面只允许时长几乎一致。
-        let version_markers_match = candidate_markers == track_markers;
+        let version_markers_match = &candidate_markers == track_markers;
 
-        let track_artists = normalized_artist_set(&self.track.artists);
+        let track_artists = &self.normalized_artists;
         let candidate_artists = normalized_artist_set(candidate.artists);
         let artist_score = if track_artists.is_empty() {
             // 播放器未提供艺术家（本地文件、浏览器播放等）时不能凭此直接拒绝，
             // 改由更严格的标题与时长要求承担判别。
             0
-        } else if track_artists == candidate_artists {
+        } else if track_artists == &candidate_artists {
             30
         } else if !track_artists.is_disjoint(&candidate_artists) {
             20
@@ -112,7 +119,7 @@ impl<'a> TrackMatchKey<'a> {
         let exact_without_duration = duration_score == 0
             && title_similarity == 1.0
             && !track_artists.is_empty()
-            && track_artists == candidate_artists;
+            && track_artists == &candidate_artists;
         (score >= required_score || exact_without_duration).then_some(score)
     }
 }
@@ -133,13 +140,13 @@ fn normalized_artist_set(artists: &[String]) -> BTreeSet<String> {
     artists
         .iter()
         .flat_map(|artist| split_artists(artist))
-        .map(|artist| normalize_text(&artist))
+        .map(|artist| normalize_match_text(&artist))
         .filter(|artist| !artist.is_empty())
         .collect()
 }
 
 fn version_markers(value: &str) -> BTreeSet<&'static str> {
-    let normalized = value.to_lowercase();
+    let normalized = simplify_for_matching(value).to_lowercase();
     let ascii_words = normalized
         .split(|character: char| !character.is_ascii_alphanumeric())
         .filter(|part| !part.is_empty())
@@ -159,6 +166,11 @@ fn version_markers(value: &str) -> BTreeSet<&'static str> {
         })
         .map(|(marker, _)| marker)
         .collect()
+}
+
+/// 在原有格式归一化之后折叠简繁差异，避免跨平台候选被字形差异拒绝。
+fn normalize_match_text(value: &str) -> String {
+    simplify_owned_for_matching(normalize_text(value))
 }
 
 #[cfg(test)]
@@ -202,6 +214,15 @@ mod tests {
         let current = track("夜曲", &["周杰伦"], Some(200_000));
         assert_eq!(
             score(&current, "夜曲", &["周杰伦"], Some(200_000)),
+            Some(100)
+        );
+    }
+
+    #[test]
+    fn traditional_metadata_matches_simplified_candidate() {
+        let current = track("擱淺", &["周杰倫"], Some(238_000));
+        assert_eq!(
+            score(&current, "搁浅", &["周杰伦"], Some(240_000)),
             Some(100)
         );
     }

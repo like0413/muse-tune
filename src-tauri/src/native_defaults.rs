@@ -10,7 +10,7 @@
 
 use std::sync::LazyLock;
 
-use crate::lyrics::LyricsOnlineStrategy;
+use crate::lyrics::{LyricsChineseVariant, LyricsOnlineStrategy};
 use crate::media::{MediaPlayer, MediaSessionSelectionStrategy};
 use crate::taskbar::{TaskbarOverlapPriority, TaskbarPlacement, TaskbarWidthMode};
 
@@ -22,6 +22,28 @@ const SHARED_DEFAULTS: &str = include_str!("../../src/features/settings/native-d
 pub enum LyricsNetworkPolicy {
     Auto,
     LocalOnly,
+}
+
+/// `taskbar.lyrics.chineseVariant` 的持久化取值。
+#[derive(Clone, Copy, Debug, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LyricsChineseVariantPreference {
+    FollowInterface,
+    Simplified,
+    Traditional,
+}
+
+impl LyricsChineseVariantPreference {
+    /// 把“跟随界面”解析成后端实际输出目标；非中文界面保留歌词原文。
+    pub fn resolve(self, locale: &str) -> LyricsChineseVariant {
+        match self {
+            Self::Simplified => LyricsChineseVariant::Simplified,
+            Self::Traditional => LyricsChineseVariant::Traditional,
+            Self::FollowInterface if locale == "zh-Hans" => LyricsChineseVariant::Simplified,
+            Self::FollowInterface if locale == "zh-Hant" => LyricsChineseVariant::Traditional,
+            Self::FollowInterface => LyricsChineseVariant::Original,
+        }
+    }
 }
 
 impl LyricsNetworkPolicy {
@@ -72,8 +94,11 @@ pub struct TaskbarDefaults {
 #[serde(rename_all = "camelCase")]
 pub struct LyricsDefaults {
     pub enabled: bool,
+    pub chinese_variant: LyricsChineseVariantPreference,
     pub network_policy: LyricsNetworkPolicy,
     pub online_strategy: LyricsOnlineStrategy,
+    /// 真正具备在线解析能力的平台；本地-only 播放器不能进入在线接口设置。
+    pub online_sources: Vec<MediaPlayer>,
 }
 
 /// 媒体服务在前端推送到达前使用的会话选择策略。
@@ -139,6 +164,22 @@ mod tests {
             assert!(
                 !seen.contains(player),
                 "{player:?} 在共享平台列表里重复出现"
+            );
+            seen.push(*player);
+        }
+    }
+
+    /// 本地-only 播放器不能进入在线接口列表，且在线平台必须属于已接入播放器。
+    #[test]
+    fn online_lyrics_sources_are_supported_and_unique() {
+        let sources = &shared().taskbar.lyrics.online_sources;
+        let supported = supported_players();
+        let mut seen = Vec::new();
+        for player in sources {
+            assert!(supported.contains(player), "{player:?} 尚未接入媒体播放器");
+            assert!(
+                !seen.contains(player),
+                "{player:?} 在在线歌词列表里重复出现"
             );
             seen.push(*player);
         }

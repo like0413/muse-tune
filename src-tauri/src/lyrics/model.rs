@@ -66,6 +66,16 @@ pub enum LyricsOnlineStrategy {
     CurrentPlayerOnly,
 }
 
+/// 歌词中文字形的实际输出目标；`Original` 表示保留来源原文。
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LyricsChineseVariant {
+    #[default]
+    Original,
+    Simplified,
+    Traditional,
+}
+
 /// 解析步骤的来源标识。
 ///
 /// 这里只输出稳定的机器键，展示文案由前端按语言组装：Rust 直接产出中文会让界面文案无法
@@ -75,6 +85,8 @@ pub enum LyricsOnlineStrategy {
 pub enum LyricsResolutionSite {
     /// 应用自身的解析结果缓存。
     ApplicationCache,
+    /// 命中缓存后按当前设置原位改写简繁字形。
+    ApplicationCacheVariant,
     /// 当前播放器的本地歌词。
     Local,
     /// 当前播放器的在线歌词。

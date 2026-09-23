@@ -5,7 +5,10 @@
 
 use std::sync::atomic::Ordering;
 
-use crate::lyrics::model::{LyricsResolutionMethod, LyricsSnapshot, LyricsStatus};
+use crate::lyrics::{
+    chinese_conversion::convert_snapshot,
+    model::{LyricsResolutionMethod, LyricsSnapshot, LyricsStatus},
+};
 
 use super::LyricsService;
 
@@ -54,8 +57,14 @@ impl LyricsService {
         if !self.current_generation_matches(generation) {
             return;
         }
+        let chinese_variant = self.preferences().chinese_variant;
+        let snapshot = convert_snapshot(snapshot, chinese_variant);
         // 磁盘写入是本流程最慢的一步，移出歌曲身份锁，避免阻塞媒体监控线程更新当前歌曲。
-        if let Err(error) = self.inner.cache.store(&snapshot, generation) {
+        if let Err(error) = self
+            .inner
+            .cache
+            .store(&snapshot, chinese_variant, generation)
+        {
             log::warn!("保存解析后歌词缓存失败: {error}");
         }
         // 写入期间可能已经切歌，发布前重新校验，避免把过期结果广播出去。
@@ -94,7 +103,11 @@ impl LyricsService {
     }
 
     fn publish(&self, snapshot: LyricsSnapshot, resolution_method: LyricsResolutionMethod) {
+        let source_snapshot = snapshot.clone();
         let snapshot_changed = self.inner.runtime_state.write().map_or(true, |mut state| {
+            if state.source_snapshot != source_snapshot {
+                state.source_snapshot = source_snapshot;
+            }
             let changed = state.snapshot != snapshot;
             if changed {
                 state.snapshot.clone_from(&snapshot);

@@ -6,6 +6,7 @@ import { neteaseCloudMusicPresentation } from './netease-cloud-music'
 import { otherPlayerPresentation } from './other'
 import { qqMusicPresentation } from './qq-music'
 import { sodaMusicPresentation } from './soda-music'
+import { spotifyPresentation } from './spotify'
 import type { MediaPlayerPresentation } from './types'
 
 const playerPresentations: Record<MediaPlayer, MediaPlayerPresentation> = {
@@ -13,6 +14,7 @@ const playerPresentations: Record<MediaPlayer, MediaPlayerPresentation> = {
   netease_cloud_music: neteaseCloudMusicPresentation,
   soda_music: sodaMusicPresentation,
   kugou_music: kugouMusicPresentation,
+  spotify: spotifyPresentation,
   other: otherPlayerPresentation,
 }
 

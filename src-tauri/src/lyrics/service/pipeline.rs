@@ -205,6 +205,7 @@ pub(super) const fn player_label(player: MediaPlayer) -> &'static str {
         MediaPlayer::NeteaseCloudMusic => "网易云音乐",
         MediaPlayer::SodaMusic => "汽水音乐",
         MediaPlayer::KugouMusic => "酷狗音乐",
+        MediaPlayer::Spotify => "Spotify",
         MediaPlayer::Other => "其他播放器",
     }
 }

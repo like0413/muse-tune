@@ -5,6 +5,7 @@ mod qq_music;
 mod registry;
 mod registry_watch;
 mod soda_music;
+mod spotify;
 
 use std::{
     path::{Path, PathBuf},

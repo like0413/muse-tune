@@ -92,6 +92,7 @@ pub enum MediaPlayer {
     NeteaseCloudMusic,
     SodaMusic,
     KugouMusic,
+    Spotify,
     #[default]
     Other,
 }

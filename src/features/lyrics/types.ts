@@ -18,9 +18,12 @@ export type LyricsPrecision = 'word' | 'line'
 export type LyricsSourceKind = 'local' | 'online'
 export type LyricsResolutionMethod = 'none' | 'application_cache' | 'player_local' | 'online'
 export type LyricsResolutionOutcome = 'hit' | 'miss' | 'error'
+/** 后端实际执行的中文字形输出目标。 */
+export type LyricsChineseVariant = 'original' | 'simplified' | 'traditional'
 /** 解析步骤的来源标识；展示文案由前端按当前语言组装。 */
 export type LyricsResolutionSite =
   | 'application_cache'
+  | 'application_cache_variant'
   | 'local'
   | 'online'
   | 'online_fallback'

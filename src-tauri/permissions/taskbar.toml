@@ -16,6 +16,7 @@ commands.allow = [
   "set_media_spectrum_enabled",
   "set_media_session_selection_policy",
   "get_current_lyrics",
+  "convert_chinese_texts",
   "set_lyrics_preferences",
   "get_system_accent_color",
   "get_system_foreground_color",

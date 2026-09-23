@@ -10,10 +10,11 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { notifySettingSaveFailed } from '@/features/feedback/errors'
+import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import { applyApplicationLocale } from '@/features/i18n'
 import { isApplicationLocale, type ApplicationLocale } from '@/features/i18n/locales'
 import { setApplicationLocale } from '@/features/i18n/settings'
+import { syncTaskbarLyricsChineseVariant } from '@/features/settings/lyrics'
 
 const { locale, t } = useI18n({ useScope: 'global' })
 const localeSaving = shallowRef(false)
@@ -26,6 +27,11 @@ async function selectLocale(value: string | number) {
   localeSaving.value = true
   try {
     await setApplicationLocale(value)
+    try {
+      await syncTaskbarLyricsChineseVariant(value)
+    } catch (error) {
+      reportBackgroundFailure('同步歌词中文字形失败', error)
+    }
   } catch (error) {
     applyApplicationLocale(previousLocale)
     notifySettingSaveFailed(t('settings.general.language.title'), error)

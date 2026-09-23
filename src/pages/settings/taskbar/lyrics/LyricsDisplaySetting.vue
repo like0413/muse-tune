@@ -6,6 +6,7 @@ import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components
 import { Switch } from '@/components/ui/switch'
 import { useLyricsDisplaySetting } from '@/features/settings/controllers/useLyricsDisplaySetting'
 
+import LyricsLanguageSettings from './LyricsLanguageSettings.vue'
 import LyricsLayoutSettings from './LyricsLayoutSettings.vue'
 import LyricsSourceSettings from './LyricsSourceSettings.vue'
 import LyricsTimingSettings from './LyricsTimingSettings.vue'
@@ -49,6 +50,11 @@ const {
           @update-settings="updateSettings"
           @preview-font-size="previewFontSize"
           @commit-font-size="commitFontSize"
+        />
+        <LyricsLanguageSettings
+          :settings="selectedSettings"
+          :saving="settingsSaving"
+          @update-settings="updateSettings"
         />
         <LyricsTimingSettings
           :settings="selectedSettings"

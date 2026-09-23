@@ -209,6 +209,11 @@
         "translationOnly": "僅翻譯",
         "nextLine": "下一句",
         "translationFirst": "翻譯優先",
+        "chineseVariant": "中文簡繁",
+        "chineseVariantDescription": "轉換歌曲名稱、歌手和歌詞中的簡繁字形；跟隨介面時，英文介面保留來源原文",
+        "followInterface": "跟隨介面",
+        "simplified": "簡體",
+        "traditional": "繁體",
         "wordHighlight": "逐字醒目提示",
         "wordHighlightDescription": "僅對包含逐字時間軸的歌詞生效",
         "alignmentDescription": "調整歌詞在可用區域內的水平位置",
@@ -259,7 +264,7 @@
         "windows": "跟隨 Windows",
         "fixed": "固定播放器優先順序",
         "supportedOnly": "忽略其他媒體",
-        "supportedOnlyDescription": "僅接收 QQ 音樂、網易雲音樂、汽水音樂與酷狗音樂的媒體工作階段",
+        "supportedOnlyDescription": "僅接收 QQ 音樂、網易雲音樂、汽水音樂、酷狗音樂與 Spotify 的媒體工作階段",
         "priority": "播放器優先順序",
         "priorityDescription": "多個播放器同時播放時，優先顯示清單中較前面的播放器"
       },
@@ -505,7 +510,7 @@
     },
     "adapters": {
       "title": "播放器配接器",
-      "description": "四家目前版本播放器的自動目錄發現與檔案事件監聽",
+      "description": "五家目前版本播放器的自動目錄發現與檔案事件監聽",
       "notDiscovered": "未自動發現目錄",
       "available": "目錄可用",
       "unavailable": "目錄不可用",
@@ -574,6 +579,7 @@
       "parallelCount": "{count} 項並行",
       "sites": {
         "applicationCache": "Muse Tune 快取",
+        "applicationCacheVariant": "快取歌詞簡繁轉換",
         "local": "目前播放器本機",
         "online": "目前播放器線上",
         "onlineFallback": "備用平台線上",

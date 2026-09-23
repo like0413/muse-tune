@@ -209,6 +209,11 @@
         "translationOnly": "Translation only",
         "nextLine": "Next line",
         "translationFirst": "Translation first",
+        "chineseVariant": "Chinese text",
+        "chineseVariantDescription": "Convert the song title, artist, and lyrics between Simplified and Traditional Chinese; Follow interface preserves source text when the interface is in English",
+        "followInterface": "Follow interface",
+        "simplified": "Simplified",
+        "traditional": "Traditional",
         "wordHighlight": "Word highlighting",
         "wordHighlightDescription": "Available only for lyrics that include word-level timing",
         "alignmentDescription": "Align lyrics within the available horizontal space",
@@ -259,7 +264,7 @@
         "windows": "Follow Windows",
         "fixed": "Fixed player priority",
         "supportedOnly": "Ignore unsupported media",
-        "supportedOnlyDescription": "Use media sessions only from QQ Music, NetEase Cloud Music, Soda Music, and Kugou Music",
+        "supportedOnlyDescription": "Use media sessions only from QQ Music, NetEase Cloud Music, Soda Music, Kugou Music, and Spotify",
         "priority": "Player priority",
         "priorityDescription": "When multiple players are playing, choose the first one in this list"
       },
@@ -508,7 +513,7 @@
     },
     "adapters": {
       "title": "Player adapters",
-      "description": "Automatic folder discovery and file event watching for the four supported players",
+      "description": "Automatic folder discovery and file event watching for the five supported players",
       "notDiscovered": "Folder not discovered automatically",
       "available": "Folder available",
       "unavailable": "Folder unavailable",
@@ -577,6 +582,7 @@
       "parallelCount": "{count} concurrent",
       "sites": {
         "applicationCache": "Muse Tune cache",
+        "applicationCacheVariant": "Cached lyric script conversion",
         "local": "Current player local",
         "online": "Current player online",
         "onlineFallback": "Fallback player online",

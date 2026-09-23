@@ -79,12 +79,16 @@ impl LyricsService {
             &preferences.online_sources,
         );
         let cache_timeline_validation = cached.as_ref().and_then(|cached| {
+            if cached.requires_original_refresh {
+                return None;
+            }
             (cached.snapshot.status == LyricsStatus::Ready)
                 .then(|| validate_timeline(&track, &cached.snapshot.lines))
         });
-        let cached_snapshot_displayable = cached
-            .as_ref()
-            .is_some_and(|cached| is_cached_snapshot_displayable(&track, &cached.snapshot));
+        let cached_snapshot_displayable = cached.as_ref().is_some_and(|cached| {
+            !cached.requires_original_refresh
+                && is_cached_snapshot_displayable(&track, &cached.snapshot)
+        });
         let cache_source_mismatch = cached
             .as_ref()
             .is_some_and(|cached| cache_source_differs_from_player(&cached.snapshot, track.player));
@@ -109,6 +113,36 @@ impl LyricsService {
                 },
             )),
         );
+        if let Some(cached) = cached.as_ref() {
+            if let Some(previous) = cached.variant_updated_from {
+                self.record_resolution_step(
+                    generation,
+                    LyricsResolutionSite::ApplicationCacheVariant,
+                    if cached.variant_rewrite_succeeded {
+                        LyricsResolutionOutcome::Hit
+                    } else {
+                        LyricsResolutionOutcome::Error
+                    },
+                    Some(describe_variant_update(
+                        previous,
+                        cached.chinese_variant,
+                        cached.variant_text_converted,
+                        cached.variant_rewrite_succeeded,
+                    )),
+                );
+            } else if cached.requires_original_refresh {
+                self.record_resolution_step(
+                    generation,
+                    LyricsResolutionSite::ApplicationCacheVariant,
+                    LyricsResolutionOutcome::Miss,
+                    Some(format!(
+                        "缓存为{}，无法无损恢复来源原文，继续从歌词来源重新解析",
+                        chinese_variant_label(cached.chinese_variant)
+                    )),
+                );
+            }
+        }
+        let cached = cached.filter(|cached| !cached.requires_original_refresh);
         // 过期或跨平台的语义结论（纯音乐 / 没有歌词）不携带歌词行，无法参与候选排序，
         // 但仍保留为最终兜底：否则后续来源全未命中时会退化成更弱的通用结论。
         let fallback_notice = cached
@@ -152,6 +186,12 @@ impl LyricsService {
                     LyricsResolutionMethod::ApplicationCache,
                 );
                 if !self.is_current_generation(generation) {
+                    return;
+                }
+
+                // Spotify 没有对应的官方在线适配器；Muse Tune 缓存已可直接展示时，
+                // 再向其他平台检索只会重复匹配同一歌曲，并增加请求与歌词跳变风险。
+                if track.player == crate::media::MediaPlayer::Spotify {
                     return;
                 }
 
@@ -524,6 +564,42 @@ fn cache_miss_detail(cleared: bool) -> String {
     }
 }
 
+/// 缓存字形名称只用于诊断说明，不进入可本地化的步骤标题。
+const fn chinese_variant_label(
+    variant: crate::lyrics::model::LyricsChineseVariant,
+) -> &'static str {
+    match variant {
+        crate::lyrics::model::LyricsChineseVariant::Original => "来源原文",
+        crate::lyrics::model::LyricsChineseVariant::Simplified => "简体",
+        crate::lyrics::model::LyricsChineseVariant::Traditional => "繁体",
+    }
+}
+
+fn describe_variant_update(
+    previous: crate::lyrics::model::LyricsChineseVariant,
+    target: crate::lyrics::model::LyricsChineseVariant,
+    text_converted: bool,
+    persisted: bool,
+) -> String {
+    let detail = if text_converted {
+        format!(
+            "{} → {}，本次直接使用转换后的歌词",
+            chinese_variant_label(previous),
+            chinese_variant_label(target)
+        )
+    } else {
+        format!(
+            "检测到歌词已经是{}，正文未转换",
+            chinese_variant_label(target)
+        )
+    };
+    if persisted {
+        format!("{detail}；已更新同一缓存项的字形标记，未新增副本")
+    } else {
+        format!("{detail}；覆盖原缓存失败，下次命中会重试")
+    }
+}
+
 /// 缓存来源是否与当前播放器不同；无来源的旧缓存不凭空推断平台。
 fn cache_source_differs_from_player(
     snapshot: &LyricsSnapshot,
@@ -543,6 +619,12 @@ fn describe_cache_step(
     displayable: bool,
     allow_online: bool,
 ) -> String {
+    if cached.requires_original_refresh {
+        return format!(
+            "已读取，缓存字形为{}，当前设置要求来源原文",
+            chinese_variant_label(cached.chinese_variant)
+        );
+    }
     let detail = if let Some(label) = notice_status_label(cached.snapshot.status) {
         if cached.is_fresh {
             format!("已确认{label}，有效期内")
@@ -663,6 +745,12 @@ mod tests {
             },
             is_fresh: true,
             needs_revalidation: false,
+            chinese_variant: crate::lyrics::model::LyricsChineseVariant::Original,
+            refreshed_at_seconds: 0,
+            variant_updated_from: None,
+            variant_text_converted: false,
+            variant_rewrite_succeeded: false,
+            requires_original_refresh: false,
         };
 
         let detail = describe_cache_step(

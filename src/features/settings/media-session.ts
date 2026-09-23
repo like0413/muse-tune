@@ -41,7 +41,7 @@ export function isMediaSessionSelectionStrategy(
   )
 }
 
-/** 将损坏或旧版配置规范为完整策略，并补齐四家播放器。 */
+/** 将损坏或旧版配置规范为完整策略，并补齐全部已接入播放器。 */
 export function normalizeMediaSessionSelectionPolicy(value: unknown): MediaSessionSelectionPolicy {
   const candidate = typeof value === 'object' && value !== null ? value : {}
   const record = candidate as Partial<Record<keyof MediaSessionSelectionPolicy, unknown>>

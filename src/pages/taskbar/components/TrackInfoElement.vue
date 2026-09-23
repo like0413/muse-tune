@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useEventState } from '@/features/ipc/useEventState'
-import type { MediaSessionSnapshot } from '@/features/media/types'
 import {
   DEFAULT_TASKBAR_TRACK_INFO_ALIGNMENT,
   DEFAULT_TASKBAR_TRACK_INFO_SCROLLING,
@@ -15,7 +14,8 @@ import {
 import ScrollingTrackTitle from './ScrollingTrackTitle.vue'
 
 const props = defineProps<{
-  session: MediaSessionSnapshot | null
+  title: string
+  artist: string
   /** 所在内容层是否可见；仅在可见时才继续运行标题滚动动画。 */
   active: boolean
 }>()
@@ -43,18 +43,6 @@ const visible = useEventState(
   },
   true,
 )
-
-/** 歌手字段缺失时依次使用专辑歌手与副标题，最后显示空态。 */
-const artist = computed(
-  () =>
-    props.session?.metadata.artist ||
-    props.session?.metadata.albumArtist ||
-    props.session?.metadata.subtitle ||
-    '—',
-)
-
-const { t } = useI18n({ useScope: 'global' })
-const title = computed(() => props.session?.metadata.title || t('media.nothingPlaying'))
 </script>
 
 <template>
@@ -65,12 +53,12 @@ const title = computed(() => props.session?.metadata.title || t('media.nothingPl
   >
     <ScrollingTrackTitle
       class="text-sm font-medium text-(--taskbar-active-foreground)"
-      :text="title"
+      :text="props.title"
       :scrolling="scrolling"
       :active="active"
     />
     <span class="max-w-full truncate text-xs text-(--taskbar-active-secondary-foreground)">{{
-      artist
+      props.artist
     }}</span>
   </div>
 </template>

@@ -4,6 +4,7 @@ mod kugou_music;
 mod netease_cloud_music;
 mod qq_music;
 mod soda_music;
+mod spotify;
 
 use std::time::Duration;
 
@@ -41,11 +42,12 @@ trait PlayerAdapter: Sync {
     }
 }
 
-static ADAPTERS: [&dyn PlayerAdapter; 4] = [
+static ADAPTERS: [&dyn PlayerAdapter; 5] = [
     &qq_music::QQ_MUSIC,
     &netease_cloud_music::NETEASE_CLOUD_MUSIC,
     &soda_music::SODA_MUSIC,
     &kugou_music::KUGOU_MUSIC,
+    &spotify::SPOTIFY,
 ];
 
 /// 已识别的播放器及其专属适配器。

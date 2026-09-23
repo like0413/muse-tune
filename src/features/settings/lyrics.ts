@@ -2,11 +2,17 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { emit, listen } from '@tauri-apps/api/event'
 import { isEqual, uniq } from 'es-toolkit'
 
+import type { ApplicationLocale } from '@/features/i18n/locales'
+import { getApplicationLocale } from '@/features/i18n/settings'
 import { setLyricsPreferences } from '@/features/lyrics/client'
-import { LYRICS_ONLINE_STRATEGIES, type LyricsOnlineStrategy } from '@/features/lyrics/types'
+import {
+  LYRICS_ONLINE_STRATEGIES,
+  type LyricsChineseVariant,
+  type LyricsOnlineStrategy,
+} from '@/features/lyrics/types'
 import type { MediaPlayer } from '@/features/media/types'
 
-import { DEFAULT_TASKBAR_LYRICS_SETTINGS, SUPPORTED_MEDIA_PLAYERS } from './defaults'
+import { DEFAULT_TASKBAR_LYRICS_SETTINGS, ONLINE_LYRICS_SOURCES } from './defaults'
 import { normalizeIntegerInRange } from './normalize'
 import { SETTINGS_SCHEMA_VERSIONS } from './storage/schema-versions'
 import { loadVersionedSetting, setVersionedSetting } from './storage/versioned-setting'
@@ -18,6 +24,7 @@ const TASKBAR_LYRICS_ALIGNMENTS = ['left', 'center', 'right'] as const
 const TASKBAR_LYRICS_LINE_MODES = ['single', 'double'] as const
 const TASKBAR_LYRICS_SECONDARY_LINES = ['translation_only', 'next', 'translation_or_next'] as const
 const TASKBAR_LYRICS_NETWORK_POLICIES = ['auto', 'local_only'] as const
+const TASKBAR_LYRICS_CHINESE_VARIANTS = ['follow_interface', 'simplified', 'traditional'] as const
 const TASKBAR_LYRICS_ANIMATIONS = ['none', 'up', 'fade'] as const
 const TASKBAR_LYRICS_COLOR_SCHEMES = ['theme', 'custom'] as const
 const MAX_FONT_FAMILY_LENGTH = 128
@@ -31,17 +38,19 @@ export type TaskbarLyricsAlignment = (typeof TASKBAR_LYRICS_ALIGNMENTS)[number]
 export type TaskbarLyricsLineMode = (typeof TASKBAR_LYRICS_LINE_MODES)[number]
 export type TaskbarLyricsSecondaryLine = (typeof TASKBAR_LYRICS_SECONDARY_LINES)[number]
 export type TaskbarLyricsNetworkPolicy = (typeof TASKBAR_LYRICS_NETWORK_POLICIES)[number]
+export type TaskbarLyricsChineseVariant = (typeof TASKBAR_LYRICS_CHINESE_VARIANTS)[number]
 export type TaskbarLyricsAnimation = (typeof TASKBAR_LYRICS_ANIMATIONS)[number]
 export type TaskbarLyricsColorScheme = (typeof TASKBAR_LYRICS_COLOR_SCHEMES)[number]
 
 export interface TaskbarLyricsSettings {
   enabled: boolean
+  chineseVariant: TaskbarLyricsChineseVariant
   alignment: TaskbarLyricsAlignment
   lineMode: TaskbarLyricsLineMode
   secondaryLine: TaskbarLyricsSecondaryLine
   networkPolicy: TaskbarLyricsNetworkPolicy
   onlineStrategy: LyricsOnlineStrategy
-  /** 全部已接入平台的在线接口顺序；始终是每个平台各出现一次的完整排列。 */
+  /** 全部在线歌词接口的顺序；始终是每个平台各出现一次的完整排列。 */
   onlineSourceOrder: MediaPlayer[]
   /** 参与在线检索的平台子集，可为空表示不使用任何在线接口。 */
   enabledOnlineSources: MediaPlayer[]
@@ -72,6 +81,12 @@ export function isTaskbarLyricsSecondaryLine(value: unknown): value is TaskbarLy
 
 export function isTaskbarLyricsNetworkPolicy(value: unknown): value is TaskbarLyricsNetworkPolicy {
   return TASKBAR_LYRICS_NETWORK_POLICIES.some((policy) => policy === value)
+}
+
+export function isTaskbarLyricsChineseVariant(
+  value: unknown,
+): value is TaskbarLyricsChineseVariant {
+  return TASKBAR_LYRICS_CHINESE_VARIANTS.some((variant) => variant === value)
 }
 
 export function isTaskbarLyricsOnlineStrategy(value: unknown): value is LyricsOnlineStrategy {
@@ -130,7 +145,7 @@ function filterSupportedMediaPlayers(value: unknown): MediaPlayer[] {
   if (!Array.isArray(value)) return []
   return uniq(
     value.filter((player): player is MediaPlayer =>
-      SUPPORTED_MEDIA_PLAYERS.some((supported) => supported === player),
+      ONLINE_LYRICS_SOURCES.some((supported) => supported === player),
     ),
   )
 }
@@ -138,7 +153,7 @@ function filterSupportedMediaPlayers(value: unknown): MediaPlayer[] {
 /** 规范化在线接口顺序：缺失或损坏时回退默认，否则按规范平台顺序补齐为完整排列。 */
 function normalizeTaskbarLyricsOnlineSourceOrder(value: unknown): MediaPlayer[] {
   if (!Array.isArray(value)) return [...DEFAULT_TASKBAR_LYRICS_SETTINGS.onlineSourceOrder]
-  return uniq([...filterSupportedMediaPlayers(value), ...SUPPORTED_MEDIA_PLAYERS])
+  return uniq([...filterSupportedMediaPlayers(value), ...ONLINE_LYRICS_SOURCES])
 }
 
 /**
@@ -166,6 +181,9 @@ export function normalizeTaskbarLyricsSettings(value: unknown): TaskbarLyricsSet
       typeof record.enabled === 'boolean'
         ? record.enabled
         : DEFAULT_TASKBAR_LYRICS_SETTINGS.enabled,
+    chineseVariant: isTaskbarLyricsChineseVariant(record.chineseVariant)
+      ? record.chineseVariant
+      : DEFAULT_TASKBAR_LYRICS_SETTINGS.chineseVariant,
     alignment: isTaskbarLyricsAlignment(record.alignment)
       ? record.alignment
       : DEFAULT_TASKBAR_LYRICS_SETTINGS.alignment,
@@ -235,13 +253,37 @@ function resolveOnlineSources(settings: TaskbarLyricsSettings): MediaPlayer[] {
 }
 
 /** 将歌词显示配置映射为后端歌词解析偏好；原生侧值未变化时是空操作。 */
-async function applyLyricsPreferences(settings: TaskbarLyricsSettings): Promise<void> {
+async function applyLyricsPreferences(
+  settings: TaskbarLyricsSettings,
+  locale?: ApplicationLocale,
+): Promise<void> {
+  const effectiveLocale = locale ?? (await getApplicationLocale())
   await setLyricsPreferences({
     enabled: settings.enabled,
+    chineseVariant: resolveLyricsChineseVariant(settings.chineseVariant, effectiveLocale),
     allowOnline: settings.networkPolicy === 'auto',
     onlineStrategy: settings.onlineStrategy,
     onlineSources: resolveOnlineSources(settings),
   })
+}
+
+/** 把持久化选项解析成后端实际执行的转换目标。 */
+export function resolveLyricsChineseVariant(
+  preference: TaskbarLyricsChineseVariant,
+  locale: ApplicationLocale,
+): LyricsChineseVariant {
+  if (preference === 'simplified' || preference === 'traditional') return preference
+  if (locale === 'zh-Hans') return 'simplified'
+  if (locale === 'zh-Hant') return 'traditional'
+  return 'original'
+}
+
+/** 界面语言变化时，仅刷新“跟随界面”的实际输出目标，不改写歌词设置。 */
+export async function syncTaskbarLyricsChineseVariant(locale: ApplicationLocale): Promise<void> {
+  const settings = await getTaskbarLyricsSettings()
+  if (settings.chineseVariant === 'follow_interface') {
+    await applyLyricsPreferences(settings, locale)
+  }
 }
 
 /**
@@ -255,6 +297,7 @@ export async function setTaskbarLyricsSettings(value: TaskbarLyricsSettings): Pr
   const saved = await setVersionedSetting(lyricsStorage, value)
   if (
     saved.enabled !== previous.enabled ||
+    saved.chineseVariant !== previous.chineseVariant ||
     saved.networkPolicy !== previous.networkPolicy ||
     saved.onlineStrategy !== previous.onlineStrategy ||
     !isEqual(saved.enabledOnlineSources, previous.enabledOnlineSources) ||

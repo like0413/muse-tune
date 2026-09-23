@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::lyrics::{
+    chinese_conversion::convert_texts,
     model::{
         LyricsResolutionOutcome, LyricsResolutionRecord, LyricsResolutionSite,
         LyricsResolutionStep, LyricsResolutionTrack,
@@ -19,6 +20,11 @@ const RESOLUTION_HISTORY_LIMIT: usize = 1;
 impl LyricsService {
     /// 为当前解析代数创建一条新的诊断链路，并记下本轮使用的曲目信息。
     pub(super) fn begin_resolution_trace(&self, generation: u64, track: &TrackDescriptor) {
+        let mut metadata = Vec::with_capacity(track.artists.len() + 1);
+        metadata.push(track.title.clone());
+        metadata.extend(track.artists.iter().cloned());
+        let mut metadata = convert_texts(metadata, self.preferences().chinese_variant).into_iter();
+        let title = metadata.next().unwrap_or_default();
         if let Ok(mut state) = self.inner.runtime_state.write() {
             archive_previous_resolution(&mut state);
             state.trace_generation = generation;
@@ -26,8 +32,8 @@ impl LyricsService {
             state.resolution_duration_ms = None;
             state.resolution_finished_at_seconds = None;
             state.resolution_track = Some(LyricsResolutionTrack {
-                title: track.title.clone(),
-                artists: track.artists.clone(),
+                title,
+                artists: metadata.collect(),
                 duration_ms: track.duration_ms,
             });
             state.resolution_steps.clear();

@@ -14,7 +14,7 @@ use crate::{filesystem, media::MediaPlayer};
 
 use super::{
     error::LyricsError,
-    model::{LyricsCacheDiagnostics, LyricsSnapshot, LyricsSourceKind},
+    model::{LyricsCacheDiagnostics, LyricsChineseVariant, LyricsSnapshot, LyricsSourceKind},
     schema::lyrics_cache_schema_label,
 };
 
@@ -31,6 +31,18 @@ const MAX_CACHE_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
 /// 缓存命中及其时效状态。
 pub struct CacheLookup {
     pub snapshot: LyricsSnapshot,
+    /// 条目落盘时已经应用的中文字形目标。
+    pub chinese_variant: LyricsChineseVariant,
+    /// 保留原来源刷新时间；仅改写字形时不能借机延长缓存有效期。
+    pub refreshed_at_seconds: u64,
+    /// 本轮读取后已按设置转换并覆盖缓存时，记录转换前字形供解析链路展示。
+    pub variant_updated_from: Option<LyricsChineseVariant>,
+    /// 缓存归一化时正文是否真的发生字形变化。
+    pub variant_text_converted: bool,
+    /// 本轮字形转换是否成功持久化；失败时仍可展示内存中的转换结果。
+    pub variant_rewrite_succeeded: bool,
+    /// “原文”不能从已转换文本无损还原，此时缓存只用于诊断，不能用于展示或候选比较。
+    pub requires_original_refresh: bool,
     /// 仍在展示可信期内：可以直接展示，不必阻塞式重解析。
     pub is_fresh: bool,
     /// 命中的是逐行结果：本轮需要静默确认能否升级到逐字（升级成功后缓存变成长期结论）。
@@ -41,6 +53,7 @@ pub struct CacheLookup {
 #[serde(rename_all = "camelCase")]
 struct CacheEntry {
     refreshed_at_seconds: u64,
+    chinese_variant: LyricsChineseVariant,
     snapshot: LyricsSnapshot,
 }
 
@@ -193,6 +206,12 @@ impl ParsedLyricsCache {
             return Some(CacheLookup {
                 is_fresh,
                 needs_revalidation: revalidate,
+                chinese_variant: entry.chinese_variant,
+                refreshed_at_seconds: entry.refreshed_at_seconds,
+                variant_updated_from: None,
+                variant_text_converted: false,
+                variant_rewrite_succeeded: false,
+                requires_original_refresh: false,
                 snapshot: entry.snapshot,
             });
         }
@@ -206,7 +225,33 @@ impl ParsedLyricsCache {
     /// `generation` 用于排序：同一首歌可能有多轮解析在途（手动刷新、监听事件、切歌），
     /// 代数较小的写入属于已被取代的那一轮，直接丢弃，避免它覆盖同键的较新结果——
     /// 否则下次启动会读回旧内容，而内存里展示的是新内容。
-    pub fn store(&self, snapshot: &LyricsSnapshot, generation: u64) -> Result<(), LyricsError> {
+    pub fn store(
+        &self,
+        snapshot: &LyricsSnapshot,
+        chinese_variant: LyricsChineseVariant,
+        generation: u64,
+    ) -> Result<(), LyricsError> {
+        self.store_at(snapshot, chinese_variant, generation, now_seconds())
+    }
+
+    /// 原位改写同一首歌的缓存字形，并保留歌词来源原本的刷新时间。
+    pub fn rewrite_variant(
+        &self,
+        snapshot: &LyricsSnapshot,
+        chinese_variant: LyricsChineseVariant,
+        generation: u64,
+        refreshed_at_seconds: u64,
+    ) -> Result<(), LyricsError> {
+        self.store_at(snapshot, chinese_variant, generation, refreshed_at_seconds)
+    }
+
+    fn store_at(
+        &self,
+        snapshot: &LyricsSnapshot,
+        chinese_variant: LyricsChineseVariant,
+        generation: u64,
+        refreshed_at_seconds: u64,
+    ) -> Result<(), LyricsError> {
         let Some(track_key) = snapshot.track_key.as_deref() else {
             return Ok(());
         };
@@ -227,7 +272,8 @@ impl ParsedLyricsCache {
             self.cache_path
                 .join(format!(".{track_key}.{}.{}.tmp", std::process::id(), nonce));
         let cache_entry = CacheEntry {
-            refreshed_at_seconds: now_seconds(),
+            refreshed_at_seconds,
+            chinese_variant,
             snapshot: snapshot.clone(),
         };
         let content = encode_entry(&cache_entry)?;

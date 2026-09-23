@@ -209,6 +209,11 @@
         "translationOnly": "仅翻译",
         "nextLine": "下一句",
         "translationFirst": "翻译优先",
+        "chineseVariant": "中文简繁",
+        "chineseVariantDescription": "转换歌曲名、歌手和歌词中的简繁字形；跟随界面时，英文界面保留来源原文",
+        "followInterface": "跟随界面",
+        "simplified": "简体",
+        "traditional": "繁体",
         "wordHighlight": "逐字高亮",
         "wordHighlightDescription": "仅对包含逐字时间轴的歌词生效",
         "alignmentDescription": "调整歌词在可用区域内的水平位置",
@@ -259,7 +264,7 @@
         "windows": "跟随 Windows",
         "fixed": "固定播放器优先级",
         "supportedOnly": "忽略其他媒体",
-        "supportedOnlyDescription": "仅接收 QQ 音乐、网易云音乐、汽水音乐与酷狗音乐的媒体会话",
+        "supportedOnlyDescription": "仅接收 QQ 音乐、网易云音乐、汽水音乐、酷狗音乐与 Spotify 的媒体会话",
         "priority": "播放器优先级",
         "priorityDescription": "多个播放器同时播放时，优先显示列表中更靠前的播放器"
       },
@@ -505,7 +510,7 @@
     },
     "adapters": {
       "title": "播放器适配器",
-      "description": "四家当前版本播放器的自动目录发现与文件事件监听",
+      "description": "五家当前版本播放器的自动目录发现与文件事件监听",
       "notDiscovered": "未自动发现目录",
       "available": "目录可用",
       "unavailable": "目录不可用",
@@ -574,6 +579,7 @@
       "parallelCount": "{count} 项并发",
       "sites": {
         "applicationCache": "Muse Tune 缓存",
+        "applicationCacheVariant": "缓存歌词简繁转换",
         "local": "当前播放器本地",
         "online": "当前播放器在线",
         "onlineFallback": "备用平台在线",

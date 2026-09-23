@@ -3,7 +3,7 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::media::{MediaPlayer, MediaSessionSnapshot};
 
-use super::schema::LYRICS_CACHE_SCHEMA_VERSION;
+use super::{chinese_conversion::simplify_owned_for_matching, schema::LYRICS_CACHE_SCHEMA_VERSION};
 
 /// 歌词解析所需的稳定歌曲描述，不携带封面和播放状态。
 #[derive(Clone, Debug)]
@@ -45,10 +45,10 @@ impl TrackDescriptor {
             .and_then(|timeline| timeline.end_time_ms.checked_sub(timeline.start_time_ms))
             .and_then(|duration| u64::try_from(duration).ok())
             .filter(|duration| *duration > 0);
-        let normalized_title = normalize_text(title);
+        let normalized_title = canonical_cache_text(title);
         let mut normalized_artists = artists
             .iter()
-            .map(|artist| normalize_text(artist))
+            .map(|artist| canonical_cache_text(artist))
             .filter(|artist| !artist.is_empty())
             .collect::<Vec<_>>();
         normalized_artists.sort_unstable();
@@ -70,6 +70,11 @@ impl TrackDescriptor {
             duration_ms,
         })
     }
+}
+
+/// 缓存身份统一使用简体字形，使同一首歌的简繁元数据只产生一个磁盘条目。
+fn canonical_cache_text(value: &str) -> String {
+    simplify_owned_for_matching(normalize_text(value))
 }
 
 /// 规范化跨平台标题和歌手文本。
@@ -108,6 +113,15 @@ mod tests {
     #[test]
     fn normalization_drops_whitespace_only_titles() {
         assert!(normalize_text("   ").is_empty());
+    }
+
+    #[test]
+    fn cache_identity_collapses_simplified_and_traditional_metadata() {
+        assert_eq!(canonical_cache_text("擱淺"), canonical_cache_text("搁浅"));
+        assert_eq!(
+            canonical_cache_text("周杰倫"),
+            canonical_cache_text("周杰伦")
+        );
     }
 
     /// 联合歌手必须先拆分再归一化，否则"周杰伦/费玉清"与"周杰伦、费玉清"会得到不同身份。

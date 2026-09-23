@@ -83,6 +83,7 @@ mod tests {
     ) -> CacheEntry {
         CacheEntry {
             refreshed_at_seconds,
+            chinese_variant: crate::lyrics::model::LyricsChineseVariant::Original,
             snapshot: LyricsSnapshot {
                 status,
                 precision,

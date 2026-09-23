@@ -20,6 +20,7 @@ export type MediaPlayer =
   | 'netease_cloud_music'
   | 'soda_music'
   | 'kugou_music'
+  | 'spotify'
   | 'other'
 export type MediaSessionSelectionStrategy =
   | 'follow_windows'

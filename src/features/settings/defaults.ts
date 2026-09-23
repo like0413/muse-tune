@@ -1,4 +1,3 @@
-import type { ApplicationLocale } from '@/features/i18n/locales'
 import type { LyricsOnlineStrategy } from '@/features/lyrics/types'
 import type { MediaPlayer, MediaSessionSelectionStrategy } from '@/features/media/types'
 import type {
@@ -13,7 +12,11 @@ import type { TaskbarAudioSpectrumSettings } from './audio-spectrum'
 import type { TaskbarBackgroundStyle } from './background-style'
 import type { TaskbarAutoHide } from './bar-visibility'
 import type { TaskbarCoverAppearance } from './cover'
-import type { TaskbarLyricsNetworkPolicy, TaskbarLyricsSettings } from './lyrics'
+import type {
+  TaskbarLyricsChineseVariant,
+  TaskbarLyricsNetworkPolicy,
+  TaskbarLyricsSettings,
+} from './lyrics'
 import nativeDefaultsJson from './native-defaults.json'
 import type { TaskbarProgressPosition, TaskbarProgressStyle } from './progress-style'
 import type { TaskbarThemeColor } from './theme-color'
@@ -64,8 +67,10 @@ const sharedDefaults = nativeDefaultsJson as {
     displayTarget: string
     lyrics: {
       enabled: boolean
+      chineseVariant: TaskbarLyricsChineseVariant
       networkPolicy: TaskbarLyricsNetworkPolicy
       onlineStrategy: LyricsOnlineStrategy
+      onlineSources: MediaPlayer[]
     }
   }
   media: {
@@ -74,9 +79,6 @@ const sharedDefaults = nativeDefaultsJson as {
     supportedPlayers: MediaPlayer[]
   }
 }
-
-/** 界面语言，缺失或损坏时回退简体中文。 */
-export const DEFAULT_APPLICATION_LOCALE: ApplicationLocale = 'zh-Hans'
 
 /** 应用级减少动态效果覆盖项默认关闭，由系统偏好优先。 */
 export const DEFAULT_REDUCED_MOTION = false
@@ -142,14 +144,15 @@ export const DEFAULT_TASKBAR_THEME_COLOR: TaskbarThemeColor = {
 /** 歌词显示默认双行、左对齐、逐字高亮并跟随主题配色。 */
 export const DEFAULT_TASKBAR_LYRICS_SETTINGS: TaskbarLyricsSettings = {
   enabled: sharedDefaults.taskbar.lyrics.enabled,
+  chineseVariant: sharedDefaults.taskbar.lyrics.chineseVariant,
   alignment: 'left',
   lineMode: 'double',
   secondaryLine: 'translation_or_next',
   networkPolicy: sharedDefaults.taskbar.lyrics.networkPolicy,
   onlineStrategy: sharedDefaults.taskbar.lyrics.onlineStrategy,
-  // 在线接口顺序与启用集合默认都取自共享配置里的已接入平台顺序，即全部平台、全部启用。
-  onlineSourceOrder: [...sharedDefaults.media.supportedPlayers],
-  enabledOnlineSources: [...sharedDefaults.media.supportedPlayers],
+  // 在线接口顺序与启用集合只包含真正具备在线能力的平台。
+  onlineSourceOrder: [...sharedDefaults.taskbar.lyrics.onlineSources],
+  enabledOnlineSources: [...sharedDefaults.taskbar.lyrics.onlineSources],
   timingOffsetMs: 0,
   wordHighlight: true,
   animation: 'up',
@@ -183,6 +186,10 @@ export const DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS: TaskbarAudioSpectrumSettin
 }
 
 export const SUPPORTED_MEDIA_PLAYERS: readonly MediaPlayer[] = sharedDefaults.media.supportedPlayers
+
+/** 真正具备在线歌词能力的平台；本地-only 播放器不会出现在在线接口设置中。 */
+export const ONLINE_LYRICS_SOURCES: readonly MediaPlayer[] =
+  sharedDefaults.taskbar.lyrics.onlineSources
 
 /** 多播放器并存时默认按最近播放选择会话。 */
 export const DEFAULT_MEDIA_SESSION_SELECTION_STRATEGY: MediaSessionSelectionStrategy =
