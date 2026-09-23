@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use crate::lyrics::{
     model::{
         LyricsAdapterDiagnostics, LyricsCacheDiagnostics, LyricsDiagnostics,
-        LyricsResolutionMethod, LyricsSnapshotDiagnostics, LyricsWatcherDiagnostics,
+        LyricsResolutionMethod, LyricsSnapshotDiagnostics,
     },
     players,
 };
@@ -124,17 +124,6 @@ impl LyricsService {
                 .cache
                 .diagnostics(current_track.as_ref().map(|track| track.key.as_str())),
             adapters,
-            watcher: {
-                let metrics = self.inner.watcher_metrics.snapshot();
-                LyricsWatcherDiagnostics {
-                    enqueued_batches: metrics.enqueued_batches,
-                    processed_batches: metrics.processed_batches,
-                    coalesced_batches: metrics.coalesced_batches,
-                    callback_count: metrics.callback_count,
-                    pending_batches: metrics.pending_batches,
-                    pending_batches_peak: metrics.pending_batches_peak,
-                }
-            },
         }
     }
 

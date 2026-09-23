@@ -36,7 +36,7 @@ use super::{
     },
     players,
     track::TrackDescriptor,
-    watcher::{LyricsFileWatcher, LyricsWatcherMetrics},
+    watcher::LyricsFileWatcher,
 };
 use pipeline::is_cached_snapshot_displayable;
 use players::RegistryWatchHandle;
@@ -87,7 +87,6 @@ struct LyricsServiceInner {
     runtime_state: RwLock<LyricsRuntimeState>,
     adapter_paths: RwLock<HashMap<MediaPlayer, Option<PathBuf>>>,
     watchers: Mutex<HashMap<MediaPlayer, LyricsFileWatcher>>,
-    watcher_metrics: Arc<LyricsWatcherMetrics>,
     registry_watchers: Mutex<Vec<RegistryWatchHandle>>,
     shutdown_requested: AtomicBool,
     resolver: Mutex<ResolverState>,
@@ -168,7 +167,6 @@ impl LyricsService {
                 runtime_state: RwLock::new(LyricsRuntimeState::default()),
                 adapter_paths: RwLock::new(HashMap::new()),
                 watchers: Mutex::new(HashMap::new()),
-                watcher_metrics: Arc::new(LyricsWatcherMetrics::default()),
                 registry_watchers: Mutex::new(Vec::new()),
                 shutdown_requested: AtomicBool::new(false),
                 resolver: Mutex::new(ResolverState::default()),

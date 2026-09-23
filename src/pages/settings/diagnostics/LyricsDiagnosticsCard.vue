@@ -229,33 +229,6 @@ const resolutionStages = computed(() => {
     </DiagnosticRow>
     <DiagnosticRow :label="t('diagnostics.lyrics.resolverQueue')" :value="resolverStatus" />
     <DiagnosticRow
-      :label="t('diagnostics.lyrics.fileBatches')"
-      :value="
-        t('diagnostics.queueSummary', {
-          sent: diagnostics.watcher.enqueuedBatches,
-          processed: diagnostics.watcher.processedBatches,
-        })
-      "
-    />
-    <DiagnosticRow
-      :label="t('diagnostics.lyrics.pendingFileEvents')"
-      :value="
-        t('diagnostics.currentPeak', {
-          current: diagnostics.watcher.pendingBatches,
-          peak: diagnostics.watcher.pendingBatchesPeak,
-        })
-      "
-    />
-    <DiagnosticRow
-      :label="t('diagnostics.lyrics.coalescedFileEvents')"
-      :value="
-        t('diagnostics.lyrics.coalescedValue', {
-          batches: diagnostics.watcher.coalescedBatches,
-          callbacks: diagnostics.watcher.callbackCount,
-        })
-      "
-    />
-    <DiagnosticRow
       :label="t('diagnostics.lyrics.resolutionTrack')"
       :value="describeTrack(diagnostics.resolutionTrack)"
     />

@@ -55,7 +55,7 @@ impl LyricsService {
                     });
                 }
             });
-            match watcher::create(paths, callback, Arc::clone(&self.inner.watcher_metrics)) {
+            match watcher::create(paths, callback) {
                 Ok(Some(watcher)) => {
                     next_watchers.insert(player, watcher);
                 }

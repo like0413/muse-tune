@@ -8,10 +8,6 @@ use std::{
 
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 
-mod metrics;
-
-pub(super) use metrics::LyricsWatcherMetrics;
-
 /// 一轮写入的安静窗口：同一批歌词落盘往往是多次写入，目录被删除重建时还会从父目录产生事件，
 /// 这里等最后一次事件之后再安静满这么久，才把整批合并成一次回调。
 /// 调小会让同一次写入被拆成多次解析，调大则会让歌词刷新明显滞后于文件实际变化。
@@ -21,14 +17,12 @@ const WRITE_SETTLE_TIME: Duration = Duration::from_millis(400);
 pub struct LyricsFileWatcher {
     watcher: Option<RecommendedWatcher>,
     signal: Arc<WatcherSignal>,
-    metrics: Arc<LyricsWatcherMetrics>,
     worker: Option<JoinHandle<()>>,
 }
 
 #[derive(Default)]
 struct WatcherState {
     changed_paths: HashSet<PathBuf>,
-    pending_batches: usize,
     last_change: Option<Instant>,
     stopped: bool,
 }
@@ -43,7 +37,7 @@ impl Drop for LyricsFileWatcher {
     fn drop(&mut self) {
         // 先释放 notify watcher，确保停止信号之后不会再有生产者写入。
         drop(self.watcher.take());
-        let discarded_batches = {
+        {
             let mut state = self
                 .signal
                 .state
@@ -52,9 +46,7 @@ impl Drop for LyricsFileWatcher {
             state.stopped = true;
             state.changed_paths.clear();
             state.last_change = None;
-            std::mem::take(&mut state.pending_batches)
-        };
-        self.metrics.discard_pending_batches(discarded_batches);
+        }
         self.signal.changed.notify_one();
         if let Some(worker) = self.worker.take() {
             if worker.thread().id() == thread::current().id() {
@@ -73,7 +65,6 @@ impl Drop for LyricsFileWatcher {
 pub fn create(
     paths: impl IntoIterator<Item = PathBuf>,
     on_change: Arc<dyn Fn(Vec<PathBuf>) + Send + Sync>,
-    metrics: Arc<LyricsWatcherMetrics>,
 ) -> Result<Option<LyricsFileWatcher>, notify::Error> {
     let requested_paths = paths.into_iter().collect::<HashSet<_>>();
     let watch_roots = requested_paths
@@ -86,7 +77,6 @@ pub fn create(
 
     let signal = Arc::new(WatcherSignal::default());
     let event_targets = requested_paths.clone();
-    let producer_metrics = Arc::clone(&metrics);
     let producer_signal = Arc::clone(&signal);
     let mut watcher = notify::recommended_watcher(move |result: notify::Result<Event>| {
         if let Ok(event) = result
@@ -117,9 +107,7 @@ pub fn create(
                         return;
                     }
                     state.changed_paths.extend(paths);
-                    state.pending_batches = state.pending_batches.saturating_add(1);
                     state.last_change = Some(Instant::now());
-                    producer_metrics.record_enqueue();
                 }
                 producer_signal.changed.notify_one();
             }
@@ -130,13 +118,10 @@ pub fn create(
     }
 
     let worker_signal = Arc::clone(&signal);
-    let worker_metrics = Arc::clone(&metrics);
     let worker = thread::Builder::new()
         .name("lyrics-cache-events".to_owned())
         .spawn(move || {
-            while let Some((changed_paths, batch_count)) = wait_for_quiet_batch(&worker_signal) {
-                worker_metrics.record_processed_batches(batch_count);
-                worker_metrics.record_callback();
+            while let Some(changed_paths) = wait_for_quiet_batch(&worker_signal) {
                 on_change(changed_paths.into_iter().collect());
             }
         })
@@ -144,13 +129,12 @@ pub fn create(
     Ok(Some(LyricsFileWatcher {
         watcher: Some(watcher),
         signal,
-        metrics,
         worker: Some(worker),
     }))
 }
 
 /// 等待至少一个文件事件，并以最后一批事件为起点保持完整安静窗口。
-fn wait_for_quiet_batch(signal: &WatcherSignal) -> Option<(HashSet<PathBuf>, usize)> {
+fn wait_for_quiet_batch(signal: &WatcherSignal) -> Option<HashSet<PathBuf>> {
     let mut state = signal
         .state
         .lock()
@@ -171,9 +155,8 @@ fn wait_for_quiet_batch(signal: &WatcherSignal) -> Option<(HashSet<PathBuf>, usi
         let remaining = (last_change + WRITE_SETTLE_TIME).saturating_duration_since(Instant::now());
         if remaining.is_zero() {
             let paths = std::mem::take(&mut state.changed_paths);
-            let batch_count = std::mem::take(&mut state.pending_batches);
             state.last_change = None;
-            return Some((paths, batch_count));
+            return Some(paths);
         }
         let (next_state, _) = signal
             .changed
