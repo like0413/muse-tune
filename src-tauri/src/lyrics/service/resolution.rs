@@ -30,7 +30,7 @@ use super::{
     executor::RecordedAttempt,
     pipeline::{
         LyricsCandidate, TimelineValidation, format_milliseconds, is_acceptable_candidate,
-        is_cached_snapshot_displayable, lookup_miss_detail, select_best_candidate,
+        is_cached_snapshot_displayable, lookup_miss_detail, player_label, select_best_candidate,
         timeline_rejection_reason, validate_timeline,
     },
     plan::ResolutionPlan,
@@ -56,8 +56,10 @@ struct ResolutionProgress {
     source_failed: bool,
     /// 缓存升级阶段是否已经查过当前播放器的本地来源，此时本地阶段不必重复。
     local_source_resolved: bool,
-    /// 缓存里已有可展示的逐行结果；本地阶段以它为基准判断替换是否值得。
-    cached_line_displayed: bool,
+    /// 当前展示结果只应由逐字歌词替换，避免同平台横向替换或把跨平台逐字缓存降级成逐行。
+    displayed_requires_word_upgrade: bool,
+    /// 本轮是否已经立即展示了应用缓存；最终仍选中同一缓存时不重复发布和改写时间戳。
+    cached_result_displayed: bool,
 }
 
 impl LyricsService {
@@ -83,6 +85,9 @@ impl LyricsService {
         let cached_snapshot_displayable = cached
             .as_ref()
             .is_some_and(|cached| is_cached_snapshot_displayable(&track, &cached.snapshot));
+        let cache_source_mismatch = cached
+            .as_ref()
+            .is_some_and(|cached| cache_source_differs_from_player(&cached.snapshot, track.player));
         self.record_resolution_step(
             generation,
             LyricsResolutionSite::ApplicationCache,
@@ -93,15 +98,23 @@ impl LyricsService {
             },
             Some(cached.as_ref().map_or_else(
                 || cache_miss_detail(cache_cleared),
-                |cached| describe_cache_step(cached, cache_timeline_validation),
+                |cached| {
+                    describe_cache_step(
+                        cached,
+                        cache_timeline_validation,
+                        track.player,
+                        cached_snapshot_displayable,
+                        preferences.allow_online,
+                    )
+                },
             )),
         );
-        // 过期的语义结论（纯音乐 / 没有歌词）不携带歌词行，无法参与候选排序，但保留为最终兜底：
-        // 否则“曾经确认过纯音乐”会在所有来源未命中时退化成“没有找到可靠歌词”。
-        let stale_notice = cached
+        // 过期或跨平台的语义结论（纯音乐 / 没有歌词）不携带歌词行，无法参与候选排序，
+        // 但仍保留为最终兜底：否则后续来源全未命中时会退化成更弱的通用结论。
+        let fallback_notice = cached
             .as_ref()
             .filter(|cached| {
-                !cached.is_fresh
+                (!cached.is_fresh || cache_source_mismatch)
                     && matches!(
                         cached.snapshot.status,
                         LyricsStatus::Instrumental | LyricsStatus::NoLyrics
@@ -109,49 +122,63 @@ impl LyricsService {
             })
             .map(|cached| cached.snapshot.clone());
 
-        // 缓存里已有可展示的逐行结果：先展示它，本轮在线只用于升级到逐字，不再降级替换。
-        let cached_line_displayed = cached.as_ref().is_some_and(|cached| {
-            cached.is_fresh
+        let cached_result_displayed = cached
+            .as_ref()
+            .is_some_and(|cached| cached.is_fresh && cached_snapshot_displayable);
+        // 同平台逐行缓存只接受逐字升级；跨平台缓存允许同精度的当前播放器结果替换，
+        // 但跨平台逐字缓存仍不能被逐行结果降级。
+        let displayed_requires_word_upgrade = cached.as_ref().is_some_and(|cached| {
+            cached_result_displayed
                 && cached.snapshot.status == LyricsStatus::Ready
-                && cached.snapshot.precision == Some(LyricsPrecision::Line)
+                && (cached.snapshot.precision == Some(LyricsPrecision::Word)
+                    || (!cache_source_mismatch
+                        && cached.snapshot.precision == Some(LyricsPrecision::Line)))
         });
         let mut progress = ResolutionProgress {
             candidates: Vec::new(),
-            upgrade_to_word_only: cached_line_displayed,
+            upgrade_to_word_only: displayed_requires_word_upgrade,
             source_failed: false,
             local_source_resolved: false,
-            cached_line_displayed,
+            displayed_requires_word_upgrade,
+            cached_result_displayed,
         };
 
         // 缓存分支可能已经解析过当前播放器的本地来源（新鲜逐行的升级判定），此时本地阶段不必重复。
         if let Some(cached) = cached {
             if cached_snapshot_displayable && cached.is_fresh {
-                // 逐行与纯音乐都要顺手查一次本地（判据见 `should_check_local_upgrade`）。
-                let should_check_local = cache_policy::should_check_local_upgrade(&cached.snapshot);
-                // 在线复核只为把逐行升级成逐字；纯音乐不联网，联网也推不翻它。
-                let should_revalidate = cached.needs_revalidation && preferences.allow_online;
                 self.publish_if_current_with_method(
                     cached.snapshot.clone(),
                     generation,
                     LyricsResolutionMethod::ApplicationCache,
                 );
-                if !should_check_local || !self.is_current_generation(generation) {
+                if !self.is_current_generation(generation) {
                     return;
                 }
 
-                // 已有缓存必须先展示；本地精度升级属于增强路径，不能阻塞首屏歌词。
-                progress.local_source_resolved = true;
-                let Some(upgraded_locally) = self.try_local_upgrade(&track, generation, &cached)
-                else {
-                    return;
-                };
-                // 本地升级没有结果时，只有逐行缓存继续走在线阶段尝试升级到逐字。
-                if !should_revalidate || upgraded_locally {
-                    return;
+                if !cache_source_mismatch {
+                    // 同平台缓存沿用既有增强策略：逐行与语义结论检查本地，必要时再联网升级。
+                    let should_check_local =
+                        cache_policy::should_check_local_upgrade(&cached.snapshot);
+                    let should_revalidate = cached.needs_revalidation && preferences.allow_online;
+                    if !should_check_local {
+                        return;
+                    }
+
+                    // 已有缓存必须先展示；本地精度升级属于增强路径，不能阻塞首屏歌词。
+                    progress.local_source_resolved = true;
+                    let Some(upgraded_locally) =
+                        self.try_local_upgrade(&track, generation, &cached)
+                    else {
+                        return;
+                    };
+                    // 本地升级没有结果时，只有逐行缓存继续走在线阶段尝试升级到逐字。
+                    if !should_revalidate || upgraded_locally {
+                        return;
+                    }
                 }
             }
-            // 可参与比较的缓存：过期但仍可展示的快照，或需要升级复核的新鲜逐行快照
-            // （逐行只接受逐字替换，见 `improves_displayed`）。
+            // 可参与比较的缓存：过期但仍可展示的快照、需要升级复核的新鲜逐行快照，
+            // 或来源与当前播放器不同、需要继续解析的新鲜快照。
             if cached.snapshot.status == LyricsStatus::Ready
                 && cached_snapshot_displayable
                 && let Some(source) = cached.snapshot.source
@@ -174,7 +201,7 @@ impl LyricsService {
                 &track,
                 generation,
                 progress,
-                stale_notice,
+                fallback_notice,
                 "联网策略仅允许本地与缓存",
                 "本地与缓存歌词来源暂时不可用",
             );
@@ -187,7 +214,7 @@ impl LyricsService {
             &track,
             generation,
             progress,
-            stale_notice,
+            fallback_notice,
             "没有找到可靠歌词",
             "歌词来源暂时不可用，请检查网络连接",
         );
@@ -319,9 +346,9 @@ impl LyricsService {
                 }
                 RecordedAttempt::Candidate(candidate) => {
                     // 本地逐行先发布：用户不必等在线阶段跑完才看到歌词，升级在后台继续。
-                    // 但已展示逐行时（新鲜缓存）只有真正的提升才值得替换，否则歌词会无意义地跳一次。
+                    // 当前展示结果要求逐字升级时，不用逐行候选制造降级或无意义的跳变。
                     if candidate.resolved.source.player == track.player
-                        && improves_displayed(progress.cached_line_displayed, &candidate)
+                        && improves_displayed(progress.displayed_requires_word_upgrade, &candidate)
                     {
                         progress.upgrade_to_word_only = true;
                         self.publish_candidate(track, candidate.clone(), generation);
@@ -397,7 +424,7 @@ impl LyricsService {
         track: &TrackDescriptor,
         generation: u64,
         progress: ResolutionProgress,
-        stale_notice: Option<LyricsSnapshot>,
+        fallback_notice: Option<LyricsSnapshot>,
         miss_reason: &str,
         failure_reason: &str,
     ) {
@@ -405,10 +432,13 @@ impl LyricsService {
         // 偏好变化不会作废进行中的一轮，而是从下一轮解析开始生效。
         let online_sources = self.preferences().online_sources;
         match select_best_candidate(track, progress.candidates, &online_sources) {
+            Some(candidate)
+                if progress.cached_result_displayed
+                    && candidate.resolution_method == LyricsResolutionMethod::ApplicationCache => {}
             Some(candidate) if improves_displayed(progress.upgrade_to_word_only, &candidate) => {
                 self.publish_candidate(track, candidate, generation);
             }
-            // 只升级不降级：已经展示的逐行保持不变，也不要让过期结论覆盖它。
+            // 只升级不降级：保持当前较优结果，也不要让过期结论覆盖它。
             Some(_) => {}
             None => {
                 // 混搭快照（新标题 + 上一首时间线）会让所有来源同时未命中，此时下结论是错的：
@@ -417,7 +447,10 @@ impl LyricsService {
                     || self.superseded_before_conclusion(generation)
                 {
                     log::debug!("本轮解析的输入可能已过期，放弃本次结论");
-                } else if let Some(snapshot) = stale_notice {
+                } else if progress.cached_result_displayed && fallback_notice.is_some() {
+                    // 跨平台语义缓存已经即时展示；后续来源未给出更可靠结论时保持现状，
+                    // 但不重复写回缓存，避免每次跨播放器播放都刷新这个平台外结论的有效期。
+                } else if let Some(snapshot) = fallback_notice {
                     // 沿用上次的语义结论；顺带写回缓存以刷新时间戳，避免它成为永不更新的僵死条目。
                     self.store_and_publish_if_current(
                         snapshot,
@@ -474,8 +507,7 @@ impl LyricsService {
 
 /// 候选是否可以替换当前已展示的结果。
 ///
-/// 已经展示逐行时只接受逐字：在线阶段拿到的另一个逐行精度并没有提高，替换只会让用户
-/// 看到歌词无意义地跳一次。
+/// 当当前结果已达到逐字，或同平台逐行缓存只允许精度升级时，只接受逐字候选。
 fn improves_displayed(upgrade_to_word_only: bool, candidate: &LyricsCandidate) -> bool {
     !upgrade_to_word_only || has_word_timing(&candidate.resolved.lines)
 }
@@ -492,38 +524,83 @@ fn cache_miss_detail(cleared: bool) -> String {
     }
 }
 
-/// 缓存命中步骤的诊断文案；区分语义结论、逐字、逐行与时间轴异常。
-fn describe_cache_step(cached: &CacheLookup, validation: Option<TimelineValidation>) -> String {
-    if let Some(label) = notice_status_label(cached.snapshot.status) {
-        return if cached.is_fresh {
+/// 缓存来源是否与当前播放器不同；无来源的旧缓存不凭空推断平台。
+fn cache_source_differs_from_player(
+    snapshot: &LyricsSnapshot,
+    current_player: crate::media::MediaPlayer,
+) -> bool {
+    snapshot
+        .source
+        .as_ref()
+        .is_some_and(|source| source.player != current_player)
+}
+
+/// 缓存命中步骤的诊断文案；区分语义结论、逐字、逐行、时间轴异常与跨平台复核。
+fn describe_cache_step(
+    cached: &CacheLookup,
+    validation: Option<TimelineValidation>,
+    current_player: crate::media::MediaPlayer,
+    displayable: bool,
+    allow_online: bool,
+) -> String {
+    let detail = if let Some(label) = notice_status_label(cached.snapshot.status) {
+        if cached.is_fresh {
             format!("已确认{label}，有效期内")
         } else {
             format!("已确认{label}，已过期，重新确认")
-        };
-    }
-    match validation {
-        Some(TimelineValidation::Plausible) if cached.is_fresh => {
-            if cached.needs_revalidation {
-                "有效期内，继续确认能否升级到逐字".to_owned()
-            } else {
-                "有效期内".to_owned()
+        }
+    } else {
+        match validation {
+            Some(TimelineValidation::Plausible) if cached.is_fresh => {
+                if cached.needs_revalidation {
+                    "有效期内，继续确认能否升级到逐字".to_owned()
+                } else {
+                    "有效期内".to_owned()
+                }
+            }
+            Some(TimelineValidation::Plausible) => "已过期，作为兜底候选".to_owned(),
+            Some(TimelineValidation::DurationMismatch {
+                track_duration_ms,
+                latest_start_ms,
+                latest_end_ms,
+            }) => format!(
+                "已读取；播放器时长 {}，歌词末行开始 {}、结束 {}；采用有效缓存",
+                format_milliseconds(track_duration_ms),
+                format_milliseconds(latest_start_ms),
+                format_milliseconds(latest_end_ms),
+            ),
+            Some(TimelineValidation::Invalid(_)) | None => {
+                "已读取，但缓存状态或时间轴结构无效".to_owned()
             }
         }
-        Some(TimelineValidation::Plausible) => "已过期，作为兜底候选".to_owned(),
-        Some(TimelineValidation::DurationMismatch {
-            track_duration_ms,
-            latest_start_ms,
-            latest_end_ms,
-        }) => format!(
-            "已读取；播放器时长 {}，歌词末行开始 {}、结束 {}；采用有效缓存",
-            format_milliseconds(track_duration_ms),
-            format_milliseconds(latest_start_ms),
-            format_milliseconds(latest_end_ms),
-        ),
-        Some(TimelineValidation::Invalid(_)) | None => {
-            "已读取，但缓存状态或时间轴结构无效".to_owned()
-        }
+    };
+
+    let Some(source) = cached
+        .snapshot
+        .source
+        .as_ref()
+        .filter(|source| source.player != current_player)
+    else {
+        return detail;
+    };
+    if !cached.is_fresh || !displayable {
+        return format!(
+            "{detail}；缓存来源为 {}，当前播放器为 {}",
+            player_label(source.player),
+            player_label(current_player),
+        );
     }
+
+    let continuation = if allow_online {
+        "继续解析当前播放器来源，并按联网策略查询在线来源"
+    } else {
+        "继续解析当前播放器本地来源；当前联网策略不查询在线来源"
+    };
+    format!(
+        "{detail}；已立即显示缓存。缓存来源为 {}，当前播放器为 {}；{continuation}",
+        player_label(source.player),
+        player_label(current_player),
+    )
 }
 
 /// 语义结论的中文名；真歌词与其他状态返回 `None`。
@@ -535,5 +612,71 @@ fn notice_status_label(status: LyricsStatus) -> Option<&'static str> {
         | LyricsStatus::Ready
         | LyricsStatus::Unavailable
         | LyricsStatus::Error => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        lyrics::model::{LyricsSource, LyricsSourceKind},
+        media::MediaPlayer,
+    };
+
+    /// 缓存平台比较只依据快照中真实记录的来源，不把旧缓存的缺失来源猜成跨平台。
+    #[test]
+    fn cache_source_mismatch_requires_a_recorded_different_player() {
+        let mut snapshot = LyricsSnapshot::default();
+        assert!(!cache_source_differs_from_player(
+            &snapshot,
+            MediaPlayer::NeteaseCloudMusic,
+        ));
+
+        snapshot.source = Some(LyricsSource {
+            player: MediaPlayer::QqMusic,
+            kind: LyricsSourceKind::Online,
+            song_id: None,
+        });
+        assert!(cache_source_differs_from_player(
+            &snapshot,
+            MediaPlayer::NeteaseCloudMusic,
+        ));
+        assert!(!cache_source_differs_from_player(
+            &snapshot,
+            MediaPlayer::QqMusic,
+        ));
+    }
+
+    /// 跨平台缓存的首步诊断必须同时说清即时回显、两个平台和继续解析原因。
+    #[test]
+    fn cross_player_cache_detail_explains_provisional_display_and_resolution() {
+        let cached = CacheLookup {
+            snapshot: LyricsSnapshot {
+                status: LyricsStatus::Ready,
+                source: Some(LyricsSource {
+                    player: MediaPlayer::QqMusic,
+                    kind: LyricsSourceKind::Online,
+                    song_id: None,
+                }),
+                precision: Some(LyricsPrecision::Line),
+                ..LyricsSnapshot::default()
+            },
+            is_fresh: true,
+            needs_revalidation: false,
+        };
+
+        let detail = describe_cache_step(
+            &cached,
+            Some(TimelineValidation::Plausible),
+            MediaPlayer::NeteaseCloudMusic,
+            true,
+            true,
+        );
+
+        assert!(detail.contains("已立即显示缓存"));
+        assert!(detail.contains("缓存来源为 QQ 音乐"));
+        assert!(detail.contains("当前播放器为 网易云音乐"));
+        assert!(detail.contains("继续解析当前播放器来源"));
+        assert!(detail.contains("按联网策略查询在线来源"));
     }
 }
