@@ -18,6 +18,7 @@ commands.allow = [
   "set_taskbar_display_target",
   "set_taskbar_overlap_priority",
   "set_taskbar_placement",
+  "set_taskbar_horizontal_offset",
   "set_taskbar_width",
   "set_current_media_volume",
 ]

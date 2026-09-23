@@ -70,6 +70,7 @@ pub fn run() {
             commands::taskbar::set_taskbar_content_visibility,
             commands::taskbar::set_taskbar_overlap_priority,
             commands::taskbar::set_taskbar_placement,
+            commands::taskbar::set_taskbar_horizontal_offset,
             commands::taskbar::set_taskbar_width,
             commands::taskbar::show_volume_popup,
             commands::taskbar::hide_volume_popup

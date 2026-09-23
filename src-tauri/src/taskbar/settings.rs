@@ -23,6 +23,8 @@ static TASKBAR_CONTENT_WIDTH_DIP: LazyLock<AtomicI32> =
     LazyLock::new(|| AtomicI32::new(native_defaults::shared().taskbar.width));
 static TASKBAR_WIDTH_MODE: LazyLock<AtomicU8> =
     LazyLock::new(|| AtomicU8::new(native_defaults::shared().taskbar.width_mode as u8));
+static TASKBAR_HORIZONTAL_OFFSET_DIP: LazyLock<AtomicI32> =
+    LazyLock::new(|| AtomicI32::new(native_defaults::shared().taskbar.horizontal_offset));
 static TASKBAR_CONTENT_VISIBLE: AtomicBool = AtomicBool::new(true);
 
 /// bar 基准宽度的可调下限，与前端共用同一份取值。
@@ -33,6 +35,14 @@ pub(super) fn min_content_width() -> i32 {
 /// bar 基准宽度的可调上限，与前端共用同一份取值。
 pub(super) fn max_content_width() -> i32 {
     native_defaults::shared().taskbar.width_max
+}
+
+fn min_horizontal_offset() -> i32 {
+    native_defaults::shared().taskbar.horizontal_offset_min
+}
+
+fn max_horizontal_offset() -> i32 {
+    native_defaults::shared().taskbar.horizontal_offset_max
 }
 
 /// 跨线程更新定位偏好；仅在值变化时唤醒同步循环。
@@ -64,6 +74,14 @@ pub(super) fn set_width_mode(mode: TaskbarWidthMode) {
     }
 }
 
+/// 跨线程更新水平坐标偏移；正值向右、负值向左。
+pub(super) fn set_horizontal_offset(offset: i32) {
+    let offset = offset.clamp(min_horizontal_offset(), max_horizontal_offset());
+    if TASKBAR_HORIZONTAL_OFFSET_DIP.swap(offset, Ordering::AcqRel) != offset {
+        events::request_all_layout_updates();
+    }
+}
+
 /// 更新 bar 内容可见性；值变化时立即唤醒全部同步线程。
 pub(super) fn set_content_visibility(visible: bool) {
     if TASKBAR_CONTENT_VISIBLE.swap(visible, Ordering::AcqRel) != visible {
@@ -88,6 +106,10 @@ pub(super) fn width_mode() -> TaskbarWidthMode {
     TaskbarWidthMode::from_stored(TASKBAR_WIDTH_MODE.load(Ordering::Acquire))
 }
 
+pub(super) fn horizontal_offset() -> i32 {
+    TASKBAR_HORIZONTAL_OFFSET_DIP.load(Ordering::Acquire)
+}
+
 /// 读取媒体状态计算出的 bar 内容可见性。
 pub(super) fn content_visible() -> bool {
     TASKBAR_CONTENT_VISIBLE.load(Ordering::Acquire)
@@ -108,11 +130,13 @@ pub(super) fn diagnostic_settings() -> (
     TaskbarOverlapPriority,
     TaskbarWidthMode,
     i32,
+    i32,
 ) {
     (
         placement(),
         overlap_priority(),
         width_mode(),
         content_width(),
+        horizontal_offset(),
     )
 }

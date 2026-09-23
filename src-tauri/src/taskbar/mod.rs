@@ -82,6 +82,11 @@ pub fn set_width_mode(mode: TaskbarWidthMode) {
     settings::set_width_mode(mode);
 }
 
+/// 设置相对默认布局的有符号水平偏移，单位为 DIP。
+pub fn set_horizontal_offset(offset: i32) {
+    settings::set_horizontal_offset(offset);
+}
+
 pub fn set_content_visibility(visible: bool) {
     settings::set_content_visibility(visible);
 }
@@ -102,10 +107,19 @@ pub(crate) fn diagnostic_settings() -> (
     TaskbarOverlapPriority,
     TaskbarWidthMode,
     i32,
+    i32,
 ) {
     let target = service::display_target_snapshot().0;
-    let (placement, overlap_priority, width_mode, width) = settings::diagnostic_settings();
-    (target, placement, overlap_priority, width_mode, width)
+    let (placement, overlap_priority, width_mode, width, horizontal_offset) =
+        settings::diagnostic_settings();
+    (
+        target,
+        placement,
+        overlap_priority,
+        width_mode,
+        width,
+        horizontal_offset,
+    )
 }
 
 /// 显示并定位独立音量悬浮窗。

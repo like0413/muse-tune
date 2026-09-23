@@ -81,6 +81,10 @@ const priorityLabel = (value: TaskbarOverlapPriority) => priorityLabels.value[va
       :label="t('diagnostics.taskbar.logicalWidth')"
       :value="`${diagnostics.contentWidthDip} DIP`"
     />
+    <DiagnosticRow
+      :label="t('diagnostics.taskbar.horizontalOffset')"
+      :value="`${diagnostics.horizontalOffsetDip > 0 ? '+' : ''}${diagnostics.horizontalOffsetDip} DIP`"
+    />
     <DiagnosticRow :label="t('diagnostics.taskbar.displayDetails')">
       <span v-if="diagnostics.displays.length === 0">{{ t('common.none') }}</span>
       <span v-else>

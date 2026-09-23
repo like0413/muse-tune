@@ -8,6 +8,7 @@ import ControlsSetting from './ControlsSetting.vue'
 import CoverSetting from './CoverSetting.vue'
 import DisplaySetting from './DisplaySetting.vue'
 import ElementOrderSetting from './ElementOrderSetting.vue'
+import HorizontalOffsetSetting from './HorizontalOffsetSetting.vue'
 import LyricsDisplaySetting from './lyrics/LyricsDisplaySetting.vue'
 import MediaSessionSetting from './media-session/MediaSessionSetting.vue'
 import OverlapPrioritySetting from './OverlapPrioritySetting.vue'
@@ -23,6 +24,7 @@ const { t } = useI18n({ useScope: 'global' })
   <div class="flex w-full flex-col gap-3">
     <div class="pl-2 text-sm font-bold">{{ t('settings.taskbar.groups.placement') }}</div>
     <PlacementSetting />
+    <HorizontalOffsetSetting />
     <OverlapPrioritySetting />
     <BarVisibilitySetting />
 

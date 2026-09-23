@@ -57,6 +57,10 @@
         "auto": "自动",
         "right": "右侧"
       },
+      "horizontalOffset": {
+        "title": "水平偏移",
+        "description": "相对默认位置水平移动；正值向右，负值向左，单位为像素"
+      },
       "overlap": {
         "title": "遮挡优先级",
         "description": "空间不足时，允许组件覆盖任务栏项目，或裁剪组件以避让它们",
@@ -504,6 +508,7 @@
       "barPriority": "Muse Tune 优先",
       "systemPriority": "系统任务栏元素优先",
       "logicalWidth": "逻辑宽度",
+      "horizontalOffset": "水平偏移",
       "displayDetails": "显示器详情",
       "windowDetails": "窗口详情",
       "windowState": "{label}（{state}）"

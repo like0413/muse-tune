@@ -17,7 +17,8 @@ use crate::{error::Error, native_defaults, settings_store::PATH as SETTINGS_STOR
 
 use super::{
     TASKBAR_WINDOW_LABEL, TaskbarOverlapPriority, TaskbarPlacement, TaskbarWidthMode, displays,
-    events, platform, set_content_width, set_overlap_priority, set_placement, set_width_mode, sync,
+    events, platform, set_content_width, set_horizontal_offset, set_overlap_priority,
+    set_placement, set_width_mode, sync,
 };
 
 const RECOVERY_RETRY_DELAY: Duration = Duration::from_millis(400);
@@ -25,6 +26,7 @@ const DISPLAY_TOPOLOGY_CHECK_INTERVAL: Duration = Duration::from_secs(1);
 const DISPLAY_TARGET_KEY: &str = "taskbar.displayTarget";
 const WIDTH_KEY: &str = "taskbar.width";
 const WIDTH_MODE_KEY: &str = "taskbar.widthMode";
+const HORIZONTAL_OFFSET_KEY: &str = "taskbar.horizontalOffset";
 const PLACEMENT_KEY: &str = "taskbar.placement";
 const OVERLAP_PRIORITY_KEY: &str = "taskbar.overlapPriority";
 
@@ -176,6 +178,13 @@ fn restore_native_settings<R: Runtime>(app: &tauri::App<R>) {
         .and_then(|value| serde_json::from_value::<TaskbarWidthMode>(value).ok())
     {
         set_width_mode(mode);
+    }
+    if let Some(offset) = store
+        .get(HORIZONTAL_OFFSET_KEY)
+        .and_then(|value| value.as_i64())
+        .and_then(|value| i32::try_from(value).ok())
+    {
+        set_horizontal_offset(offset);
     }
     if let Some(priority) = store
         .get(OVERLAP_PRIORITY_KEY)

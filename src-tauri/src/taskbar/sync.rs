@@ -27,8 +27,8 @@ use super::{
         taskbar_buttons_center_aligned, window_dpi,
     },
     settings::{
-        content_visible, content_width, min_content_width, needs_taskbar_elements,
-        overlap_priority, placement, width_mode,
+        content_visible, content_width, horizontal_offset, min_content_width,
+        needs_taskbar_elements, overlap_priority, placement, width_mode,
     },
 };
 
@@ -410,7 +410,14 @@ impl TaskbarSync {
                 dpi,
             ),
         };
-        let ideal_rect = calculate_bar_rect(taskbar_rect, anchor_right, dpi, side, content_width);
+        let ideal_rect = calculate_bar_rect(
+            taskbar_rect,
+            anchor_right,
+            dpi,
+            side,
+            content_width,
+            horizontal_offset(),
+        );
         let visible_rect = if self.active_priority == TaskbarOverlapPriority::TaskbarElements {
             match button_rects {
                 Some(rects) => hard_clip_bar_rect(ideal_rect, &rects?, side, dpi),

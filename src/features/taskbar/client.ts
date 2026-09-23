@@ -30,6 +30,11 @@ export function setTaskbarPlacement(placement: TaskbarPlacement): Promise<void> 
   return invoke('set_taskbar_placement', { placement })
 }
 
+/** 将所有任务栏窗口相对默认位置水平平移指定 DIP。 */
+export function setTaskbarHorizontalOffset(offset: number): Promise<void> {
+  return invoke('set_taskbar_horizontal_offset', { offset })
+}
+
 export function setTaskbarWidth(width: number, mode: TaskbarWidthMode): Promise<void> {
   return invoke('set_taskbar_width', { width, mode })
 }

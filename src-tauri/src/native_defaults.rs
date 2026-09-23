@@ -83,6 +83,9 @@ pub struct TaskbarDefaults {
     pub width_max: i32,
     pub width: i32,
     pub width_mode: TaskbarWidthMode,
+    pub horizontal_offset_min: i32,
+    pub horizontal_offset_max: i32,
+    pub horizontal_offset: i32,
     pub placement: TaskbarPlacement,
     pub overlap_priority: TaskbarOverlapPriority,
     pub display_target: String,
@@ -145,6 +148,11 @@ mod tests {
         assert!(
             taskbar.width_min <= taskbar.width && taskbar.width <= taskbar.width_max,
             "默认宽度必须落在可调范围内，否则会被原生钳制而与设置界面不一致"
+        );
+        assert!(
+            taskbar.horizontal_offset_min <= taskbar.horizontal_offset
+                && taskbar.horizontal_offset <= taskbar.horizontal_offset_max,
+            "默认水平偏移必须落在可调范围内，否则会被原生钳制而与设置界面不一致"
         );
     }
 

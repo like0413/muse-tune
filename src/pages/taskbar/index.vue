@@ -16,7 +16,6 @@ import { toggleCurrentMediaPlayer } from '@/features/media/client'
 import { useMediaProgress } from '@/features/media/useMediaProgress'
 import { useMediaSession } from '@/features/media/useMediaSession'
 import { useMediaSessionSelectionPolicy } from '@/features/media/useMediaSessionSelectionPolicy'
-import { useReducedMotionPreference } from '@/features/motion/useReducedMotionPreference'
 import { useTaskbarAudioSpectrumSettings } from '@/features/settings/audio-spectrum'
 import { TASKBAR_WIDTH_PRESETS } from '@/features/settings/bar-width'
 import { isTaskbarCoverVisibleInMode } from '@/features/settings/cover'
@@ -40,8 +39,6 @@ import PlaybackControlsElement from './components/PlaybackControlsElement.vue'
 import TrackInfoElement from './components/TrackInfoElement.vue'
 
 const { locale, t } = useI18n({ useScope: 'global' })
-const reducedMotion = useReducedMotionPreference()
-
 const { session: mediaSession, timeline, controlPending, control } = useMediaSession()
 const playbackStatus = computed(() => mediaSession.value?.playback.status ?? 'unknown')
 const { settings: lyricsSettings } = useTaskbarLyricsSettings()
@@ -125,8 +122,8 @@ const needsLyricsTimeline = computed(
     playbackStatus.value === 'playing' &&
     !isTaskbarHovered.value,
 )
-// 开启减少动态效果时降级为 1 FPS 低频更新，避免逐帧重算歌词并触发重绘。
-const needsSmoothProgress = computed(() => needsLyricsTimeline.value && !reducedMotion.value)
+// 逐字高亮属于歌词内容进度，不是装饰性动画；减少动态效果不能降低它的更新时间精度。
+const needsSmoothProgress = needsLyricsTimeline
 const needsProgress = computed(
   () =>
     taskbarContentVisible.value &&

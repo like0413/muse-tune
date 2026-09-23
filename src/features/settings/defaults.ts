@@ -38,8 +38,9 @@ import type { TaskbarTrackInfoAlignment, TaskbarTrackInfoScrolling } from './tra
 
 /**
  * `native-defaults.json` 承载原生启动期必须自行读取的取值——那时前端尚未运行，
- * 无法依赖前端推送。因此宽度范围与 `taskbar.width` / `widthMode` / `placement` /
- * `overlapPriority` / `displayTarget` / `lyrics` 的默认值以该文件为唯一来源，
+ * 无法依赖前端推送。因此宽度和水平偏移范围与 `taskbar.width` / `widthMode` /
+ * `horizontalOffset` / `placement` / `overlapPriority` / `displayTarget` / `lyrics`
+ * 的默认值以该文件为唯一来源，
  * 原生侧通过 `src-tauri/src/native_defaults.rs` 读取同一份数据。
  *
  * JSON 导入只能推导出 `string`，不会保留字面量联合类型，所以在此集中断言一次；
@@ -49,10 +50,10 @@ import type { TaskbarTrackInfoAlignment, TaskbarTrackInfoScrolling } from './tra
  * 需要自行判废过期的 `taskbar.lyrics`）；后者由 `./storage/schema-versions.ts` 读取。
  *
  * 写入契约：原生侧只在启动时读取上述键，之后不再从存储同步。修改它们必须经由各自的
- * setter（`setTaskbarWidth`、`setTaskbarPlacement`、`setTaskbarOverlapPriority`、
- * `setTaskbarDisplayTarget`、`setTaskbarLyricsSettings`），因为"推送原生"与"写入存储"
- * 是在那里成对完成的。绕过 setter 直接写 `settingsStore` 会让原生保持旧值而设置界面
- * 显示新值，并且没有任何机制会自动纠正。
+ * setter（`setTaskbarWidth`、`setTaskbarHorizontalOffset`、`setTaskbarPlacement`、
+ * `setTaskbarOverlapPriority`、`setTaskbarDisplayTarget`、`setTaskbarLyricsSettings`），
+ * 因为"推送原生"与"写入存储"是在那里成对完成的。绕过 setter 直接写
+ * `settingsStore` 会让原生保持旧值而设置界面显示新值，并且没有任何机制会自动纠正。
  *
  * `media.sessionSelection` 遵循同一条规则，只是它的推送经由变更事件而非同一个函数。
  */
@@ -62,6 +63,9 @@ const sharedDefaults = nativeDefaultsJson as {
     widthMax: number
     width: number
     widthMode: TaskbarWidthMode
+    horizontalOffsetMin: number
+    horizontalOffsetMax: number
+    horizontalOffset: number
     placement: TaskbarPlacement
     overlapPriority: TaskbarOverlapPriority
     displayTarget: string
@@ -107,6 +111,13 @@ export const TASKBAR_WIDTH_MAX = sharedDefaults.taskbar.widthMax
 export const DEFAULT_TASKBAR_WIDTH = sharedDefaults.taskbar.width
 
 export const DEFAULT_TASKBAR_WIDTH_MODE: TaskbarWidthMode = sharedDefaults.taskbar.widthMode
+
+/** bar 水平坐标偏移的可调范围，单位为 DIP。 */
+export const TASKBAR_HORIZONTAL_OFFSET_MIN = sharedDefaults.taskbar.horizontalOffsetMin
+export const TASKBAR_HORIZONTAL_OFFSET_MAX = sharedDefaults.taskbar.horizontalOffsetMax
+
+/** 默认不偏移；正值向屏幕右侧移动，负值向左。 */
+export const DEFAULT_TASKBAR_HORIZONTAL_OFFSET = sharedDefaults.taskbar.horizontalOffset
 
 export const DEFAULT_TASKBAR_PLACEMENT: TaskbarPlacement = sharedDefaults.taskbar.placement
 

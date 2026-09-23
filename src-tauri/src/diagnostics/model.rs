@@ -45,6 +45,7 @@ pub struct TaskbarDiagnostics {
     pub placement: TaskbarPlacement,
     pub overlap_priority: TaskbarOverlapPriority,
     pub content_width_dip: i32,
+    pub horizontal_offset_dip: i32,
     pub width_mode: TaskbarWidthMode,
     pub displays: Vec<TaskbarDisplay>,
     pub windows: Vec<TaskbarWindowDiagnostics>,

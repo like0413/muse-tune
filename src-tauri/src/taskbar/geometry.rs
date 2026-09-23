@@ -114,18 +114,20 @@ pub(super) fn calculate_bar_rect(
     dpi: u32,
     side: TaskbarSide,
     content_width_dip: i32,
+    horizontal_offset_dip: i32,
 ) -> ScreenRect {
     let dpi = if dpi == 0 { BASE_DPI } else { dpi };
     let width = scale_dip(content_width_dip.max(1), dpi).min(taskbar.width());
+    let horizontal_offset = scale_dip(horizontal_offset_dip, dpi);
     let (left, right) = match side {
-        TaskbarSide::Left => (taskbar.left, taskbar.left + width),
-        TaskbarSide::Right => (anchor_right - width, anchor_right),
+        TaskbarSide::Left => (taskbar.left, taskbar.left.saturating_add(width)),
+        TaskbarSide::Right => (anchor_right.saturating_sub(width), anchor_right),
     };
 
     ScreenRect {
-        left,
+        left: left.saturating_add(horizontal_offset),
         top: taskbar.top,
-        right,
+        right: right.saturating_add(horizontal_offset),
         bottom: taskbar.bottom,
     }
 }
@@ -173,7 +175,9 @@ pub(super) fn hard_clip_bar_rect(
 
 /// 将设备无关像素按当前窗口 DPI 转换为物理像素。
 fn scale_dip(value: i32, dpi: u32) -> i32 {
-    ((i64::from(value) * i64::from(dpi) + i64::from(BASE_DPI / 2)) / i64::from(BASE_DPI)) as i32
+    let scaled = i64::from(value) * i64::from(dpi);
+    let rounding = i64::from(BASE_DPI / 2) * scaled.signum();
+    ((scaled + rounding) / i64::from(BASE_DPI)) as i32
 }
 
 /// 反方向换算：把物理像素折回设备无关像素。
@@ -224,7 +228,7 @@ mod tests {
     /// 右侧停靠时播放器贴着锚点向内生长。
     #[test]
     fn right_docked_bar_grows_leftwards_from_the_anchor() {
-        let bar = calculate_bar_rect(rect(0, 1920), 1800, BASE_DPI, TaskbarSide::Right, 250);
+        let bar = calculate_bar_rect(rect(0, 1920), 1800, BASE_DPI, TaskbarSide::Right, 250, 0);
 
         assert_eq!(bar, rect(1550, 1800));
     }
@@ -232,7 +236,7 @@ mod tests {
     /// 宽度不得超过任务栏可用宽度，否则播放器会被推到屏幕外。
     #[test]
     fn bar_width_is_capped_by_the_taskbar() {
-        let bar = calculate_bar_rect(rect(0, 1920), 1920, BASE_DPI, TaskbarSide::Right, 4000);
+        let bar = calculate_bar_rect(rect(0, 1920), 1920, BASE_DPI, TaskbarSide::Right, 4000, 0);
 
         assert_eq!(bar, rect(0, 1920));
     }
@@ -240,7 +244,7 @@ mod tests {
     /// DPI 缺失时按基准 DPI 处理，不能出现除零或退化到 0 宽度。
     #[test]
     fn missing_dpi_falls_back_to_base_dpi() {
-        let bar = calculate_bar_rect(rect(0, 1920), 1800, 0, TaskbarSide::Right, 250);
+        let bar = calculate_bar_rect(rect(0, 1920), 1800, 0, TaskbarSide::Right, 250, 0);
 
         assert_eq!(bar.width(), 250);
     }
@@ -248,7 +252,7 @@ mod tests {
     /// 高 DPI 下同一 DIP 宽度要按比例放大，否则高分屏上播放器会明显偏窄。
     #[test]
     fn dip_width_scales_with_dpi() {
-        let bar = calculate_bar_rect(rect(0, 1920), 1920, 120, TaskbarSide::Right, 250);
+        let bar = calculate_bar_rect(rect(0, 1920), 1920, 120, TaskbarSide::Right, 250, 0);
 
         assert_eq!(bar.width(), 313);
     }
@@ -256,9 +260,37 @@ mod tests {
     /// 左侧停靠时从任务栏左边缘起算，与右侧锚点无关。
     #[test]
     fn left_docked_bar_starts_at_the_taskbar_edge() {
-        let bar = calculate_bar_rect(rect(0, 1920), 1800, BASE_DPI, TaskbarSide::Left, 250);
+        let bar = calculate_bar_rect(rect(0, 1920), 1800, BASE_DPI, TaskbarSide::Left, 250, 0);
 
         assert_eq!(bar, rect(0, 250));
+    }
+
+    /// 有符号偏移只改变 X 坐标；正值在两种停靠方向下都向屏幕右侧移动。
+    #[test]
+    fn horizontal_offset_uses_screen_axis_direction() {
+        let left = calculate_bar_rect(rect(0, 1920), 1800, BASE_DPI, TaskbarSide::Left, 250, 24);
+        let right = calculate_bar_rect(rect(0, 1920), 1800, BASE_DPI, TaskbarSide::Right, 250, -24);
+
+        assert_eq!(left, rect(24, 274));
+        assert_eq!(right, rect(1526, 1776));
+    }
+
+    /// 偏移与宽度一样按显示器 DPI 缩放，保证不同缩放比例下视觉距离一致。
+    #[test]
+    fn horizontal_offset_scales_with_dpi() {
+        let bar = calculate_bar_rect(rect(0, 1920), 1800, 120, TaskbarSide::Right, 250, 20);
+
+        assert_eq!(bar, rect(1512, 1825));
+    }
+
+    /// 负偏移使用与正偏移对称的 DPI 舍入，不能让小负值意外退化为零。
+    #[test]
+    fn negative_horizontal_offset_scales_symmetrically() {
+        let positive = calculate_bar_rect(rect(0, 1920), 1800, 120, TaskbarSide::Left, 250, 1);
+        let negative = calculate_bar_rect(rect(0, 1920), 1800, 120, TaskbarSide::Left, 250, -1);
+
+        assert_eq!(positive.left, 1);
+        assert_eq!(negative.left, -1);
     }
 
     /// 硬裁剪只为真正重叠的元素让位，且右侧要额外留出视觉间距。

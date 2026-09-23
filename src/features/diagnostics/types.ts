@@ -25,6 +25,7 @@ export interface TaskbarDiagnostics {
   placement: TaskbarPlacement
   overlapPriority: TaskbarOverlapPriority
   contentWidthDip: number
+  horizontalOffsetDip: number
   displays: TaskbarDisplay[]
   windows: Array<{ label: string; visible: boolean }>
 }

@@ -24,6 +24,12 @@ pub fn set_taskbar_placement(placement: TaskbarPlacement) {
 }
 
 #[tauri::command]
+/// 立即更新所有任务栏窗口的有符号水平偏移。
+pub fn set_taskbar_horizontal_offset(offset: i32) {
+    taskbar::set_horizontal_offset(offset);
+}
+
+#[tauri::command]
 pub fn set_taskbar_overlap_priority(priority: TaskbarOverlapPriority) {
     taskbar::set_overlap_priority(priority);
 }

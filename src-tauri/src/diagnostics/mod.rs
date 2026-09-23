@@ -44,8 +44,14 @@ pub fn collect<R: Runtime>(
     bar_windows.sort_unstable_by(|left, right| left.label.cmp(&right.label));
     let visible_bar_window_count = bar_windows.iter().filter(|window| window.visible).count();
     let displays = taskbar::available_displays();
-    let (display_target, placement, overlap_priority, width_mode, content_width_dip) =
-        taskbar::diagnostic_settings();
+    let (
+        display_target,
+        placement,
+        overlap_priority,
+        width_mode,
+        content_width_dip,
+        horizontal_offset_dip,
+    ) = taskbar::diagnostic_settings();
     let cache_directory = app.path().app_cache_dir().ok();
     let log_directory = app.path().app_log_dir().ok();
     let settings_file = app
@@ -67,6 +73,7 @@ pub fn collect<R: Runtime>(
         placement,
         overlap_priority,
         content_width_dip,
+        horizontal_offset_dip,
         width_mode,
         displays,
         windows: bar_windows,

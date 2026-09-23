@@ -57,6 +57,10 @@
         "auto": "Automatic",
         "right": "Right"
       },
+      "horizontalOffset": {
+        "title": "Horizontal offset",
+        "description": "Move from the default position; positive values move right and negative values move left, in pixels"
+      },
       "overlap": {
         "title": "Overlap priority",
         "description": "When space is limited, let Muse Tune overlap taskbar items or clip it to avoid them",
@@ -507,6 +511,7 @@
       "barPriority": "Muse Tune first",
       "systemPriority": "System taskbar elements first",
       "logicalWidth": "Logical width",
+      "horizontalOffset": "Horizontal offset",
       "displayDetails": "Display details",
       "windowDetails": "Window details",
       "windowState": "{label} ({state})"

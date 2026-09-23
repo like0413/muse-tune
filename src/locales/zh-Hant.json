@@ -57,6 +57,10 @@
         "auto": "自動",
         "right": "右側"
       },
+      "horizontalOffset": {
+        "title": "水平偏移",
+        "description": "相對預設位置水平移動；正值向右，負值向左，單位為像素"
+      },
       "overlap": {
         "title": "遮擋優先順序",
         "description": "空間不足時，允許元件覆蓋工作列項目，或裁切元件以避開它們",
@@ -504,6 +508,7 @@
       "barPriority": "Muse Tune 優先",
       "systemPriority": "系統工作列元素優先",
       "logicalWidth": "邏輯寬度",
+      "horizontalOffset": "水平偏移",
       "displayDetails": "顯示器詳細資料",
       "windowDetails": "視窗詳細資料",
       "windowState": "{label}（{state}）"
