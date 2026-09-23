@@ -19,7 +19,7 @@ use windows::{
 
 use super::{
     MediaVolumeSnapshot,
-    monitor::{metrics::WorkerSender, pending_events::WorkerEvent},
+    monitor::{channel::WorkerSender, pending_events::WorkerEvent},
 };
 use crate::error::Error;
 

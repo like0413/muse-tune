@@ -7,6 +7,16 @@ use std::{
 };
 
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+use windows::Win32::{
+    Foundation::{CloseHandle, HANDLE, HMODULE},
+    System::{
+        ProcessStatus::{EnumProcessModulesEx, GetModuleFileNameExW, LIST_MODULES_ALL},
+        Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ},
+    },
+};
+
+/// 单次模块枚举的最大数量，超出部分不影响低基数插件判定。
+const MAX_PROCESS_MODULES: usize = 1024;
 
 /// 复用的进程枚举器：避免每次查询都重建整张进程表。
 static PROCESS_SYSTEM: OnceLock<Mutex<System>> = OnceLock::new();
@@ -83,4 +93,70 @@ pub(super) fn find_process_executable(process_ids: &HashSet<u32>) -> Option<Path
         })
         .min_by_key(|(is_child, executable)| (*is_child, executable.components().count()))
         .map(|(_, executable)| executable)
+}
+
+/// 判断目标进程中是否加载了路径包含任意指定片段的模块。
+///
+/// 读取模块列表失败时按未加载处理，由调用方选择保守的后续路径。
+pub(super) fn loads_module_matching(process_ids: &HashSet<u32>, fragments: &[&str]) -> bool {
+    if fragments.is_empty() {
+        return false;
+    }
+
+    process_ids
+        .iter()
+        .any(|process_id| process_loads_matching_module(*process_id, fragments))
+}
+
+/// 枚举单个进程的模块路径并匹配路径片段。
+fn process_loads_matching_module(process_id: u32, fragments: &[&str]) -> bool {
+    // SAFETY: 只申请读取模块列表所需的权限，不修改目标进程。
+    let Ok(process) = (unsafe {
+        OpenProcess(
+            PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+            false,
+            process_id,
+        )
+    }) else {
+        return false;
+    };
+
+    let matched = any_module_matches(process, fragments);
+    // SAFETY: process 由 OpenProcess 成功返回，这里关闭唯一句柄。
+    let _ = unsafe { CloseHandle(process) };
+    matched
+}
+
+/// 读取模块完整路径；插件常把文件改名放进自己的目录，因此按路径片段匹配。
+fn any_module_matches(process: HANDLE, fragments: &[&str]) -> bool {
+    let mut modules = [HMODULE::default(); MAX_PROCESS_MODULES];
+    let mut needed = 0_u32;
+    // SAFETY: modules 是可写数组，缓冲区字节数与输出长度地址均有效。
+    let Ok(()) = (unsafe {
+        EnumProcessModulesEx(
+            process,
+            modules.as_mut_ptr(),
+            std::mem::size_of_val(&modules) as u32,
+            &raw mut needed,
+            LIST_MODULES_ALL,
+        )
+    }) else {
+        return false;
+    };
+
+    let count = (needed as usize / std::mem::size_of::<HMODULE>()).min(MAX_PROCESS_MODULES);
+    (0..count).any(|index| module_matches(process, modules[index], fragments))
+}
+
+/// 读取单个模块的完整路径并匹配任意片段。
+fn module_matches(process: HANDLE, module: HMODULE, fragments: &[&str]) -> bool {
+    let mut buffer = [0_u16; 512];
+    // SAFETY: buffer 的完整长度均可写，process 与 module 来自本次模块枚举。
+    let length = unsafe { GetModuleFileNameExW(Some(process), Some(module), &mut buffer) };
+    let Some(path) = buffer.get(..length as usize) else {
+        return false;
+    };
+
+    let path = String::from_utf16_lossy(path).to_ascii_lowercase();
+    fragments.iter().any(|fragment| path.contains(fragment))
 }

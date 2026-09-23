@@ -1,9 +1,10 @@
 use crate::lyrics::{
     model::{
         LyricLine, LyricsLookupMiss, LyricsLookupOutcome, LyricsResolutionMethod,
-        LyricsResolutionOutcome, LyricsSnapshot, LyricsSourceKind, LyricsStatus, PlatformNotice,
-        ResolvedLyrics, has_word_timing, platform_notice,
+        LyricsResolutionOutcome, LyricsSnapshot, LyricsSourceKind, LyricsStatus, ResolvedLyrics,
+        has_word_timing,
     },
+    notice::{PlatformNotice, platform_notice},
     track::TrackDescriptor,
 };
 use crate::media::MediaPlayer;

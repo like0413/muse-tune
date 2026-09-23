@@ -6,7 +6,7 @@ use windows::Media::Control::{
 
 use crate::media::{MediaPlayer, model::MediaPlaybackStatus, players::identify};
 
-use super::{SessionEntry, metrics::WorkerSender, session};
+use super::{SessionEntry, channel::WorkerSender, session};
 
 /// 同步当前全部 GSMTC 会话，并为新增会话建立独立事件订阅。
 pub(super) fn synchronize_sessions(

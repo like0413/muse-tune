@@ -8,11 +8,7 @@ use std::{
 };
 
 use windows::Win32::{
-    Foundation::{CloseHandle, HANDLE, HMODULE, HWND, LPARAM, WPARAM},
-    System::{
-        ProcessStatus::{EnumProcessModulesEx, GetModuleFileNameExW, LIST_MODULES_ALL},
-        Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ},
-    },
+    Foundation::{HWND, LPARAM, WPARAM},
     UI::WindowsAndMessaging::{
         EnumWindows, GA_ROOTOWNER, GW_OWNER, GWL_EXSTYLE, GetAncestor, GetClassNameW,
         GetForegroundWindow, GetWindow, GetWindowLongPtrW, GetWindowPlacement,
@@ -25,7 +21,7 @@ use windows_core::BOOL;
 
 use super::{
     players::IdentifiedPlayer,
-    process::{find_process_executable, find_process_ids},
+    process::{find_process_executable, find_process_ids, loads_module_matching},
 };
 use crate::error::Error;
 
@@ -33,8 +29,6 @@ use crate::error::Error;
 const MIN_RELATED_TITLE_LENGTH: usize = 2;
 /// 官方启动入口相对客户端可执行文件向上查找的层数。
 const LAUNCH_ENTRY_SEARCH_LEVELS: usize = 3;
-/// 单次模块枚举的最大数量，超出部分不影响插件判定。
-const MAX_PROCESS_MODULES: usize = 1024;
 /// Chromium 托管窗口的类名前缀。
 const CHROMIUM_WINDOW_CLASS_PREFIX: &str = "chrome_widgetwin_";
 
@@ -89,7 +83,7 @@ fn open_player_window(
 
     // 应用自己隐藏的窗口优先由外部直接显示：客户端自有窗口类的可见位就是它的真实状态，
     // 显示与置前瞬时生效。只有下面两种情况必须换路径。
-    if loads_blocking_plugin(process_ids, player.relaunch_blocking_module_fragments()) {
+    if loads_module_matching(process_ids, player.relaunch_blocking_module_fragments()) {
         show_and_activate_window(candidate.window, candidate.minimized);
         return Ok(());
     }
@@ -214,72 +208,6 @@ fn find_launch_entry(executable: &Path, entry_names: &[&str]) -> Option<PathBuf>
     }
 
     None
-}
-
-/// 判断目标进程中是否加载了会阻止重新启动入口的插件模块。
-/// 读取模块列表失败时按“未加载”处理，交给窗口托管类型决定路径；
-/// 若此时误判为已加载，Chromium 托管的窗口会被强制外部显示而卡死。
-fn loads_blocking_plugin(process_ids: &HashSet<u32>, fragments: &[&str]) -> bool {
-    if fragments.is_empty() {
-        return false;
-    }
-
-    process_ids
-        .iter()
-        .any(|process_id| process_loads_blocking_module(*process_id, fragments))
-}
-
-/// 枚举单个进程的模块路径并匹配插件片段。
-fn process_loads_blocking_module(process_id: u32, fragments: &[&str]) -> bool {
-    // SAFETY: 只申请读取模块列表所需的权限，不修改目标进程。
-    let Ok(process) = (unsafe {
-        OpenProcess(
-            PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
-            false,
-            process_id,
-        )
-    }) else {
-        return false;
-    };
-
-    let matched = unsafe { any_module_matches(process, fragments) };
-    // SAFETY: process 由 OpenProcess 成功返回，这里关闭唯一句柄。
-    let _ = unsafe { CloseHandle(process) };
-    matched
-}
-
-/// 读取模块完整路径；插件常把文件改名放进自己的目录，因此按路径片段匹配。
-unsafe fn any_module_matches(process: HANDLE, fragments: &[&str]) -> bool {
-    let mut modules = [HMODULE::default(); MAX_PROCESS_MODULES];
-    let mut needed = 0_u32;
-    // SAFETY: modules 是可写数组，cb 与 lpcbneeded 均按同一数组计算。
-    let Ok(()) = (unsafe {
-        EnumProcessModulesEx(
-            process,
-            modules.as_mut_ptr(),
-            std::mem::size_of_val(&modules) as u32,
-            &raw mut needed,
-            LIST_MODULES_ALL,
-        )
-    }) else {
-        return false;
-    };
-
-    let count = (needed as usize / std::mem::size_of::<HMODULE>()).min(MAX_PROCESS_MODULES);
-    (0..count).any(|index| module_matches(process, modules[index], fragments))
-}
-
-/// 读取单个模块的完整路径并匹配任意片段。
-fn module_matches(process: HANDLE, module: HMODULE, fragments: &[&str]) -> bool {
-    let mut buffer = [0_u16; 512];
-    // SAFETY: buffer 的完整长度均可写，process 与 module 来自本次模块枚举。
-    let length = unsafe { GetModuleFileNameExW(Some(process), Some(module), &mut buffer) };
-    let Some(path) = buffer.get(..length as usize) else {
-        return false;
-    };
-
-    let path = String::from_utf16_lossy(path).to_ascii_lowercase();
-    fragments.iter().any(|fragment| path.contains(fragment))
 }
 
 struct WindowCandidate {

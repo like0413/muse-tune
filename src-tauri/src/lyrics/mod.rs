@@ -6,6 +6,7 @@ mod error;
 mod matcher;
 mod model;
 mod network;
+mod notice;
 mod parser;
 mod players;
 mod schema;

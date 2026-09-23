@@ -5,7 +5,8 @@ use lyrics_parsers::parsers::{krc_parser, lrc_parser, qrc_parser, yrc_parser};
 
 use super::{
     error::LyricsError,
-    model::{LyricLine, LyricWord, notice_text_without_timeline},
+    model::{LyricLine, LyricWord},
+    notice::notice_text_without_timeline,
 };
 
 const DEFAULT_LINE_DURATION_MS: u64 = 5_000;
@@ -219,7 +220,7 @@ fn select_translation(translations: &std::collections::HashMap<String, String>) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lyrics::model::{PlatformNotice, platform_notice};
+    use crate::lyrics::notice::{PlatformNotice, platform_notice};
 
     /// QQ 音乐给纯音乐曲目返回的整段歌词不带时间戳，逐行解析会把它整段丢掉；补出的那一行
     /// 必须能让统一的占位识别判成纯音乐，否则这首歌既不显示歌词也判不出结论。

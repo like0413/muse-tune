@@ -1,5 +1,6 @@
-use crate::lyrics::model::{
-    LyricsPrecision, LyricsSnapshot, LyricsStatus, ResolvedLyrics, has_word_timing, platform_notice,
+use crate::lyrics::{
+    model::{LyricsPrecision, LyricsSnapshot, LyricsStatus, ResolvedLyrics, has_word_timing},
+    notice::platform_notice,
 };
 
 use super::pipeline::auxiliary_content_quality;

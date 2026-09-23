@@ -47,7 +47,7 @@ struct KugouDownloadResponse {
 }
 
 /// 搜索酷狗歌词候选，按匹配度逐个下载解密，返回第一个可用结果。
-pub(super) fn resolve(
+pub(in crate::lyrics::players) fn resolve(
     track: &TrackDescriptor,
     client: &Client,
     deadline: &ResolutionDeadline,

@@ -12,7 +12,7 @@ use windows::{
     Storage::Streams::IRandomAccessStreamReference,
 };
 
-use super::{metrics::WorkerSender, pending_events::WorkerEvent};
+use super::{channel::WorkerSender, pending_events::WorkerEvent};
 use crate::error::Error;
 use crate::media::{
     MediaControlAction, MediaMetadata, MediaPlayback, MediaPlaybackControls, MediaSessionSnapshot,

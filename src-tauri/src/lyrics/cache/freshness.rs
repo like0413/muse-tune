@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::lyrics::model::{LyricsPrecision, LyricsStatus};
 
-use super::CacheEntry;
+use super::entry::CacheEntry;
 
 /// 展示可信期：缓存可直接展示、无需阻塞式重新解析的期限。
 ///

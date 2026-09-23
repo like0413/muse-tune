@@ -1,0 +1,307 @@
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+    sync::{Arc, LazyLock},
+};
+
+use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_SZ, RegGetValueW};
+
+use crate::{
+    lyrics::{
+        error::LyricsError,
+        matcher::{SongCandidate, TrackMatchKey, accepted_score},
+        model::{LyricLine, LyricsSource, LyricsSourceKind, ResolvedLyrics},
+        parser::{AuxiliaryKind, merge_auxiliary_lines, parse_lrc_lines, parse_qrc_lines},
+        players::{
+            file_index::DirectoryFileIndex,
+            registry_watch::{RegistryWatchHandle, watch_current_user_value_changes},
+        },
+        track::{TrackDescriptor, split_artists},
+    },
+    media::MediaPlayer,
+};
+
+const MAX_QRC_BYTES: u64 = 2 * 1024 * 1024;
+static LOCAL_QRC_INDEX: LazyLock<DirectoryFileIndex<IndexedQrcFile>> =
+    LazyLock::new(DirectoryFileIndex::new);
+
+#[derive(Clone)]
+struct IndexedQrcFile {
+    path: PathBuf,
+    artist: String,
+    title: String,
+    duration_seconds: u64,
+}
+
+/// 从注册表的缓存根目录定位 QQMusicLyricNew。
+pub(in crate::lyrics::players) fn automatic_cache_path() -> Option<PathBuf> {
+    read_cache_root_from_registry().map(|path| path.join("QQMusicLyricNew"))
+}
+
+/// 使用 Windows 注册表原生通知监听 QQ 音乐缓存根目录调整。
+pub(in crate::lyrics::players) fn watch_cache_path_changes(
+    on_change: Arc<dyn Fn() + Send + Sync>,
+) -> Result<RegistryWatchHandle, io::Error> {
+    watch_current_user_value_changes(
+        "qq-music-cache-registry",
+        r"Software\Tencent\QQMusic\LogConfig",
+        on_change,
+    )
+}
+
+pub(in crate::lyrics::players) fn resolve(
+    track: &TrackDescriptor,
+    cache_path: &Path,
+) -> Result<Option<ResolvedLyrics>, LyricsError> {
+    if !cache_path.is_dir() {
+        return Ok(None);
+    }
+    let entries = LOCAL_QRC_INDEX.load(cache_path, || scan_local_qrc_files(cache_path))?;
+    // 索引可能有上千条目，当前歌曲的归一化只做一次。
+    let match_key = TrackMatchKey::new(track);
+    let mut best: Option<(u8, PathBuf)> = None;
+    for entry in entries.iter() {
+        let artists = split_artists(&entry.artist);
+        let Some(score) = match_key.score(SongCandidate {
+            title: &entry.title,
+            artists: &artists,
+            duration_ms: Some(entry.duration_seconds * 1_000),
+        }) else {
+            continue;
+        };
+        if best
+            .as_ref()
+            .is_none_or(|(best_score, _)| score > *best_score)
+        {
+            best = Some((score, entry.path.clone()));
+        }
+    }
+    let Some((_, original_path)) = best else {
+        return Ok(None);
+    };
+    let mut lines = decrypt_local_qrc(&original_path)?;
+    let base = original_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .and_then(|name| name.strip_suffix("_qm.qrc"))
+        .ok_or_else(|| LyricsError::InvalidData("QQ QRC 文件名无效".to_owned()))?;
+    for (suffix, kind) in [
+        ("_qmts.qrc", AuxiliaryKind::Translation),
+        ("_qmRoma.qrc", AuxiliaryKind::Romanization),
+    ] {
+        let auxiliary_path = original_path.with_file_name(format!("{base}{suffix}"));
+        if auxiliary_path.is_file() {
+            match decrypt_local_qrc(&auxiliary_path) {
+                Ok(auxiliary) => merge_auxiliary_lines(&mut lines, &auxiliary, kind),
+                Err(error) => log::debug!("QQ 本地辅助歌词不可用: {error}"),
+            }
+        }
+    }
+    if lines.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(ResolvedLyrics {
+        source: LyricsSource {
+            player: MediaPlayer::QqMusic,
+            kind: LyricsSourceKind::Local,
+            song_id: None,
+        },
+        lines,
+    }))
+}
+
+/// 文件监听确认 QQ 歌词目录变化后，淘汰可能早于目录时间戳更新的索引。
+pub(in crate::lyrics::players) fn invalidate_local_index(cache_path: &Path) {
+    LOCAL_QRC_INDEX.invalidate(cache_path);
+}
+
+/// 扫描一次 QQ 主 QRC 文件并缓存稳定的文件名元数据。
+fn scan_local_qrc_files(cache_path: &Path) -> io::Result<Vec<IndexedQrcFile>> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(cache_path)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_file() {
+            continue;
+        }
+        let file_name = entry.file_name();
+        let Some(file_name) = file_name.to_str() else {
+            continue;
+        };
+        let Some(metadata) = parse_original_file_name(file_name) else {
+            continue;
+        };
+        files.push(IndexedQrcFile {
+            path: entry.path(),
+            artist: metadata.artist.to_owned(),
+            title: metadata.title.to_owned(),
+            duration_seconds: metadata.duration_seconds,
+        });
+    }
+    Ok(files)
+}
+
+/// 判断一组 QQ 缓存文件事件中是否包含当前歌曲的主歌词或辅助歌词。
+pub(in crate::lyrics::players) fn changed_paths_affect_track(
+    track: &TrackDescriptor,
+    paths: &[PathBuf],
+) -> bool {
+    paths.iter().any(|path| {
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            return false;
+        };
+        let primary_name = name
+            .strip_suffix("_qmts.qrc")
+            .or_else(|| name.strip_suffix("_qmRoma.qrc"))
+            .map_or_else(|| name.to_owned(), |base| format!("{base}_qm.qrc"));
+        let Some(metadata) = parse_original_file_name(&primary_name) else {
+            return false;
+        };
+        let artists = split_artists(metadata.artist);
+        accepted_score(
+            track,
+            SongCandidate {
+                title: metadata.title,
+                artists: &artists,
+                duration_ms: Some(metadata.duration_seconds * 1_000),
+            },
+        )
+        .is_some()
+    })
+}
+
+/// 解密 QQ 本地 QRC，并按明文内容识别逐字 QRC 或逐行 LRC。
+fn decrypt_local_qrc(path: &Path) -> Result<Vec<LyricLine>, LyricsError> {
+    let metadata = fs::metadata(path)?;
+    if metadata.len() == 0 || metadata.len() > MAX_QRC_BYTES {
+        return Err(LyricsError::InvalidData("QQ QRC 文件大小无效".to_owned()));
+    }
+    let decoded = decode_qmc_mask(&fs::read(path)?);
+    let newline = decoded
+        .iter()
+        .position(|byte| *byte == b'\n')
+        .ok_or_else(|| LyricsError::InvalidData("QQ QRC 缺少偏移头".to_owned()))?;
+    let header = String::from_utf8_lossy(&decoded[..newline]);
+    if !header.trim().starts_with("[offset:") || !header.trim().ends_with(']') {
+        return Err(LyricsError::InvalidData("QQ QRC 偏移头无效".to_owned()));
+    }
+    let encrypted = hex::encode(&decoded[newline + 1..]);
+    let text = lyrics_crypto::decrypter::qrc::decrypter::decrypt_lyrics(&encrypted)
+        .ok_or_else(|| LyricsError::InvalidData("QQ QRC 解密失败".to_owned()))?;
+    if text.trim_start().starts_with("<?xml") || has_raw_qrc_timestamp(&text) {
+        parse_qrc_lines(&text)
+    } else {
+        parse_lrc_lines(&text)
+    }
+}
+
+/// 裸 QRC 行以毫秒起点和时长组成方括号时间戳，区别于 LRC 的分秒时间戳。
+fn has_raw_qrc_timestamp(input: &str) -> bool {
+    input.lines().any(|line| {
+        line.trim_start()
+            .strip_prefix('[')
+            .and_then(|line| line.split_once(']'))
+            .is_some_and(|(timestamp, _)| timestamp.contains(',') && !timestamp.contains(':'))
+    })
+}
+
+fn decode_qmc_mask(bytes: &[u8]) -> Vec<u8> {
+    const SEED: [[u8; 7]; 8] = [
+        [0x4a, 0xd6, 0xca, 0x90, 0x67, 0xf7, 0x52],
+        [0x5e, 0x95, 0x23, 0x9f, 0x13, 0x11, 0x7e],
+        [0x47, 0x74, 0x3d, 0x90, 0xaa, 0x3f, 0x51],
+        [0xc6, 0x09, 0xd5, 0x9f, 0xfa, 0x66, 0xf9],
+        [0xf3, 0xd6, 0xa1, 0x90, 0xa0, 0xf7, 0xf0],
+        [0x1d, 0x95, 0xde, 0x9f, 0x84, 0x11, 0xf4],
+        [0x0e, 0x74, 0xbb, 0x90, 0xbc, 0x3f, 0x92],
+        [0x00, 0x09, 0x5b, 0x9f, 0x62, 0x66, 0xa1],
+    ];
+    let mut x = -1_i32;
+    let mut y = 8_i32;
+    let mut direction = 1_i32;
+    let mut mask_index = -1_i32;
+    bytes
+        .iter()
+        .map(|byte| {
+            let mask = loop {
+                mask_index += 1;
+                let current = if x < 0 {
+                    direction = 1;
+                    y = (8 - y) % 8;
+                    0xc3
+                } else if x > 6 {
+                    direction = -1;
+                    y = 7 - y;
+                    0xd8
+                } else {
+                    SEED[y as usize][x as usize]
+                };
+                x += direction;
+                if mask_index != 0x8000 && !(mask_index > 0x8000 && (mask_index + 1) % 0x8000 == 0)
+                {
+                    break current;
+                }
+            };
+            byte ^ mask
+        })
+        .collect()
+}
+
+fn read_cache_root_from_registry() -> Option<PathBuf> {
+    let mut byte_count = 0_u32;
+    // SAFETY: 仅查询当前用户下静态 QQ 音乐键值的所需缓冲区大小。
+    let result = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            windows::core::w!(r"Software\Tencent\QQMusic\LogConfig"),
+            windows::core::w!("CACHEPATH"),
+            RRF_RT_REG_SZ,
+            None,
+            None,
+            Some(&mut byte_count),
+        )
+    };
+    if result.is_err() || byte_count < 2 {
+        return None;
+    }
+    let mut buffer = vec![0_u16; byte_count as usize / 2];
+    // SAFETY: 缓冲区按上一次调用返回的字节数分配，指针在调用期间有效且可写。
+    let result = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            windows::core::w!(r"Software\Tencent\QQMusic\LogConfig"),
+            windows::core::w!("CACHEPATH"),
+            RRF_RT_REG_SZ,
+            None,
+            Some(buffer.as_mut_ptr().cast()),
+            Some(&mut byte_count),
+        )
+    };
+    if result.is_err() {
+        return None;
+    }
+    let length = buffer
+        .iter()
+        .position(|value| *value == 0)
+        .unwrap_or(buffer.len());
+    let path = String::from_utf16_lossy(&buffer[..length]);
+    (!path.trim().is_empty()).then(|| PathBuf::from(path))
+}
+
+struct FileNameMetadata<'a> {
+    artist: &'a str,
+    title: &'a str,
+    duration_seconds: u64,
+}
+
+fn parse_original_file_name(file_name: &str) -> Option<FileNameMetadata<'_>> {
+    let stem = file_name.strip_suffix("_qm.qrc")?;
+    let mut right = stem.rsplitn(3, " - ");
+    let _album = right.next()?;
+    let duration_seconds = right.next()?.parse().ok()?;
+    let (artist, title) = right.next()?.split_once(" - ")?;
+    Some(FileNameMetadata {
+        artist,
+        title,
+        duration_seconds,
+    })
+}

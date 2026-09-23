@@ -10,7 +10,7 @@ use std::{
 
 use tauri::{AppHandle, Runtime};
 
-use super::{WorkerMessage, metrics, metrics::WorkerSender, worker::run_worker};
+use super::{WorkerMessage, channel, channel::WorkerSender, worker::run_worker};
 use crate::error::Error;
 use crate::media::{
     MediaControlAction, MediaRuntimeDiagnostics, MediaSessionSelectionPolicy, MediaSessionSnapshot,
@@ -43,7 +43,7 @@ impl MediaService {
         app: AppHandle<R>,
         snapshot_subscriber: MediaSnapshotSubscriber,
     ) -> Result<Self, std::io::Error> {
-        let (sender, receiver, worker_metrics) = metrics::channel();
+        let (sender, receiver, worker_metrics) = channel::channel();
         let snapshot = Arc::new(RwLock::new(None));
         let worker_sender = sender.clone();
         let worker_snapshot = Arc::clone(&snapshot);

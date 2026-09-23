@@ -18,9 +18,9 @@ use crate::lyrics::{
     model::{
         LyricsLookupOutcome, LyricsPrecision, LyricsResolutionMethod, LyricsResolutionOutcome,
         LyricsResolutionSite, LyricsSnapshot, LyricsStatus, ResolvedLyrics, has_word_timing,
-        platform_notice,
     },
     network::ResolutionDeadline,
+    notice::platform_notice,
     players,
     track::TrackDescriptor,
 };

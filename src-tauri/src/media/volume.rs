@@ -18,7 +18,7 @@ use windows::{
 
 use super::{
     MediaVolumeSnapshot,
-    monitor::{metrics::WorkerSender, pending_events::WorkerEvent},
+    monitor::{channel::WorkerSender, pending_events::WorkerEvent},
     process::find_process_ids,
 };
 use crate::error::Error;

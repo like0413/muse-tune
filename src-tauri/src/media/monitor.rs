@@ -19,6 +19,7 @@ use super::{
 use crate::error::Error;
 
 mod apartment;
+pub(super) mod channel;
 mod deadlines;
 pub(super) mod metrics;
 pub(in crate::media) mod pending_events;

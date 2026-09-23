@@ -23,8 +23,9 @@ use crate::{
 use super::{
     MetadataRefresh, SelectedMedia, SessionEntry, TimelineRefresh, WorkerMessage,
     apartment::WinRtMta,
+    channel::{WorkerReceiver, WorkerSender},
     deadlines::{ScheduledWorkerTask, WorkerDeadlines},
-    metrics::{WorkerEnvelope, WorkerMessageKind, WorkerMetrics, WorkerReceiver, WorkerSender},
+    metrics::{WorkerEnvelope, WorkerMessageKind, WorkerMetrics},
     playback::{
         refresh_all_playback, refresh_metadata, refresh_playback, refresh_timeline,
         reset_stale_timeline_at_track_boundary, timeline_pending_new_track,

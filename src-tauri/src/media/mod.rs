@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 mod activation;
+mod diagnostics;
 mod model;
 mod monitor;
 mod players;
@@ -15,13 +16,13 @@ mod thumbnail;
 mod volume;
 
 pub use crate::native_defaults::supported_players;
+pub(crate) use diagnostics::{
+    MediaRuntimeDiagnostics, MediaRuntimeSessionDiagnostics, MediaSnapshotDiagnostics,
+    MediaWorkerMessageRuntimeDiagnostics, MediaWorkerRuntimeDiagnostics,
+};
 pub use model::{
     MediaControlAction, MediaPlaybackStatus, MediaPlayer, MediaSessionSelectionPolicy,
     MediaSessionSelectionStrategy, MediaSessionSnapshot, MediaTimeline, MediaVolumeSnapshot,
-};
-pub(crate) use model::{
-    MediaRuntimeDiagnostics, MediaRuntimeSessionDiagnostics, MediaSnapshotDiagnostics,
-    MediaWorkerMessageRuntimeDiagnostics, MediaWorkerRuntimeDiagnostics,
 };
 pub use monitor::MediaService;
 
