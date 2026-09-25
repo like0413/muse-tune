@@ -270,7 +270,6 @@ pub(super) fn show_bar(bar: HWND) -> bool {
 
 /// 在任务栏暂不可用或被全屏覆盖时隐藏播放器。
 pub(super) fn hide_bar(bar: HWND) {
-    super::volume_popup::hide_for_owner(bar);
     if is_window_visible(bar) {
         // SAFETY: `bar` 已在同步循环中验证，只请求隐藏窗口。
         let _ = unsafe { ShowWindow(bar, SW_HIDE) };

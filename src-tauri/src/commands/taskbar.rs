@@ -1,5 +1,3 @@
-use tauri::WebviewWindow;
-
 use crate::{
     ipc::IpcError,
     taskbar::{self, TaskbarDisplay, TaskbarOverlapPriority, TaskbarPlacement, TaskbarWidthMode},
@@ -43,22 +41,4 @@ pub fn set_taskbar_width(width: i32, mode: TaskbarWidthMode) {
 #[tauri::command]
 pub fn set_taskbar_content_visibility(visible: bool) {
     taskbar::set_content_visibility(visible);
-}
-
-/// 把独立音量悬浮窗定位到触发按钮上方并显示。
-#[tauri::command]
-pub fn show_volume_popup(
-    window: WebviewWindow,
-    anchor_center_x: f64,
-    theme_color: String,
-) -> Result<(), IpcError> {
-    taskbar::show_volume_popup(&window, anchor_center_x, theme_color)
-        .map_err(|error| IpcError::new("taskbar.show-volume-popup", error, false))
-}
-
-/// 在离场动画完成后隐藏音量悬浮窗。
-#[tauri::command]
-pub fn hide_volume_popup(window: WebviewWindow, generation: u64) -> Result<(), IpcError> {
-    taskbar::hide_volume_popup(&window, generation)
-        .map_err(|error| IpcError::new("taskbar.hide-volume-popup", error, false))
 }

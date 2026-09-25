@@ -22,5 +22,4 @@ commands.allow = [
   "get_system_foreground_color",
   "set_taskbar_content_visibility",
   "set_tray_menu_state",
-  "show_volume_popup",
 ]

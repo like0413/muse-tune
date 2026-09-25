@@ -16,11 +16,6 @@ const router = createRouter({
       name: 'settings',
       component: SettingsPage,
     },
-    {
-      path: '/volume',
-      name: 'volume',
-      component: () => import('@/pages/volume/index.vue'),
-    },
   ],
 })
 

@@ -71,6 +71,7 @@ const contentRoot = useTemplateRef<HTMLElement>('contentRoot')
 const normalLayer = useTemplateRef<HTMLElement>('normalLayer')
 const normalCoverAnchor = shallowRef<HTMLElement | null>(null)
 const lyricsCoverAnchor = shallowRef<HTMLElement | null>(null)
+const volumeModeActive = shallowRef(false)
 
 /** v-for 内的封面锚点仍保持单元素引用，避免模板 ref 被收集成数组。 */
 const setNormalCoverAnchor: VNodeRef = (element) => {
@@ -279,6 +280,11 @@ const progressBarPositionClass = computed(() =>
   progressPosition.value === 'top' ? 'top-0' : 'bottom-0',
 )
 
+/** 音量交互期间让普通内容完整让位，退出后恢复用户原有排列。 */
+function handleVolumeModeChange(active: boolean) {
+  volumeModeActive.value = active
+}
+
 /** 右键开关当前媒体会话所属的播放器窗口：已打开时关闭，最小化或隐藏时打开。 */
 async function togglePlayer() {
   try {
@@ -316,7 +322,11 @@ onMounted(refreshCoverAnchors)
       "
       :image="coverImage"
     />
-    <div ref="contentRoot" class="relative z-10 min-w-0 flex-1 self-stretch">
+    <div
+      ref="contentRoot"
+      class="relative z-10 min-w-0 flex-1 self-stretch transition-opacity duration-160"
+      :class="volumeModeActive ? 'pointer-events-none opacity-0' : 'opacity-100'"
+    >
       <div
         ref="normalLayer"
         class="taskbar-mode-layer"
@@ -342,8 +352,10 @@ onMounted(refreshCoverAnchors)
             :session="mediaSession"
             :pending="controlPending"
             :theme-color="progressColor"
+            :foreground-color="activeForegroundColor"
             :compact="isCompact"
             @control="control"
+            @volume-mode-change="handleVolumeModeChange"
           />
         </template>
       </div>
@@ -407,7 +419,12 @@ onMounted(refreshCoverAnchors)
     </div>
 
     <AudioSpectrumElement
-      v-if="spectrumSettingsReady && taskbarContentVisible && spectrumSettings.visible"
+      v-if="
+        !volumeModeActive &&
+        spectrumSettingsReady &&
+        taskbarContentVisible &&
+        spectrumSettings.visible
+      "
       :settings="spectrumSettings"
       :theme-color="progressColor"
       :foreground-color="activeForegroundColor"
@@ -416,7 +433,7 @@ onMounted(refreshCoverAnchors)
     />
 
     <div
-      v-if="timeline && progressVisible"
+      v-if="!volumeModeActive && timeline && progressVisible"
       class="pointer-events-none absolute inset-0"
       role="progressbar"
       :aria-label="t('media.progress')"

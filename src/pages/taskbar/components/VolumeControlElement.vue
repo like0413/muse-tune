@@ -1,35 +1,29 @@
 <script setup lang="ts">
 import { Volume1, Volume2, VolumeX } from '@lucide/vue'
-import type { UnlistenFn } from '@tauri-apps/api/event'
-import { emitTo, listen } from '@tauri-apps/api/event'
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { useTimeoutFn } from '@vueuse/core'
+import type { CSSProperties } from 'vue'
 
 import { Button } from '@/components/ui/button'
-import { reportBackgroundFailure } from '@/features/feedback/errors'
 import { useVolumeControl } from '@/features/media/useVolumeControl'
-import {
-  VOLUME_POPUP_CLOSE_EVENT,
-  VOLUME_POPUP_HOVER_BRIDGE_MS,
-  VOLUME_POPUP_HOVER_CHANGED_EVENT,
-  VOLUME_POPUP_LABEL,
-  type VolumePopupHoverPayload,
-} from '@/features/media/volume-popup'
-import { showVolumePopup } from '@/features/taskbar/client'
+
+import VolumeSliderOverlay from './VolumeSliderOverlay.vue'
 
 const { t } = useI18n({ useScope: 'global' })
 
 const props = defineProps<{
   themeColor: string
+  foregroundColor: string
   compact: boolean
 }>()
-const anchor = useTemplateRef<HTMLElement>('anchor')
+const emit = defineEmits<{ modeChange: [active: boolean] }>()
+const expanded = shallowRef(false)
 const triggerHovered = shallowRef(false)
-const popupHovered = shallowRef(false)
-const currentWindow = getCurrentWebviewWindow()
-const { target, volume, adjustLevel, toggleMuted } = useVolumeControl()
-let closeTimer: ReturnType<typeof setTimeout> | undefined
-let unlistenPopupHover: UnlistenFn | undefined
-let disposed = false
+const modeHovered = shallowRef(false)
+const focusWithin = shallowRef(false)
+const { target, volume, setLevel, adjustLevel, toggleMuted } = useVolumeControl()
+
+const MODE_FADE_DURATION_MS = 120
+const HOVER_BRIDGE_MS = 100
 
 const percentage = computed(() => Math.round((volume.value?.level ?? 0) * 100))
 const controlSize = computed(() => (props.compact ? 'icon-xs' : 'icon-sm'))
@@ -38,44 +32,64 @@ const volumeIcon = computed(() => {
   if (volume.value.muted || percentage.value === 0) return VolumeX
   return percentage.value < 50 ? Volume1 : Volume2
 })
+const modeStyle = computed<CSSProperties>(() => ({
+  color: props.foregroundColor,
+  '--volume-theme-color': props.themeColor,
+  '--volume-transition-duration': `${MODE_FADE_DURATION_MS}ms`,
+}))
 
-/** 取消跨原生窗口移动期间的延迟关闭。 */
-function cancelClose() {
-  if (closeTimer) clearTimeout(closeTimer)
-  closeTimer = undefined
+/** 更新临时音量模式，并把状态显式通知任务栏内容层。 */
+function setExpanded(value: boolean) {
+  if (expanded.value === value) return
+  expanded.value = value
+  emit('modeChange', value)
 }
 
-/** 两个 hover 区域都离开后通知悬浮窗播放离场动画。 */
-function scheduleClose() {
+const { start: scheduleClose, stop: cancelClose } = useTimeoutFn(
+  () => {
+    if (triggerHovered.value || modeHovered.value || focusWithin.value) return
+    setExpanded(false)
+  },
+  HOVER_BRIDGE_MS,
+  { immediate: false },
+)
+
+/** 先等待歌词层切回普通模式，再用整条 Bar 展示音量控制。 */
+async function openVolumeMode() {
+  if (!volume.value) return
   cancelClose()
-  closeTimer = setTimeout(() => {
-    if (triggerHovered.value || popupHovered.value) return
-    void emitTo(VOLUME_POPUP_LABEL, VOLUME_POPUP_CLOSE_EVENT, {
-      ownerLabel: currentWindow.label,
-    })
-  }, VOLUME_POPUP_HOVER_BRIDGE_MS)
+  await nextTick()
+  if (!triggerHovered.value && !modeHovered.value && !focusWithin.value) return
+  setExpanded(true)
 }
 
-async function openPopup() {
-  if (!anchor.value || !volume.value) return
-  cancelClose()
-  const bounds = anchor.value.getBoundingClientRect()
-  try {
-    await showVolumePopup(bounds.left + bounds.width / 2, props.themeColor)
-  } catch (error) {
-    reportBackgroundFailure('显示音量悬浮窗失败', error)
-  }
-}
-
-/** 记录按钮 hover，确保按钮与音量柱之间可连续移动。 */
-function handlePointerEnter() {
+function handleTriggerPointerEnter() {
   triggerHovered.value = true
-  void openPopup()
+  void openVolumeMode()
 }
 
-/** 延迟关闭，为鼠标进入独立音量窗留出跨窗时间。 */
-function handlePointerLeave() {
+function handleTriggerPointerLeave() {
   triggerHovered.value = false
+  scheduleClose()
+}
+
+function handleModePointerEnter() {
+  modeHovered.value = true
+  void openVolumeMode()
+}
+
+function handleModePointerLeave() {
+  modeHovered.value = false
+  scheduleClose()
+}
+
+function handleFocusIn() {
+  focusWithin.value = true
+  void openVolumeMode()
+}
+
+function handleFocusOut() {
+  focusWithin.value = false
   scheduleClose()
 }
 
@@ -85,36 +99,19 @@ function handleWheel(event: WheelEvent) {
   adjustLevel(event.deltaY < 0 ? 1 : -1)
 }
 
-onMounted(async () => {
-  const stopListener = await listen<VolumePopupHoverPayload>(
-    VOLUME_POPUP_HOVER_CHANGED_EVENT,
-    ({ payload }) => {
-      if (payload.ownerLabel !== currentWindow.label) return
-      popupHovered.value = payload.hovered
-      if (payload.hovered) cancelClose()
-      else scheduleClose()
-    },
-  )
-  if (disposed) stopListener()
-  else unlistenPopupHover = stopListener
+watch(volume, (value) => {
+  if (!value) setExpanded(false)
 })
-
-onUnmounted(() => {
-  disposed = true
-  cancelClose()
-  unlistenPopupHover?.()
-  void emitTo(VOLUME_POPUP_LABEL, VOLUME_POPUP_CLOSE_EVENT, {
-    ownerLabel: currentWindow.label,
-  })
-})
+onUnmounted(() => setExpanded(false))
 </script>
 
 <template>
   <span
-    ref="anchor"
     class="flex shrink-0"
-    @pointerenter="handlePointerEnter"
-    @pointerleave="handlePointerLeave"
+    @pointerenter="handleTriggerPointerEnter"
+    @pointerleave="handleTriggerPointerLeave"
+    @focusin="handleFocusIn"
+    @focusout="handleFocusOut"
     @wheel.prevent="handleWheel"
   >
     <Button
@@ -130,6 +127,41 @@ onUnmounted(() => {
     >
       <component :is="volumeIcon" data-icon="inline-start" />
     </Button>
+
+    <Teleport to="body">
+      <div
+        class="volume-mode fixed inset-0 z-100 flex items-center gap-1 px-2 py-1"
+        :class="expanded ? 'volume-mode-entered' : 'volume-mode-left'"
+        :style="modeStyle"
+        :aria-hidden="!expanded"
+        :inert="!expanded || undefined"
+        @pointerenter="handleModePointerEnter"
+        @pointerleave="handleModePointerLeave"
+        @focusin="handleFocusIn"
+        @focusout="handleFocusOut"
+      >
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          class="taskbar-volume-control shrink-0"
+          type="button"
+          :aria-label="
+            t(target === 'application' ? 'media.adjustPlayerVolume' : 'media.adjustSystemVolume')
+          "
+          :disabled="!volume"
+          @click="toggleMuted"
+        >
+          <component :is="volumeIcon" class="size-4" data-icon="inline-start" />
+        </Button>
+        <VolumeSliderOverlay
+          :target="target"
+          :percentage="percentage"
+          :disabled="!volume"
+          @set-level="setLevel"
+          @adjust-level="adjustLevel"
+        />
+      </div>
+    </Teleport>
   </span>
 </template>
 
@@ -137,5 +169,18 @@ onUnmounted(() => {
 .taskbar-volume-control:hover {
   color: inherit;
   background-color: color-mix(in srgb, currentColor 20%, transparent);
+}
+
+.volume-mode {
+  transition: opacity var(--volume-transition-duration) ease;
+}
+
+.volume-mode-left {
+  pointer-events: none;
+  opacity: 0;
+}
+
+.volume-mode-entered {
+  opacity: 1;
 }
 </style>

@@ -9,10 +9,9 @@ mod platform;
 mod service;
 mod settings;
 mod sync;
-mod volume_popup;
 
 use std::time::Duration;
-use tauri::{Runtime, WebviewWindow};
+use tauri::Runtime;
 
 use crate::error::Error;
 
@@ -120,23 +119,6 @@ pub(crate) fn diagnostic_settings() -> (
         width,
         horizontal_offset,
     )
-}
-
-/// 显示并定位独立音量悬浮窗。
-pub fn show_volume_popup<R: Runtime>(
-    source: &WebviewWindow<R>,
-    anchor_center_x: f64,
-    theme_color: String,
-) -> Result<(), Error> {
-    volume_popup::show(source, anchor_center_x, theme_color)
-}
-
-/// 仅允许音量悬浮窗隐藏自身。
-pub fn hide_volume_popup<R: Runtime>(
-    source: &WebviewWindow<R>,
-    generation: u64,
-) -> Result<(), Error> {
-    volume_popup::hide(source, generation)
 }
 
 /// 更新目标显示器，并立即唤醒窗口管理线程。

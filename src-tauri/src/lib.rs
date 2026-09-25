@@ -71,9 +71,7 @@ pub fn run() {
             commands::taskbar::set_taskbar_overlap_priority,
             commands::taskbar::set_taskbar_placement,
             commands::taskbar::set_taskbar_horizontal_offset,
-            commands::taskbar::set_taskbar_width,
-            commands::taskbar::show_volume_popup,
-            commands::taskbar::hide_volume_popup
+            commands::taskbar::set_taskbar_width
         ])
         .setup(|app| {
             // 这里的顺序不是风格问题，改错不会编译失败，只会在运行时暴露：

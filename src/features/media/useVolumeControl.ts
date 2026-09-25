@@ -142,7 +142,7 @@ export function useVolumeControl() {
   }
 
   /** 按固定百分点调整当前设置所选择的音量对象。 */
-  function adjustLevel(direction: 1 | -1, step = 0.02) {
+  function adjustLevel(direction: 1 | -1, step: number = 0.02) {
     if (!volume.value) return
     setLevel(volume.value.level + direction * step)
   }

@@ -36,25 +36,10 @@
         "center": true,
         "visible": false,
         "create": false
-      },
-      {
-        "label": "volume-popup",
-        "title": "音量",
-        "url": "index.html#/volume",
-        "width": 38,
-        "height": 140,
-        "resizable": false,
-        "decorations": false,
-        "transparent": true,
-        "shadow": false,
-        "focusable": false,
-        "skipTaskbar": true,
-        "alwaysOnTop": true,
-        "visible": false
       }
     ],
     "security": {
-      "capabilities": ["taskbar", "settings", "volume-popup"],
+      "capabilities": ["taskbar", "settings"],
       "devCsp": {
         "default-src": "'self' http://localhost:1480",
         "connect-src": "ipc: http://ipc.localhost http://localhost:1480 ws://localhost:1480",

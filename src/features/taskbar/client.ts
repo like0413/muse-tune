@@ -42,11 +42,3 @@ export function setTaskbarWidth(width: number, mode: TaskbarWidthMode): Promise<
 export function setTrayMenuState(presentation: TrayMenuPresentation): Promise<void> {
   return invoke('set_tray_menu_state', { presentation })
 }
-
-export function showVolumePopup(anchorCenterX: number, themeColor: string): Promise<void> {
-  return invoke('show_volume_popup', { anchorCenterX, themeColor })
-}
-
-export function hideVolumePopup(generation: number): Promise<void> {
-  return invoke('hide_volume_popup', { generation })
-}

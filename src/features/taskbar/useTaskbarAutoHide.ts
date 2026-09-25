@@ -20,6 +20,8 @@ export function useTaskbarAutoHide(session: Readonly<Ref<MediaSessionSnapshot | 
     { ...DEFAULT_TASKBAR_AUTO_HIDE },
   )
   let appliedVisibility: boolean | undefined
+  let desiredVisibility: boolean | undefined
+  let applyingVisibility = false
 
   // 只有 paused 有独立偏好；其余任何状态（含 stopped / closed / changing / unknown）都直接显示，
   // 新增状态默认可见，若要单独控制必须在此加分支。
@@ -29,19 +31,33 @@ export function useTaskbarAutoHide(session: Readonly<Ref<MediaSessionSnapshot | 
     return true
   })
 
-  /** 仅在计算结果变化时跨 IPC 更新原生窗口。 */
-  async function applyVisibility(value: boolean) {
-    if (appliedVisibility === value) return
-    appliedVisibility = value
-    try {
-      await setTaskbarContentVisibility(value)
-    } catch (error) {
-      appliedVisibility = undefined
-      reportBackgroundFailure('更新任务栏播放器可见性失败', error)
+  /**
+   * 串行提交可见性，避免启动时“无会话”和随后恢复出的媒体会话并发写入，
+   * 导致较早的隐藏请求反而最后抵达原生层。
+   */
+  async function flushVisibility() {
+    if (applyingVisibility) return
+    applyingVisibility = true
+    while (desiredVisibility !== undefined && appliedVisibility !== desiredVisibility) {
+      const requestedVisibility = desiredVisibility
+      try {
+        await setTaskbarContentVisibility(requestedVisibility)
+        appliedVisibility = requestedVisibility
+      } catch (error) {
+        reportBackgroundFailure('更新任务栏播放器可见性失败', error)
+        if (desiredVisibility === requestedVisibility) break
+      }
     }
+    applyingVisibility = false
   }
 
-  watch(visible, (value) => void applyVisibility(value), { immediate: true })
+  /** 记录最新目标；进行中的写入结束后会继续追平最终状态。 */
+  function applyVisibility(value: boolean) {
+    desiredVisibility = value
+    void flushVisibility()
+  }
+
+  watch(visible, applyVisibility, { immediate: true })
 
   return {
     /** 原生 bar 隐藏期间供高频视觉组件停止工作。 */

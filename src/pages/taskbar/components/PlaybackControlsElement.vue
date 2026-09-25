@@ -19,9 +19,13 @@ const props = defineProps<{
   session: MediaSessionSnapshot | null
   pending: boolean
   themeColor: string
+  foregroundColor: string
   compact: boolean
 }>()
-const emit = defineEmits<{ control: [action: MediaControlAction] }>()
+const emit = defineEmits<{
+  control: [action: MediaControlAction]
+  volumeModeChange: [active: boolean]
+}>()
 const visibility = useEventState(
   {
     read: getTaskbarControlsVisibility,
@@ -111,7 +115,9 @@ const controlItems = computed<ControlItem[]>(() => {
       <VolumeControlElement
         v-if="item.kind === 'volume'"
         :theme-color="themeColor"
+        :foreground-color="foregroundColor"
         :compact="compact"
+        @mode-change="emit('volumeModeChange', $event)"
       />
       <Button
         v-else

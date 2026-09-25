@@ -22,7 +22,7 @@ export async function getVolumeControlTarget(): Promise<VolumeControlTarget> {
   return isVolumeControlTarget(value) ? value : DEFAULT_VOLUME_CONTROL_TARGET
 }
 
-/** 持久化音量控制对象，并通知任务栏与音量悬浮窗。 */
+/** 持久化音量控制对象，并通知任务栏及设置页中的音量控件。 */
 export async function setVolumeControlTarget(target: VolumeControlTarget): Promise<void> {
   await settingsStore.set(VOLUME_CONTROL_TARGET_KEY, target)
   await emit(VOLUME_CONTROL_TARGET_CHANGED_EVENT, target)
