@@ -12,9 +12,11 @@ import {
   getUpdateCheckInterval,
   getUpdateCheckResult,
   listenUpdateCheckPreferencesChange,
+  listenUpdateCheckResultChange,
   setUpdateCheckResult,
   type UpdateCheckResult,
 } from './settings'
+import { setUpdateTrayState } from './tray'
 
 const SCHEDULE_REFRESH_INTERVAL = 60 * 60 * 1_000
 const UPDATE_CHECK_LOCK = 'muse-tune-automatic-update-check'
@@ -26,9 +28,26 @@ function lastAttemptAt(result: UpdateCheckResult): number {
 
 /** 在任务栏窗口中按持久化频率执行自动更新检测。 */
 export function useAutomaticUpdateMonitor() {
+  const { t } = useI18n({ useScope: 'global' })
+  const detectedVersion = shallowRef<string | null>(null)
+  const trayStateReady = shallowRef(false)
   let checking = false
   let disposed = false
   let unlistenPreferences: (() => void) | undefined
+  let unlistenResult: (() => void) | undefined
+
+  /** 用检测结果驱动唯一的原生托盘入口，界面语言变化时同步刷新文案。 */
+  watchEffect(() => {
+    if (!trayStateReady.value) return
+    const version = detectedVersion.value
+    const presentation = version
+      ? {
+          label: t('taskbar.menu.updateAvailable', { version }),
+          tooltip: t('taskbar.menu.updateTooltip', { version }),
+        }
+      : { label: null, tooltip: null }
+    void setUpdateTrayState(presentation).catch((error) => logWarn('同步托盘更新入口失败', error))
+  })
 
   /**
    * 失败也必须记下尝试时间。
@@ -61,8 +80,12 @@ export function useAutomaticUpdateMonitor() {
         const currentVersion = await getVersion()
         if (lastResult.availableVersion === currentVersion) {
           await setUpdateCheckResult({ ...lastResult, availableVersion: null })
+          detectedVersion.value = null
+          trayStateReady.value = true
           return
         }
+        detectedVersion.value = lastResult.availableVersion
+        trayStateReady.value = true
         const lastAttempt = lastAttemptAt(lastResult)
         const elapsed = Date.now() - lastAttempt
         if (
@@ -80,6 +103,7 @@ export function useAutomaticUpdateMonitor() {
             availableVersion !== null && availableVersion !== lastResult.availableVersion
           const checkedAt = Date.now()
           await setUpdateCheckResult({ checkedAt, attemptedAt: checkedAt, availableVersion })
+          detectedVersion.value = availableVersion
           if (shouldNotify) await notifyUpdateAvailable(availableVersion)
         } finally {
           await update?.close()
@@ -98,14 +122,22 @@ export function useAutomaticUpdateMonitor() {
 
   /** 先监听配置变化，再执行启动检查，避免设置保存期间错过事件。 */
   onMounted(async () => {
+    let stopPreferences: (() => void) | undefined
     try {
-      const stopListener = await listenUpdateCheckPreferencesChange(() => void checkIfDue())
+      stopPreferences = await listenUpdateCheckPreferencesChange(() => void checkIfDue())
+      const stopResult = await listenUpdateCheckResultChange((result) => {
+        detectedVersion.value = result.availableVersion
+        trayStateReady.value = true
+      })
       if (disposed) {
-        stopListener()
+        stopPreferences()
+        stopResult()
         return
       }
-      unlistenPreferences = stopListener
+      unlistenPreferences = stopPreferences
+      unlistenResult = stopResult
     } catch (error) {
+      stopPreferences?.()
       // 监听注册失败会让自动检测永久失效，属于真实故障，不能和“离线检测失败”混为一谈。
       reportBackgroundFailure('注册自动更新检测监听失败', error)
       return
@@ -117,5 +149,6 @@ export function useAutomaticUpdateMonitor() {
     disposed = true
     pause()
     unlistenPreferences?.()
+    unlistenResult?.()
   })
 }

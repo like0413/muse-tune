@@ -8,23 +8,17 @@ import {
   DEFAULT_TASKBAR_CONTROLS_VISIBILITY,
   getTaskbarControlsVisibility,
   listenTaskbarControlsVisibilityChange,
-  type TaskbarControlButton,
 } from '@/features/settings/controls'
-
-import VolumeControlElement from './VolumeControlElement.vue'
 
 const { t } = useI18n({ useScope: 'global' })
 
 const props = defineProps<{
   session: MediaSessionSnapshot | null
   pending: boolean
-  themeColor: string
-  foregroundColor: string
   compact: boolean
 }>()
 const emit = defineEmits<{
   control: [action: MediaControlAction]
-  volumeModeChange: [active: boolean]
 }>()
 const visibility = useEventState(
   {
@@ -46,23 +40,13 @@ const canTogglePlayback = computed(() => {
   )
 })
 
-type StandardControlButton = Exclude<TaskbarControlButton, 'volume'>
-
-interface StandardControlItem {
-  key: StandardControlButton
-  kind: 'button'
+interface ControlItem {
+  key: 'previous' | 'playPause' | 'next'
   label: string
   icon: typeof Play
   action: MediaControlAction
   disabled: boolean
 }
-
-interface VolumeControlItem {
-  key: 'volume'
-  kind: 'volume'
-}
-
-type ControlItem = StandardControlItem | VolumeControlItem
 
 /** 按已保存顺序生成当前可见按钮，并集中派生禁用状态与图标。 */
 const controlItems = computed<ControlItem[]>(() => {
@@ -73,7 +57,6 @@ const controlItems = computed<ControlItem[]>(() => {
       case 'previous':
         items.push({
           key: button,
-          kind: 'button',
           label: t('media.previous'),
           icon: SkipBack,
           action: 'skip_previous',
@@ -83,7 +66,6 @@ const controlItems = computed<ControlItem[]>(() => {
       case 'playPause':
         items.push({
           key: button,
-          kind: 'button',
           label: t('media.playPause'),
           icon: isPlaying.value ? Pause : Play,
           action: 'toggle_play_pause',
@@ -93,15 +75,11 @@ const controlItems = computed<ControlItem[]>(() => {
       case 'next':
         items.push({
           key: button,
-          kind: 'button',
           label: t('media.next'),
           icon: SkipForward,
           action: 'skip_next',
           disabled: props.pending || !props.session?.playback.controls.canSkipNext,
         })
-        break
-      case 'volume':
-        items.push({ key: button, kind: 'volume' })
         break
     }
   }
@@ -111,27 +89,19 @@ const controlItems = computed<ControlItem[]>(() => {
 
 <template>
   <div v-if="visibility.visible" class="flex shrink-0">
-    <template v-for="item in controlItems" :key="item.key">
-      <VolumeControlElement
-        v-if="item.kind === 'volume'"
-        :theme-color="themeColor"
-        :foreground-color="foregroundColor"
-        :compact="compact"
-        @mode-change="emit('volumeModeChange', $event)"
-      />
-      <Button
-        v-else
-        variant="ghost"
-        :size="controlSize"
-        class="taskbar-control"
-        type="button"
-        :aria-label="item.label"
-        :disabled="item.disabled"
-        @click="emit('control', item.action)"
-      >
-        <component :is="item.icon" class="fill-current" data-icon="inline-start" />
-      </Button>
-    </template>
+    <Button
+      v-for="item in controlItems"
+      :key="item.key"
+      variant="ghost"
+      :size="controlSize"
+      class="taskbar-control"
+      type="button"
+      :aria-label="item.label"
+      :disabled="item.disabled"
+      @click="emit('control', item.action)"
+    >
+      <component :is="item.icon" class="fill-current" data-icon="inline-start" />
+    </Button>
   </div>
 </template>
 

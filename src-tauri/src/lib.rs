@@ -65,6 +65,7 @@ pub fn run() {
             commands::system::get_system_foreground_color,
             commands::system::restart_application,
             commands::tray::set_tray_menu_state,
+            commands::tray::set_update_tray_state,
             commands::taskbar::list_taskbar_displays,
             commands::taskbar::set_taskbar_display_target,
             commands::taskbar::set_taskbar_content_visibility,

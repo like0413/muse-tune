@@ -16,6 +16,7 @@ import { toggleCurrentMediaPlayer } from '@/features/media/client'
 import { useMediaProgress } from '@/features/media/useMediaProgress'
 import { useMediaSession } from '@/features/media/useMediaSession'
 import { useMediaSessionSelectionPolicy } from '@/features/media/useMediaSessionSelectionPolicy'
+import { useVolumeControl } from '@/features/media/useVolumeControl'
 import { useTaskbarAudioSpectrumSettings } from '@/features/settings/audio-spectrum'
 import { TASKBAR_WIDTH_PRESETS } from '@/features/settings/bar-width'
 import { isTaskbarCoverVisibleInMode } from '@/features/settings/cover'
@@ -37,6 +38,7 @@ import LyricsNoticeElement from './components/lyrics/LyricsNoticeElement.vue'
 import LyricsElement from './components/LyricsElement.vue'
 import PlaybackControlsElement from './components/PlaybackControlsElement.vue'
 import TrackInfoElement from './components/TrackInfoElement.vue'
+import VolumeSliderOverlay from './components/VolumeSliderOverlay.vue'
 
 const { locale, t } = useI18n({ useScope: 'global' })
 const { session: mediaSession, timeline, controlPending, control } = useMediaSession()
@@ -71,7 +73,11 @@ const contentRoot = useTemplateRef<HTMLElement>('contentRoot')
 const normalLayer = useTemplateRef<HTMLElement>('normalLayer')
 const normalCoverAnchor = shallowRef<HTMLElement | null>(null)
 const lyricsCoverAnchor = shallowRef<HTMLElement | null>(null)
-const volumeModeActive = shallowRef(false)
+const volumeOverlayVisible = shallowRef(false)
+const volumeOverlayReturnsToLyrics = shallowRef(false)
+const volumeOverlayRestoringLyrics = shallowRef(false)
+const { target: volumeTarget, volume, setLevel, adjustLevel, toggleMuted } = useVolumeControl()
+const volumePercentage = computed(() => Math.round((volume.value?.level ?? 0) * 100))
 
 /** v-for 内的封面锚点仍保持单元素引用，避免模板 ref 被收集成数组。 */
 const setNormalCoverAnchor: VNodeRef = (element) => {
@@ -147,13 +153,24 @@ const lyricsPositionMs = computed(() =>
 )
 // 所有解析入口都要求有效播放器时间线；纯音乐结论本身不伪装成歌词行。
 const hasReliableLyricsTimeline = computed(() => timeline.value !== null)
-const showLyrics = computed(
+/** 不含 hover 的歌词模式资格，供音量层记录退出后应恢复的内容。 */
+const lyricsModeAvailable = computed(
   () =>
     lyricsSettings.value.enabled &&
     playbackStatus.value === 'playing' &&
     hasReliableLyricsTimeline.value &&
-    hasLyricsContent.value &&
-    !isTaskbarHovered.value,
+    hasLyricsContent.value,
+)
+const showLyrics = computed(
+  () =>
+    lyricsModeAvailable.value &&
+    (!isTaskbarHovered.value ||
+      (volumeOverlayVisible.value && volumeOverlayReturnsToLyrics.value) ||
+      volumeOverlayRestoringLyrics.value),
+)
+/** 音量层遮挡期间直接准备目标内容，避免关闭时播放普通/歌词层的交叉淡入。 */
+const suppressModeTransition = computed(
+  () => volumeOverlayVisible.value || volumeOverlayRestoringLyrics.value,
 )
 /** 只缩短歌词层，普通层始终保持完整宽度；0.5rem 与元素间距保持一致。 */
 const lyricsLayerStyle = computed<CSSProperties>(() => ({
@@ -280,10 +297,61 @@ const progressBarPositionClass = computed(() =>
   progressPosition.value === 'top' ? 'top-0' : 'bottom-0',
 )
 
-/** 音量交互期间让普通内容完整让位，退出后恢复用户原有排列。 */
-function handleVolumeModeChange(active: boolean) {
-  volumeModeActive.value = active
+/** 显示最新音量；鼠标仍位于 bar 内时保持展示。 */
+function showVolumeOverlay() {
+  volumeOverlayReturnsToLyrics.value = lyricsModeAvailable.value
+  volumeOverlayRestoringLyrics.value = false
+  volumeOverlayVisible.value = true
 }
+
+/** 音量对象失效时同步收起弹层。 */
+function hideVolumeOverlay() {
+  volumeOverlayVisible.value = false
+  volumeOverlayReturnsToLyrics.value = false
+  volumeOverlayRestoringLyrics.value = false
+}
+
+/**
+ * 移出时先固定应恢复的歌词层再卸载弹层；hover 状态完成同步后再释放固定状态。
+ */
+function handleTaskbarPointerLeave() {
+  if (!volumeOverlayVisible.value) return
+  volumeOverlayRestoringLyrics.value = volumeOverlayReturnsToLyrics.value
+  volumeOverlayVisible.value = false
+  volumeOverlayReturnsToLyrics.value = false
+}
+
+/** 鼠标位于整条任务栏播放器上时，用滚轮按 2% 调整当前选择的音量对象。 */
+function handleVolumeWheel(event: WheelEvent) {
+  if (!volume.value || event.deltaY === 0) return
+  event.preventDefault()
+  adjustLevel(event.deltaY < 0 ? 1 : -1)
+  showVolumeOverlay()
+}
+
+/** 让弹层内的滑杆与滚轮共用同一音量入口并保持展示。 */
+function handleVolumeLevel(level: number) {
+  setLevel(level)
+  showVolumeOverlay()
+}
+
+function handleVolumeAdjustment(direction: 1 | -1) {
+  adjustLevel(direction)
+  showVolumeOverlay()
+}
+
+/** 保留弹层内的静音入口，并在点击后继续展示更新后的状态。 */
+function handleVolumeMutedToggle() {
+  toggleMuted()
+  showVolumeOverlay()
+}
+
+watch(volume, (value) => {
+  if (!value) hideVolumeOverlay()
+})
+watch(isTaskbarHovered, (hovered) => {
+  if (!hovered) volumeOverlayRestoringLyrics.value = false
+})
 
 /** 右键开关当前媒体会话所属的播放器窗口：已打开时关闭，最小化或隐藏时打开。 */
 async function togglePlayer() {
@@ -312,6 +380,8 @@ onMounted(refreshCoverAnchors)
     class="text-taskbar-foreground relative flex size-full items-center gap-2 overflow-hidden px-2 py-1 shadow-sm select-none"
     :style="rootStyle"
     @contextmenu.prevent="togglePlayer"
+    @wheel="handleVolumeWheel"
+    @pointerleave="handleTaskbarPointerLeave"
   >
     <CoverBackgroundElement
       v-if="
@@ -324,13 +394,16 @@ onMounted(refreshCoverAnchors)
     />
     <div
       ref="contentRoot"
-      class="relative z-10 min-w-0 flex-1 self-stretch transition-opacity duration-160"
-      :class="volumeModeActive ? 'pointer-events-none opacity-0' : 'opacity-100'"
+      class="relative z-10 min-w-0 flex-1 self-stretch"
+      :class="volumeOverlayVisible ? 'pointer-events-none opacity-0' : 'opacity-100'"
     >
       <div
         ref="normalLayer"
         class="taskbar-mode-layer"
-        :class="showLyrics ? 'pointer-events-none opacity-0' : 'opacity-100'"
+        :class="[
+          showLyrics ? 'pointer-events-none opacity-0' : 'opacity-100',
+          suppressModeTransition && 'transition-none',
+        ]"
         :aria-hidden="showLyrics"
         :inert="showLyrics || undefined"
       >
@@ -351,18 +424,18 @@ onMounted(refreshCoverAnchors)
             v-else-if="element === 'controls'"
             :session="mediaSession"
             :pending="controlPending"
-            :theme-color="progressColor"
-            :foreground-color="activeForegroundColor"
             :compact="isCompact"
             @control="control"
-            @volume-mode-change="handleVolumeModeChange"
           />
         </template>
       </div>
 
       <div
         class="taskbar-mode-layer pointer-events-none"
-        :class="showLyrics ? 'opacity-100' : 'opacity-0'"
+        :class="[
+          showLyrics ? 'opacity-100' : 'opacity-0',
+          suppressModeTransition && 'transition-none',
+        ]"
         :style="lyricsLayerStyle"
         :aria-hidden="!showLyrics"
       >
@@ -420,7 +493,7 @@ onMounted(refreshCoverAnchors)
 
     <AudioSpectrumElement
       v-if="
-        !volumeModeActive &&
+        !volumeOverlayVisible &&
         spectrumSettingsReady &&
         taskbarContentVisible &&
         spectrumSettings.visible
@@ -433,7 +506,7 @@ onMounted(refreshCoverAnchors)
     />
 
     <div
-      v-if="!volumeModeActive && timeline && progressVisible"
+      v-if="!volumeOverlayVisible && timeline && progressVisible"
       class="pointer-events-none absolute inset-0"
       role="progressbar"
       :aria-label="t('media.progress')"
@@ -453,6 +526,18 @@ onMounted(refreshCoverAnchors)
         :style="verticalProgressStyle"
       />
     </div>
+
+    <VolumeSliderOverlay
+      v-if="volumeOverlayVisible"
+      :target="volumeTarget"
+      :percentage="volumePercentage"
+      :muted="volume?.muted ?? false"
+      :theme-color="progressColor"
+      :disabled="!volume"
+      @set-level="handleVolumeLevel"
+      @adjust-level="handleVolumeAdjustment"
+      @toggle-muted="handleVolumeMutedToggle"
+    />
   </main>
 </template>
 

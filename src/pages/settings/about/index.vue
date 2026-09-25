@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ItemGroup } from '@/components/ui/item'
+import { useAutomaticUpdateInstallRequest } from '@/features/updater/install-intent'
 import { useApplicationUpdater } from '@/features/updater/useApplicationUpdater'
 
 import ProjectInfoItem from './ProjectInfoItem.vue'
@@ -21,9 +22,24 @@ const {
   checkForUpdates,
   openReleaseNotes,
   installUpdate,
+  installUpdateAutomatically,
   updateAutomaticCheck,
   updateAutomaticCheckFrequency,
 } = useApplicationUpdater()
+
+const automaticInstallRequest = useAutomaticUpdateInstallRequest()
+let handledAutomaticInstallRequest = 0
+
+/** 每次托盘点击只消费一次；重复事件由 updater composable 的安装锁继续兜底。 */
+watch(
+  automaticInstallRequest,
+  (request) => {
+    if (request <= handledAutomaticInstallRequest) return
+    handledAutomaticInstallRequest = request
+    void installUpdateAutomatically()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

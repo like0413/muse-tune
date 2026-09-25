@@ -51,7 +51,6 @@ const buttonOptions = computed<Record<TaskbarControlButton, { label: string }>>(
   previous: { label: t('media.previous') },
   playPause: { label: t('media.playPause') },
   next: { label: t('media.next') },
-  volume: { label: t('media.volume') },
 }))
 
 const selectedVisibility = shallowRef<TaskbarControlsVisibility>({
@@ -271,11 +270,7 @@ onMounted(() => {
           </div>
         </Field>
 
-        <Field
-          v-if="selectedVisibility.volume"
-          orientation="horizontal"
-          :data-disabled="!selectedVisibility.visible"
-        >
+        <Field orientation="horizontal">
           <FieldContent>
             <FieldTitle>{{ t('settings.taskbar.controls.volumeTarget') }}</FieldTitle>
             <FieldDescription>{{
@@ -284,7 +279,7 @@ onMounted(() => {
           </FieldContent>
           <Select
             :model-value="selectedVolumeTarget"
-            :disabled="volumeTargetSaving || !selectedVisibility.visible"
+            :disabled="volumeTargetSaving"
             @update:model-value="selectVolumeTarget"
           >
             <SelectTrigger class="w-52" :aria-label="t('settings.taskbar.controls.volumeTarget')">

@@ -148,19 +148,21 @@ export function useApplicationUpdater() {
     downloadProgress.value = trackDownloadProgress(event)
   }
 
-  /** 确认后下载并安装；Windows 安装器启动成功后会接管退出和重启。 */
-  async function installUpdate() {
+  /** 下载并安装；Windows 安装器启动成功后会接管退出和重启。 */
+  async function performInstallUpdate(requireConfirmation: boolean) {
     const update = availableUpdate.value
     if (!update || installRequestActive || isDownloading.value) return
     installRequestActive = true
     try {
-      const shouldInstall = await confirm(t('settings.about.update.installConfirmDescription'), {
-        title: t('settings.about.update.installConfirmTitle'),
-        kind: 'warning',
-        okLabel: t('common.continue'),
-        cancelLabel: t('common.cancel'),
-      })
-      if (!shouldInstall) return
+      if (requireConfirmation) {
+        const shouldInstall = await confirm(t('settings.about.update.installConfirmDescription'), {
+          title: t('settings.about.update.installConfirmTitle'),
+          kind: 'warning',
+          okLabel: t('common.continue'),
+          cancelLabel: t('common.cancel'),
+        })
+        if (!shouldInstall) return
+      }
       status.value = 'available'
       isDownloading.value = true
       errorMessage.value = null
@@ -175,6 +177,19 @@ export function useApplicationUpdater() {
       isDownloading.value = false
       installRequestActive = false
     }
+  }
+
+  /** 设置页按钮保留原有二次确认。 */
+  function installUpdate() {
+    return performInstallUpdate(true)
+  }
+
+  /** 托盘更新项本身就是用户确认，检查到可用版本后直接下载并安装。 */
+  async function installUpdateAutomatically() {
+    await initialize()
+    if (disposed) return
+    if (!availableUpdate.value) await checkForUpdates()
+    if (!disposed && availableUpdate.value) await performInstallUpdate(false)
   }
 
   /** 更新应用级自动检测开关；实际检查由任务栏调度器执行。 */
@@ -271,6 +286,7 @@ export function useApplicationUpdater() {
     checkForUpdates,
     openReleaseNotes,
     installUpdate,
+    installUpdateAutomatically,
     updateAutomaticCheck,
     updateAutomaticCheckFrequency,
   }

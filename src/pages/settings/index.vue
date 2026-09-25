@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Activity, Database, Info, PanelLeft, Settings2 } from '@lucide/vue'
 import { getVersion } from '@tauri-apps/api/app'
+import type { UnlistenFn } from '@tauri-apps/api/event'
+import { listen } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +23,7 @@ import {
 } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
 import { reportBackgroundFailure } from '@/features/feedback/errors'
+import { requestAutomaticUpdateInstall } from '@/features/updater/install-intent'
 import { colorMode } from '@/lib/color-mode'
 
 import appIconUrl from '../../../src-tauri/icons/icon.png'
@@ -31,9 +34,32 @@ import GeneralSettingsPanel from './general/index.vue'
 import type { NavigationItem, SettingsSection } from './model'
 import TaskbarSettingsPanel from './taskbar/index.vue'
 
-const activeSection = shallowRef<SettingsSection>('general')
+const SETTINGS_SECTION_EVENT = 'settings://select-section'
+const sectionOrder: SettingsSection[] = ['general', 'taskbar', 'data', 'diagnostics', 'about']
+const route = useRoute()
+const initialSection = sectionOrder.find((section) => section === route.query.section) ?? 'general'
+const activeSection = shallowRef<SettingsSection>(initialSection)
 const applicationVersion = shallowRef('—')
 const { t } = useI18n({ useScope: 'global' })
+let unlistenSection: UnlistenFn | undefined
+
+interface SettingsNavigation {
+  section: SettingsSection
+  automaticInstall: boolean
+}
+
+/** 只接受原生层约定的设置页导航负载。 */
+function parseSettingsNavigation(value: unknown): SettingsNavigation | null {
+  if (typeof value !== 'object' || value === null) return null
+  const candidate = value as Partial<Record<keyof SettingsNavigation, unknown>>
+  const section = sectionOrder.find((item) => item === candidate.section)
+  if (!section || typeof candidate.automaticInstall !== 'boolean') return null
+  return { section, automaticInstall: candidate.automaticInstall }
+}
+
+if (initialSection === 'about' && route.query.automaticInstall === 'true') {
+  requestAutomaticUpdateInstall()
+}
 
 const sectionPresentations = computed<
   Record<SettingsSection, { title: string; description: string; icon: Component }>
@@ -65,7 +91,6 @@ const sectionPresentations = computed<
   },
 }))
 
-const sectionOrder: SettingsSection[] = ['general', 'taskbar', 'data', 'diagnostics', 'about']
 const navigationItems = computed<Array<NavigationItem>>(() =>
   sectionOrder.map((id) => ({
     id,
@@ -89,6 +114,20 @@ const toasterTheme = computed(() => (colorMode.value === 'dark' ? 'dark' : 'ligh
 function selectSection(section: SettingsSection) {
   activeSection.value = section
 }
+
+/** 响应原生托盘更新入口，在已打开的设置窗口中切换到“关于”页。 */
+onMounted(async () => {
+  try {
+    unlistenSection = await listen<unknown>(SETTINGS_SECTION_EVENT, ({ payload }) => {
+      const navigation = parseSettingsNavigation(payload)
+      if (!navigation) return
+      selectSection(navigation.section)
+      if (navigation.automaticInstall) requestAutomaticUpdateInstall()
+    })
+  } catch (error) {
+    reportBackgroundFailure('监听设置页定位事件失败', error)
+  }
+})
 
 /** 读取 Tauri 配置中的应用版本，供侧边栏品牌区展示。 */
 onMounted(async () => {
@@ -116,6 +155,8 @@ onMounted(async () => {
     reportBackgroundFailure('显示设置窗口失败', error)
   }
 })
+
+onUnmounted(() => unlistenSection?.())
 </script>
 
 <template>

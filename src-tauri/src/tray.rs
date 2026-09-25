@@ -1,14 +1,18 @@
 //! 应用托盘承载全部原生菜单：应用级操作直接执行，播放器开关转发给任务栏窗口。
 
+use std::sync::Mutex;
+
 use tauri::{
     App, AppHandle, Emitter, Manager, Wry,
-    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
-    tray::TrayIconBuilder,
+    image::Image,
+    menu::{CheckMenuItem, IconMenuItem, Menu, MenuItem, PredefinedMenuItem},
+    tray::{TrayIcon, TrayIconBuilder},
 };
 
 use crate::commands;
 
 const TRAY_ID: &str = "main";
+const UPDATE_MENU_ID: &str = "tray-update";
 const SETTINGS_MENU_ID: &str = "tray-settings";
 const RESTART_MENU_ID: &str = "tray-restart";
 const EXIT_MENU_ID: &str = "tray-exit";
@@ -36,6 +40,14 @@ pub(crate) struct TrayMenuPresentation {
     checked: TrayMenuChecked,
 }
 
+/// 更新入口的完整展示状态；无可用版本时两个字段都为 `None`。
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct UpdateTrayPresentation {
+    label: Option<String>,
+    tooltip: Option<String>,
+}
+
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TrayMenuLabels {
@@ -59,6 +71,11 @@ struct TrayMenuChecked {
 
 /// 托盘菜单资源句柄；文案与勾选状态都在同一批原生菜单项上原地更新。
 pub(crate) struct TrayMenu {
+    menu: Menu<Wry>,
+    update: IconMenuItem<Wry>,
+    update_separator: PredefinedMenuItem<Wry>,
+    update_label: Mutex<Option<String>>,
+    tray: TrayIcon<Wry>,
     normal_cover: CheckMenuItem<Wry>,
     lyrics_cover: CheckMenuItem<Wry>,
     lyrics: CheckMenuItem<Wry>,
@@ -96,12 +113,105 @@ impl TrayMenu {
         apply_result(self.lyrics.set_checked(checked.lyrics), "歌词");
         apply_result(self.spectrum.set_checked(checked.spectrum), "频谱");
     }
+
+    /// 原地同步更新入口；菜单项只在有新版本时插入，避免常态占用空间。
+    pub(crate) fn apply_update(&self, presentation: UpdateTrayPresentation) {
+        let Ok(mut current_label) = self.update_label.lock() else {
+            log::error!("更新托盘入口状态锁已损坏");
+            return;
+        };
+
+        match presentation.label {
+            Some(label) => {
+                if let Err(error) = self.update.set_text(&label) {
+                    log::warn!("更新托盘菜单项文案失败: {error}");
+                    return;
+                }
+                if current_label.is_none()
+                    && let Err(error) = self
+                        .menu
+                        .prepend_items(&[&self.update, &self.update_separator])
+                {
+                    log::warn!("显示托盘更新入口失败: {error}");
+                    return;
+                }
+                if let Some(tooltip) = presentation.tooltip {
+                    apply_result(self.tray.set_tooltip(Some(tooltip)), "托盘更新提示");
+                }
+                *current_label = Some(label);
+            }
+            None => {
+                if current_label.take().is_some() {
+                    apply_result(self.menu.remove(&self.update), "托盘更新入口");
+                    apply_result(self.menu.remove(&self.update_separator), "托盘更新分隔线");
+                }
+                apply_result(self.tray.set_tooltip(Some("Muse Tune")), "托盘默认提示");
+            }
+        }
+    }
+}
+
+/// 生成 16px 高对比红色下载图标，不依赖额外图片解码能力或磁盘资源。
+fn update_menu_icon() -> Image<'static> {
+    const SIZE: usize = 16;
+    let mut rgba = vec![0_u8; SIZE * SIZE * 4];
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let dx = x as f32 - 7.5;
+            let dy = y as f32 - 7.5;
+            if dx * dx + dy * dy <= 49.0 {
+                let offset = (y * SIZE + x) * 4;
+                rgba[offset..offset + 4].copy_from_slice(&[255, 59, 48, 255]);
+            }
+        }
+    }
+
+    for &(x, y) in &[
+        (7, 3),
+        (8, 3),
+        (7, 4),
+        (8, 4),
+        (7, 5),
+        (8, 5),
+        (7, 6),
+        (8, 6),
+        (7, 7),
+        (8, 7),
+        (5, 8),
+        (6, 8),
+        (7, 8),
+        (8, 8),
+        (9, 8),
+        (10, 8),
+        (6, 9),
+        (7, 9),
+        (8, 9),
+        (9, 9),
+        (7, 10),
+        (8, 10),
+        (7, 11),
+        (8, 11),
+    ] {
+        let offset = (y * SIZE + x) * 4;
+        rgba[offset..offset + 4].copy_from_slice(&[255, 255, 255, 255]);
+    }
+
+    Image::new_owned(rgba, SIZE as u32, SIZE as u32)
 }
 
 /// 创建单个常驻托盘图标，并注册应用级操作菜单。
 ///
 /// 菜单文案先使用简体中文，任务栏窗口就绪后会按当前界面语言覆盖。
 pub(super) fn initialize(app: &App) -> tauri::Result<()> {
+    let update_item = IconMenuItem::with_id(
+        app,
+        UPDATE_MENU_ID,
+        "发现新版本",
+        true,
+        Some(update_menu_icon()),
+        None::<&str>,
+    )?;
+    let update_separator = PredefinedMenuItem::separator(app)?;
     let normal_cover = CheckMenuItem::with_id(
         app,
         NORMAL_COVER_MENU_ID,
@@ -157,9 +267,14 @@ pub(super) fn initialize(app: &App) -> tauri::Result<()> {
     if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
     }
-    builder.build(app)?;
+    let tray = builder.build(app)?;
 
     app.manage(TrayMenu {
+        menu,
+        update: update_item,
+        update_separator,
+        update_label: Mutex::new(None),
+        tray,
         normal_cover,
         lyrics_cover,
         lyrics,
@@ -175,6 +290,7 @@ pub(super) fn initialize(app: &App) -> tauri::Result<()> {
 /// 分发托盘菜单事件：应用级操作就地执行，播放器开关交给任务栏窗口。
 fn handle_menu_event(app: &AppHandle, menu_id: &str) {
     match menu_id {
+        UPDATE_MENU_ID => open_update_settings(app.clone()),
         SETTINGS_MENU_ID => open_settings(app.clone()),
         RESTART_MENU_ID => commands::system::restart_application(app.clone()),
         EXIT_MENU_ID => app.exit(0),
@@ -184,6 +300,15 @@ fn handle_menu_event(app: &AppHandle, menu_id: &str) {
         SPECTRUM_MENU_ID => dispatch_menu_action(app, SPECTRUM_ACTION),
         _ => {}
     }
+}
+
+/// 异步打开设置窗口的“关于”页，供更新入口直达安装操作。
+fn open_update_settings(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = commands::settings::open_update_settings_window(&app) {
+            log::error!("从托盘更新入口打开设置窗口失败: {error}");
+        }
+    });
 }
 
 /// 把菜单动作投递给唯一一个任务栏窗口，避免多显示器下重复切换同一项设置。
