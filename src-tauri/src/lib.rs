@@ -50,6 +50,7 @@ pub fn run() {
             commands::data::refresh_current_lyrics,
             commands::diagnostics::collect_diagnostics,
             commands::settings::open_settings_window,
+            commands::settings::get_gpu_acceleration_setting,
             commands::media::control_media_session,
             commands::media::toggle_current_media_player,
             commands::media::get_current_media_volume,
@@ -102,6 +103,10 @@ pub fn run() {
             app.manage(media_service);
             let system_theme_service = system::initialize(app.handle().clone())?;
             app.manage(system_theme_service);
+            // GPU 加速开关必须在任务栏建窗前捕获进全局 state——同环境内所有窗口的
+            // additionalBrowserArgs 必须一致，故整个会话都用这一份固定值，改动重启后才生效。
+            let disable_gpu_setting = settings_store::read_disable_gpu_setting(app.handle());
+            app.manage(disable_gpu_setting);
             let taskbar_service = taskbar::initialize(app)?;
             app.manage(taskbar_service);
             tray::initialize(app)?;

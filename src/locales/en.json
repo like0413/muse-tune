@@ -38,6 +38,12 @@
         "title": "Reduce motion",
         "description": "Reduce lyric, artwork, and interface animations; when off, follow the Windows motion setting"
       },
+      "disableGpuAcceleration": {
+        "title": "Disable GPU acceleration",
+        "description": "Render with the CPU to lower memory usage; may raise CPU load and soften animations. Takes effect after restarting",
+        "restartRequired": "This change takes effect after restarting the app",
+        "restartNow": "Restart now"
+      },
       "autostart": {
         "title": "Launch at startup",
         "description": "Start Muse Tune automatically when you sign in to Windows"
@@ -117,7 +123,7 @@
         "buttonsDescription": "Choose which buttons to show, then drag to reorder them",
         "order": "Playback control order",
         "volumeTarget": "Volume control target",
-        "volumeTargetDescription": "Adjust the current player's audio session or take over the system master volume of the default Windows playback device. Hover over the taskbar player and scroll the mouse wheel to adjust it",
+        "volumeTargetDescription": "Hover over the taskbar player and scroll the mouse wheel to adjust it",
         "applicationVolume": "Current player volume",
         "systemVolume": "System master volume",
         "volumeRestoreTitle": "Restore the current player volume?",
@@ -173,7 +179,7 @@
         "barCount": "Number of bars",
         "barCountDescription": "Fewer bars create a simpler look; more bars show finer frequency detail",
         "width": "Spectrum width",
-        "widthDescription": "Set the width of the right-aligned spectrum; it overlays content in normal mode and occupies its own space in lyrics mode",
+        "widthDescription": "It overlays content in normal mode and occupies its own space in lyrics mode",
         "vertical": "Vertical alignment",
         "verticalDescription": "Centered bars expand both ways; bottom-aligned bars grow upward",
         "sensitivity": "Sensitivity",

@@ -38,6 +38,12 @@
         "title": "减少动态效果",
         "description": "减少歌词、封面与界面动画；关闭后跟随 Windows 动画设置"
       },
+      "disableGpuAcceleration": {
+        "title": "禁用 GPU 加速",
+        "description": "改用 CPU 渲染以降低内存占用；可能提高 CPU 负载并略微降低动画流畅度，重启后生效",
+        "restartRequired": "该更改将在重启应用后生效",
+        "restartNow": "立即重启"
+      },
       "autostart": {
         "title": "开机自启",
         "description": "登录 Windows 后自动启动 Muse Tune"
@@ -117,7 +123,7 @@
         "buttonsDescription": "选择要显示的按钮，并拖动调整排列顺序",
         "order": "控制按钮顺序",
         "volumeTarget": "音量控制对象",
-        "volumeTargetDescription": "选择调节当前播放器的独立音频会话，或接管 Windows 默认播放设备的系统主音量。将鼠标悬停在任务栏播放器上并滚动鼠标滚轮即可调节",
+        "volumeTargetDescription": "将鼠标悬停在任务栏播放器上并滚动鼠标滚轮即可调节",
         "applicationVolume": "当前播放器音量",
         "systemVolume": "系统主音量",
         "volumeRestoreTitle": "恢复当前播放器音量？",
@@ -173,7 +179,7 @@
         "barCount": "频谱条数量",
         "barCountDescription": "数量越少越简洁，越多则能显示更细致的频率变化",
         "width": "频谱宽度",
-        "widthDescription": "调整最右侧频谱的宽度；普通模式覆盖内容，歌词模式独立占用空间",
+        "widthDescription": "普通模式覆盖内容，歌词模式独立占用空间",
         "vertical": "垂直位置",
         "verticalDescription": "居中时向上下扩张，底部对齐时向上生长",
         "sensitivity": "灵敏度",

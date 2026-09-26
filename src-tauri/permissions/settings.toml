@@ -22,4 +22,6 @@ commands.allow = [
   "set_taskbar_horizontal_offset",
   "set_taskbar_width",
   "set_current_media_volume",
+  "get_gpu_acceleration_setting",
+  "restart_application",
 ]

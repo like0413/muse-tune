@@ -17,6 +17,14 @@ function setSource(index: number, source: string) {
   sources.value = next
 }
 
+/** 交叉淡入完成后释放非活动图层，避免上一首封面继续占用解码与 GPU 资源。 */
+function releaseInactiveSource(index: number, event: TransitionEvent) {
+  if (event.propertyName !== 'opacity' || index === activeIndex.value) return
+  const next = [...sources.value]
+  next[index] = null
+  sources.value = next
+}
+
 /**
  * 交叉淡入淡出：新封面先写入未激活的常驻图层，绘制完成后再切换激活项。
  * 图层始终存在，只有透明度在变，因此过渡中不会出现图层创建或回收带来的亮度跳变，
@@ -58,6 +66,7 @@ watch(
       :key="index"
       class="cover-image absolute inset-0"
       :style="{ opacity: index === activeIndex && source ? 1 : 0 }"
+      @transitionend.self="releaseInactiveSource(index, $event)"
     >
       <div
         class="cover-image-blur absolute inset-0"

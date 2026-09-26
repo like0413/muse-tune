@@ -25,4 +25,8 @@ export const settingsStore = {
   async set<T>(key: string, value: T): Promise<void> {
     await (await getSettingsStore()).set(key, value)
   },
+  /** 立即把当前全部变更刷新到磁盘，供需要在关闭前确认持久化的场景使用。 */
+  async save(): Promise<void> {
+    await (await getSettingsStore()).save()
+  },
 }

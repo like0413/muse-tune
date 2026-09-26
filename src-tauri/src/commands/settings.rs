@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-use crate::{error::Error, ipc::IpcError, storage::StoragePaths};
+use crate::{error::Error, ipc::IpcError, settings_store, storage::StoragePaths};
 
 const SETTINGS_WINDOW_LABEL: &str = "settings";
 const SETTINGS_SECTION_EVENT: &str = "settings://select-section";
@@ -25,6 +25,15 @@ struct SettingsNavigation {
 pub async fn open_settings_window(app: AppHandle) -> Result<(), IpcError> {
     open_or_activate_settings_window(&app, None)
         .map_err(|error| IpcError::new(OPEN_WINDOW_CODE, error, true))
+}
+
+/// 返回当前会话的禁用 GPU 加速设置（启动时捕获，重启前保持稳定）。
+///
+/// 供前端判断"持久化值与会话生效值是否一致"，进而决定是否提示重启。
+#[tauri::command]
+pub fn get_gpu_acceleration_setting(app: AppHandle) -> bool {
+    app.state::<settings_store::GpuAccelerationSetting>()
+        .enabled
 }
 
 /// 从原生更新入口打开设置窗口，并直接定位到“关于”页。
@@ -69,6 +78,9 @@ fn open_or_activate_settings_window(
     let mut builder = WebviewWindowBuilder::from_config(app, &window_config)?;
     if let Some(directory) = app.state::<StoragePaths>().webview_directory() {
         builder = builder.data_directory(directory.to_path_buf());
+    }
+    if let Some(args) = settings_store::disable_gpu_app_args(app) {
+        builder = builder.additional_browser_args(args);
     }
 
     match builder.build() {

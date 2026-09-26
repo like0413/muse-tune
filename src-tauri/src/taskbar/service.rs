@@ -13,7 +13,7 @@ use std::{
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 use tauri_plugin_store::StoreExt;
 
-use crate::{error::Error, native_defaults, storage::StoragePaths};
+use crate::{error::Error, native_defaults, settings_store, storage::StoragePaths};
 
 use super::{
     TASKBAR_WINDOW_LABEL, TaskbarOverlapPriority, TaskbarPlacement, TaskbarWidthMode, displays,
@@ -269,6 +269,9 @@ fn maintain_bar_windows<R: Runtime>(app: AppHandle<R>, stop: Arc<AtomicBool>) {
                 };
                 if let Some(directory) = app.state::<StoragePaths>().webview_directory() {
                     builder = builder.data_directory(directory.to_path_buf());
+                }
+                if let Some(args) = settings_store::disable_gpu_app_args(&app) {
+                    builder = builder.additional_browser_args(args);
                 }
                 let Ok(window) = builder.build() else {
                     continue;

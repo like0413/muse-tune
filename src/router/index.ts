@@ -1,6 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 
-import SettingsPage from '@/pages/settings/index.vue'
 import TaskbarPage from '@/pages/taskbar/index.vue'
 
 const router = createRouter({
@@ -14,7 +13,7 @@ const router = createRouter({
     {
       path: '/settings',
       name: 'settings',
-      component: SettingsPage,
+      component: () => import('@/pages/settings/index.vue'),
     },
   ],
 })

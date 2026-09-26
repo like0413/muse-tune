@@ -28,6 +28,43 @@ use migration::{migrate_legacy_entries_directory, remove_obsolete_schema_directo
 use pruning::{ensure_directory_boundary, prune_after_write};
 
 const MAX_CACHE_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
+/// `write_generations` 表的上限：超过后裁剪最旧的写入记录，避免长时间切歌时单调增长。
+const MAX_WRITE_GENERATIONS: usize = 2048;
+/// 裁剪后保留的比例，防止在临界值附近反复触发裁剪。
+const KEEP_WRITE_GENERATIONS: usize = MAX_WRITE_GENERATIONS * 3 / 4;
+
+/// 单个曲目键的写入代数记录；`order` 为单调递增的写入顺序，用于裁剪最旧的条目。
+struct GenerationEntry {
+    generation: u64,
+    order: u64,
+}
+
+/// 带容量上限的写入代数表；`next_order` 为全局单调递增的写入次序。
+#[derive(Default)]
+struct GenerationTable {
+    entries: HashMap<String, GenerationEntry>,
+    next_order: u64,
+}
+
+impl GenerationTable {
+    /// 移除写入次序最旧的条目，直到保留 `KEEP_WRITE_GENERATIONS` 条。
+    fn prune_oldest(&mut self) {
+        if self.entries.len() <= KEEP_WRITE_GENERATIONS {
+            return;
+        }
+        // 收集属主（而非借用）键，避免迭代期间可变借用 `entries` 与其冲突。
+        let mut ordered: Vec<(u64, String)> = self
+            .entries
+            .iter()
+            .map(|(key, value)| (value.order, key.clone()))
+            .collect();
+        ordered.sort_unstable();
+        let remove_count = ordered.len().saturating_sub(KEEP_WRITE_GENERATIONS);
+        for (_, key) in ordered.into_iter().take(remove_count) {
+            self.entries.remove(&key);
+        }
+    }
+}
 
 /// 缓存命中及其时效状态。
 pub struct CacheLookup {
@@ -56,10 +93,9 @@ pub struct ParsedLyricsCache {
     diagnostics: CacheDiagnostics,
     /// 每个键最近一次写入所属的解析代数，用于拒绝被取代的旧写入。
     ///
-    /// 只增不删：任何路径都不会移除或清空条目（`clear` 也只删磁盘文件），因此它随本次运行
-    /// 播放过的曲目键单调增长。单条记录很小（键 + u64），但长时间运行且频繁切歌时内存不会回落，
-    /// 这也是它刻意与缓存淘汰逻辑解耦的代价。
-    write_generations: Mutex<HashMap<String, u64>>,
+    /// 为避免长时间切歌时内存单调增长，此表带容量上限：超过 `MAX_WRITE_GENERATIONS`
+    /// 后裁剪最旧的写入记录。裁剪只影响用于拒绝过期写入的排序表，不影响磁盘缓存淘汰。
+    write_generations: Mutex<GenerationTable>,
 }
 
 impl ParsedLyricsCache {
@@ -75,7 +111,7 @@ impl ParsedLyricsCache {
         Ok(Self {
             cache_path,
             diagnostics: CacheDiagnostics::default(),
-            write_generations: Mutex::new(HashMap::new()),
+            write_generations: Mutex::new(GenerationTable::default()),
         })
     }
 
@@ -254,17 +290,25 @@ impl ParsedLyricsCache {
 
     /// 记录本次写入的代数；已有更大代数的写入时返回 false，表示本轮已被取代。
     fn reserve_write(&self, track_key: &str, generation: u64) -> bool {
-        let Ok(mut generations) = self.write_generations.lock() else {
+        let Ok(mut table) = self.write_generations.lock() else {
             // 锁不可用时按允许写入处理：宁可偶发乱序，也不要静默丢掉歌词。
             return true;
         };
-        if generations
+        if table
+            .entries
             .get(track_key)
-            .is_some_and(|written| *written > generation)
+            .is_some_and(|written| written.generation > generation)
         {
             return false;
         }
-        generations.insert(track_key.to_owned(), generation);
+        table.next_order += 1;
+        let order = table.next_order;
+        table
+            .entries
+            .insert(track_key.to_owned(), GenerationEntry { generation, order });
+        if table.entries.len() > MAX_WRITE_GENERATIONS {
+            table.prune_oldest();
+        }
         true
     }
 

@@ -80,16 +80,21 @@ function matchPresetColor(hue: number): string {
 /** 识别封面主色系，并输出固定色板中最接近的明亮颜色。 */
 export async function extractTaskbarCoverColor(source: string): Promise<string> {
   const image = await loadCoverImage(source)
-  const dominantHue = getUsableHue(
-    await getColor(image, EXTRACTION_OPTIONS),
-    MINIMUM_DOMINANT_CHROMA,
-  )
-  if (dominantHue !== null) return matchPresetColor(dominantHue)
+  try {
+    const dominantHue = getUsableHue(
+      await getColor(image, EXTRACTION_OPTIONS),
+      MINIMUM_DOMINANT_CHROMA,
+    )
+    if (dominantHue !== null) return matchPresetColor(dominantHue)
 
-  // 主色接近黑白灰时，先找彩色点缀；没有彩色点缀再保留整体的冷暖倾向。
-  const swatches = await getSwatches(image, EXTRACTION_OPTIONS)
-  const hue =
-    getSwatchHue(swatches, VIBRANT_SWATCH_ROLES, MINIMUM_DOMINANT_CHROMA) ??
-    getSwatchHue(swatches, MUTED_SWATCH_ROLES, MINIMUM_MUTED_CHROMA)
-  return hue === null ? COVER_COLOR_FALLBACK : matchPresetColor(hue)
+    // 主色接近黑白灰时，先找彩色点缀；没有彩色点缀再保留整体的冷暖倾向。
+    const swatches = await getSwatches(image, EXTRACTION_OPTIONS)
+    const hue =
+      getSwatchHue(swatches, VIBRANT_SWATCH_ROLES, MINIMUM_DOMINANT_CHROMA) ??
+      getSwatchHue(swatches, MUTED_SWATCH_ROLES, MINIMUM_MUTED_CHROMA)
+    return hue === null ? COVER_COLOR_FALLBACK : matchPresetColor(hue)
+  } finally {
+    // 取色完成后主动解除临时 Image 对 Data URL 和解码位图的引用。
+    image.removeAttribute('src')
+  }
 }

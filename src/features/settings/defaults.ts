@@ -87,6 +87,9 @@ const sharedDefaults = nativeDefaultsJson as {
 /** 应用级减少动态效果覆盖项默认关闭，由系统偏好优先。 */
 export const DEFAULT_REDUCED_MOTION = false
 
+/** 禁用 GPU 加速默认关闭（保持硬件加速的渲染流畅度）。 */
+export const DEFAULT_DISABLE_GPU_ACCELERATION = false
+
 export const DEFAULT_AUTOMATIC_UPDATE_CHECK = true
 
 export const DEFAULT_UPDATE_CHECK_FREQUENCY: UpdateCheckFrequency = 'daily'
