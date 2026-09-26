@@ -11,7 +11,7 @@ import { defineConfig, lazyPlugins } from 'vite-plus'
 // https://vite.dev/config/
 export default defineConfig({
   server: {
-    port: 1480,
+    port: 21480,
     strictPort: true,
     watch: {
       ignored: ['**/src-tauri/**'],

@@ -14,6 +14,15 @@ dist-ssr
 coverage
 *.local
 
+# Monorepo：所有应用和插件的 Rust 编译产物、插件分发产物
+**/target/
+**/gen/schemas
+**/artifact/
+
+# 工具生成的本地缓存
+**/.vite/
+**/.vite-temp/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -47,11 +56,5 @@ __screenshots__/
 .env.*
 !.env.example
 
-# rust generated files
-/target/
-/gen/schemas
-
-# custom
 .tauri
 todo.txt
-**/target/

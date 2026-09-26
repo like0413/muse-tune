@@ -6,7 +6,7 @@
   "identifier": "com.like.musetune",
   "build": {
     "frontendDist": "../dist",
-    "devUrl": "http://localhost:1480",
+    "devUrl": "http://localhost:21480",
     "beforeDevCommand": "vp dev",
     "beforeBuildCommand": "vp build"
   },
@@ -43,12 +43,12 @@
     "security": {
       "capabilities": ["taskbar", "settings"],
       "devCsp": {
-        "default-src": "'self' http://localhost:1480",
-        "connect-src": "ipc: http://ipc.localhost http://localhost:1480 ws://localhost:1480",
-        "font-src": "'self' data: http://localhost:1480",
-        "img-src": "'self' data: blob: http://localhost:1480",
-        "style-src": "'self' 'unsafe-inline' http://localhost:1480",
-        "script-src": "'self' http://localhost:1480",
+        "default-src": "'self' http://localhost:21480",
+        "connect-src": "ipc: http://ipc.localhost http://localhost:21480 ws://localhost:21480",
+        "font-src": "'self' data: http://localhost:21480",
+        "img-src": "'self' data: blob: http://localhost:21480",
+        "style-src": "'self' 'unsafe-inline' http://localhost:21480",
+        "script-src": "'self' http://localhost:21480",
         "object-src": "'none'",
         "frame-src": "'none'",
         "base-uri": "'none'",
