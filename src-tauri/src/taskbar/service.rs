@@ -13,7 +13,7 @@ use std::{
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 use tauri_plugin_store::StoreExt;
 
-use crate::{error::Error, native_defaults, settings_store::PATH as SETTINGS_STORE_PATH};
+use crate::{error::Error, native_defaults, storage::StoragePaths};
 
 use super::{
     TASKBAR_WINDOW_LABEL, TaskbarOverlapPriority, TaskbarPlacement, TaskbarWidthMode, displays,
@@ -153,7 +153,7 @@ pub(super) fn initialize<R: Runtime>(
 }
 
 fn restore_native_settings<R: Runtime>(app: &tauri::App<R>) {
-    let store = match app.store(SETTINGS_STORE_PATH) {
+    let store = match app.store(app.state::<StoragePaths>().settings_file()) {
         Ok(store) => store,
         Err(error) => {
             log::warn!("读取持久化设置失败，本次启动使用默认任务栏设置: {error}");
@@ -263,9 +263,13 @@ fn maintain_bar_windows<R: Runtime>(app: AppHandle<R>, stop: Arc<AtomicBool>) {
             let window = if let Some(window) = app.get_webview_window(&label) {
                 window
             } else {
-                let Ok(builder) = tauri::WebviewWindowBuilder::from_config(&app, &config) else {
+                let Ok(mut builder) = tauri::WebviewWindowBuilder::from_config(&app, &config)
+                else {
                     continue;
                 };
+                if let Some(directory) = app.state::<StoragePaths>().webview_directory() {
+                    builder = builder.data_directory(directory.to_path_buf());
+                }
                 let Ok(window) = builder.build() else {
                     continue;
                 };

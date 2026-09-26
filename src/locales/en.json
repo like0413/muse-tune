@@ -335,6 +335,8 @@
         "releaseNotes": "View release notes",
         "check": "Check for updates",
         "install": "Download and install",
+        "portableAction": "Download portable build",
+        "portableDescription": "The portable build does not run an installer. Download the new archive, exit Muse Tune, and replace the existing executable. The data folder keeps your settings, cache, and logs.",
         "downloading": "Downloading",
         "downloadingProgress": "Downloading {progress}%",
         "automatic": "Automatically check for updates",
@@ -356,7 +358,8 @@
         "saveFrequencyFailed": "Could not save the update check interval",
         "initializeFailed": "Could not initialize update settings",
         "notificationTitle": "A Muse Tune update is available",
-        "notificationBody": "Version {version} is available. Open Settings → About to download and install it."
+        "notificationBody": "Version {version} is available. Open Settings → About to download and install it.",
+        "notificationPortableBody": "Version {version} is available. Open Settings → About to download the new portable archive and replace it manually."
       },
       "project": {
         "title": "Project and license",

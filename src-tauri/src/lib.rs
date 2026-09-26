@@ -9,6 +9,7 @@ mod lyrics;
 mod media;
 mod native_defaults;
 mod settings_store;
+mod storage;
 mod system;
 mod taskbar;
 mod tray;
@@ -18,11 +19,11 @@ use std::sync::Arc;
 use tauri::Manager;
 
 pub fn run() {
-    // 必须早于任何线程创建：崩溃信息只能靠日志文件保留，正式构建没有控制台。
+    // 先安装全局 panic hook；正式构建没有控制台，文件落点随后由日志插件建立。
     logging::install_panic_hook();
+    let portable_log_directory = storage::portable_log_directory().expect("无法定位便携版日志目录");
     tauri::Builder::default()
-        .plugin(logging::plugin())
-        .plugin(tauri_plugin_notification::init())
+        // Tauri 官方要求单实例插件最先注册，避免第二实例先初始化其它插件资源。
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
@@ -31,6 +32,9 @@ pub fn run() {
                 }
             });
         }))
+        // 日志仍早于其余普通插件和 setup 注册，覆盖后续初始化及运行期错误。
+        .plugin(logging::plugin(portable_log_directory))
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::Builder::new().build())
@@ -60,6 +64,7 @@ pub fn run() {
             commands::lyrics::get_current_lyrics,
             commands::lyrics::convert_chinese_texts,
             commands::lyrics::set_lyrics_preferences,
+            commands::runtime::get_runtime_environment,
             commands::system::list_system_fonts,
             commands::system::get_system_accent_color,
             commands::system::get_system_foreground_color,
@@ -83,6 +88,8 @@ pub fn run() {
             //   先 `app.manage` 再初始化任务栏，否则首次 invoke 会因状态未注册而失败；
             // - 反过来，少 manage 任何一个都会让下面的 `ExitRequested`/`Exit` 分支在
             //   `app.state::<...>()` 上 panic，而那里正是唯一能停止这些线程的地方。
+            let storage_paths = storage::StoragePaths::resolve(app)?;
+            app.manage(storage_paths);
             let lyrics_service = lyrics::initialize(app)?;
             let lyrics_snapshot_subscriber = lyrics_service.clone();
             let media_service = media::initialize(

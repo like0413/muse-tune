@@ -6,6 +6,7 @@ use std::{
     collections::HashMap,
     ffi::OsString,
     fs, io, panic,
+    path::PathBuf,
     time::{Duration, Instant},
 };
 
@@ -13,7 +14,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_log::{Builder, RotationStrategy, Target, TargetKind, TimezoneStrategy};
 use time::{format_description::FormatItem, macros::format_description};
 
-use crate::{error::Error, filesystem};
+use crate::{error::Error, filesystem, storage::StoragePaths};
 
 pub const LOG_FILE_MAX_BYTES: u64 = 512 * 1024;
 pub const LOG_ARCHIVE_FILE_LIMIT: usize = 9;
@@ -81,13 +82,19 @@ fn local_timestamp() -> String {
 ///
 /// 必须注册在 `Builder` 上而不是 `setup` 内：插件初始化顺序在 `setup` 之前，
 /// 晚注册会让其它插件初始化阶段产生的日志无处可去。
-pub fn plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
+pub fn plugin<R: Runtime>(
+    portable_log_directory: Option<PathBuf>,
+) -> tauri::plugin::TauriPlugin<R> {
+    let file_target = portable_log_directory.map_or_else(
+        || TargetKind::LogDir { file_name: None },
+        |path| TargetKind::Folder {
+            path,
+            file_name: None,
+        },
+    );
     Builder::new()
         .clear_targets()
-        .targets([
-            Target::new(TargetKind::Stdout),
-            Target::new(TargetKind::LogDir { file_name: None }),
-        ])
+        .targets([Target::new(TargetKind::Stdout), Target::new(file_target)])
         .level(tauri_plugin_log::log::LevelFilter::Warn)
         .timezone_strategy(TIMEZONE)
         .format(|out, message, record| {
@@ -149,10 +156,7 @@ pub fn warn_throttled(key: &'static str, message: impl FnOnce() -> String) {
 
 /// 删除轮转历史文件并保留当前日志句柄对应的活动文件。
 pub fn clear_history<R: Runtime>(app: &AppHandle<R>) -> Result<(), Error> {
-    let log_directory = app
-        .path()
-        .app_log_dir()
-        .map_err(|error| Error::Message(format!("无法定位日志目录: {error}")))?;
+    let log_directory = app.state::<StoragePaths>().log_directory().to_path_buf();
     match filesystem::ensure_directory(&log_directory) {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),

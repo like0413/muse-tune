@@ -23,16 +23,15 @@ concurrency:
   group: release-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
 
-jobs:
-  publish-windows:
-    runs-on: windows-2025
-    timeout-minutes: 45
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
-      PUBLISH_RELEASE: ${{ github.event_name == 'push' || inputs.publish }}
-      TAURI_TARGET: x86_64-pc-windows-msvc
-      NSIS_BUNDLE_DIR: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  PUBLISH_RELEASE: ${{ github.event_name == 'push' || inputs.publish }}
+  TAURI_TARGET: x86_64-pc-windows-msvc
 
+jobs:
+  validate:
+    runs-on: windows-2025
+    timeout-minutes: 25
     steps:
       - name: 校验 Release Tag 格式
         if: env.PUBLISH_RELEASE == 'true'
@@ -54,18 +53,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tagCommit = git rev-parse HEAD
+          $tagCommit = (git rev-parse HEAD).Trim()
           if ($LASTEXITCODE -ne 0) {
             throw 'Unable to resolve the checked-out tag commit.'
           }
-          $tagCommit = $tagCommit.Trim()
-
-          $status = gh api "repos/$env:GITHUB_REPOSITORY/compare/$tagCommit...main" --jq '.status'
+          $status = (gh api "repos/$env:GITHUB_REPOSITORY/compare/$tagCommit...main" --jq '.status').Trim()
           if ($LASTEXITCODE -ne 0) {
             throw "Unable to compare tag commit $tagCommit with main."
           }
-          $status = $status.Trim()
-
           if ($status -notin @('ahead', 'identical')) {
             throw "Tag commit $tagCommit is not part of main. Comparison status: $status."
           }
@@ -82,13 +77,11 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) {
             throw 'GitHub secret TAURI_SIGNING_PRIVATE_KEY_PASSWORD is missing.'
           }
-
           $config = Get-Content -Raw -LiteralPath 'src-tauri/tauri.conf.json' | ConvertFrom-Json
           if ([string]::IsNullOrWhiteSpace($config.plugins.updater.pubkey) -or
               $config.plugins.updater.pubkey -eq 'REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY') {
             throw 'Commit the Tauri updater public key before building updater artifacts.'
           }
-
           try {
             $publicKey = [Text.Encoding]::UTF8.GetString(
               [Convert]::FromBase64String($config.plugins.updater.pubkey)
@@ -99,13 +92,11 @@ jobs:
           if ($publicKey -notmatch '^untrusted comment: minisign public key: [0-9A-Fa-f]+') {
             throw 'The Tauri updater public key is not a valid minisign public key.'
           }
-
           $expectedEndpoint = "https://github.com/$env:GITHUB_REPOSITORY/releases/latest/download/latest.json"
           $endpoints = @($config.plugins.updater.endpoints)
           if ($endpoints.Count -ne 1 -or $endpoints[0] -ne $expectedEndpoint) {
             throw "Updater endpoint must match this repository: $expectedEndpoint"
           }
-
           if ($env:PUBLISH_RELEASE -eq 'true') {
             $tagVersion = $env:RELEASE_TAG.Substring(1)
             if ($tagVersion -ne $config.version) {
@@ -140,8 +131,44 @@ jobs:
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 
-      - name: Check Rust
+      - name: Check installed Rust build
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --locked -- -D warnings
+
+      - name: Check portable Rust build
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --locked --features portable -- -D warnings
+
+  build-installer:
+    needs: validate
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      NSIS_BUNDLE_DIR: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
+    steps:
+      - name: Checkout requested ref
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.18.0
+        with:
+          node-version: 24.19.0
+          cache: true
+          run-install: false
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.98.0
+        with:
+          targets: ${{ env.TAURI_TARGET }}
+
+      - name: Cache Rust build output
+        uses: Swatinem/rust-cache@v2.9.2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install dependencies
+        run: vp install --frozen-lockfile
 
       - name: 构建 NSIS 安装包
         id: build
@@ -151,7 +178,6 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          # tagName 为空时 tauri-action 只构建、不上传，手动构建的产物由后续 upload-artifact 步骤接管
           tagName: ${{ env.PUBLISH_RELEASE == 'true' && env.RELEASE_TAG || '' }}
           releaseName: ${{ env.PUBLISH_RELEASE == 'true' && format('Muse Tune {0}', env.RELEASE_TAG) || '' }}
           releaseDraft: true
@@ -174,14 +200,12 @@ jobs:
           if ($installers.Count -ne 1) {
             throw "Expected exactly one NSIS installer, found $($installers.Count)."
           }
-
           $installer = $installers[0]
           $signaturePath = "$($installer.FullName).sig"
           if (-not (Test-Path -LiteralPath $signaturePath -PathType Leaf) -or
               (Get-Item -LiteralPath $signaturePath).Length -eq 0) {
             throw "The updater signature is missing or empty: $signaturePath"
           }
-
           if ($env:PUBLISH_RELEASE -ne 'true') {
             if ([string]::IsNullOrWhiteSpace($env:APP_VERSION)) {
               throw 'tauri-action did not return the application version.'
@@ -203,61 +227,147 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
-      - name: 添加手动构建的 NSIS 安装包下载链接到摘要中
+      - name: 添加安装包下载链接到摘要
         if: env.PUBLISH_RELEASE != 'true'
         shell: pwsh
         run: |
           "- [Download signed NSIS artifact](${{ steps.upload-manual-artifact.outputs.artifact-url }})" |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+  build-portable:
+    needs: validate
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - name: Checkout requested ref
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.18.0
+        with:
+          node-version: 24.19.0
+          cache: true
+          run-install: false
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.98.0
+        with:
+          targets: ${{ env.TAURI_TARGET }}
+
+      - name: Cache Rust build output
+        uses: Swatinem/rust-cache@v2.9.2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install dependencies
+        run: vp install --frozen-lockfile
+
+      - name: 构建便携版可执行文件
+        run: vp exec tauri build --target $env:TAURI_TARGET --no-bundle --features portable
+
+      - name: 打包并校验便携版
+        id: package
+        shell: pwsh
+        run: |
+          $config = Get-Content -Raw -LiteralPath 'src-tauri/tauri.conf.json' | ConvertFrom-Json
+          $version = $config.version
+          $binary = "src-tauri/target/$env:TAURI_TARGET/release/MuseTune.exe"
+          if (-not (Test-Path -LiteralPath $binary -PathType Leaf) -or
+              (Get-Item -LiteralPath $binary).Length -eq 0) {
+            throw "Portable executable is missing or empty: $binary"
+          }
+          $stage = Join-Path $env:RUNNER_TEMP "muse-tune-portable-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          New-Item -ItemType Directory -Path $stage | Out-Null
+          Copy-Item -LiteralPath $binary -Destination (Join-Path $stage 'MuseTune.exe')
+          $archive = Join-Path $env:RUNNER_TEMP "MuseTune-$version-windows-x64-portable.zip"
+          Compress-Archive -LiteralPath (Join-Path $stage 'MuseTune.exe') -DestinationPath $archive
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf) -or
+              (Get-Item -LiteralPath $archive).Length -eq 0) {
+            throw "Portable archive is missing or empty: $archive"
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "archive=$archive" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: 上传便携版
+        id: upload-portable-artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: MuseTune-${{ steps.package.outputs.version }}-windows-x64-portable
+          path: ${{ steps.package.outputs.archive }}
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: 添加便携版下载链接到摘要
+        if: env.PUBLISH_RELEASE != 'true'
+        shell: pwsh
+        run: |
+          "- [Download portable artifact](${{ steps.upload-portable-artifact.outputs.artifact-url }})" |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+  publish:
+    if: ${{ github.event_name == 'push' || inputs.publish }}
+    needs: [build-installer, build-portable]
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - name: 下载便携版构建产物
+        uses: actions/download-artifact@v8
+        with:
+          pattern: MuseTune-*-windows-x64-portable
+          path: portable
+          merge-multiple: true
+
+      - name: 上传便携版到草稿 Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $archives = @(Get-ChildItem -LiteralPath 'portable' -Filter '*.zip' -File)
+          if ($archives.Count -ne 1) {
+            throw "Expected exactly one portable archive, found $($archives.Count)."
+          }
+          gh release upload "$env:RELEASE_TAG" $archives[0].FullName --repo "$env:GITHUB_REPOSITORY" --clobber
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unable to upload the portable archive for $env:RELEASE_TAG."
+          }
+
       - name: 校验上传的更新器清单文件
-        if: env.PUBLISH_RELEASE == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $manifestDirectory = Join-Path $env:RUNNER_TEMP "muse-tune-updater-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
           New-Item -ItemType Directory -Path $manifestDirectory | Out-Null
-
           gh release download "$env:RELEASE_TAG" --repo "$env:GITHUB_REPOSITORY" --pattern 'latest.json' --dir $manifestDirectory
           if ($LASTEXITCODE -ne 0) {
             throw "Unable to download latest.json for $env:RELEASE_TAG."
           }
-
           $manifest = Get-Content -Raw -LiteralPath (Join-Path $manifestDirectory 'latest.json') | ConvertFrom-Json
           if ($manifest.version.TrimStart('v') -ne $env:RELEASE_TAG.Substring(1)) {
             throw "latest.json version $($manifest.version) does not match $env:RELEASE_TAG."
           }
-
           $windowsUpdate = $manifest.platforms.'windows-x86_64'
           if ($null -eq $windowsUpdate -or
               [string]::IsNullOrWhiteSpace($windowsUpdate.url) -or
               [string]::IsNullOrWhiteSpace($windowsUpdate.signature)) {
             throw 'latest.json does not contain a complete windows-x86_64 update.'
           }
-
           $releaseJson = gh release view "$env:RELEASE_TAG" --repo "$env:GITHUB_REPOSITORY" --json assets
           if ($LASTEXITCODE -ne 0) {
             throw "Unable to inspect the draft release for $env:RELEASE_TAG."
           }
-
           $assets = @($releaseJson | ConvertFrom-Json | Select-Object -ExpandProperty assets)
-          $updateAsset = $assets |
-            Where-Object { $_.apiUrl -eq $windowsUpdate.url -or $_.url -eq $windowsUpdate.url } |
-            Select-Object -First 1
-
-          if ($null -eq $updateAsset) {
-            $updateUri = [Uri]$windowsUpdate.url
-            $updateAssetName = [Uri]::UnescapeDataString($updateUri.Segments[-1])
-            $updateAsset = $assets | Where-Object { $_.name -eq $updateAssetName } | Select-Object -First 1
-          }
-
+          $updateUri = [Uri]$windowsUpdate.url
+          $updateAssetName = [Uri]::UnescapeDataString($updateUri.Segments[-1])
+          $updateAsset = $assets | Where-Object { $_.name -eq $updateAssetName } | Select-Object -First 1
           if ($null -eq $updateAsset -or $updateAsset.name -notlike '*.exe') {
             throw "latest.json references an installer asset that is not present: $($windowsUpdate.url)"
           }
 
       - name: 发布已完成的 Release
-        if: env.PUBLISH_RELEASE == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "$env:RELEASE_TAG" --repo "$env:GITHUB_REPOSITORY" --draft=false

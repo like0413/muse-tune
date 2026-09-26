@@ -335,6 +335,8 @@
         "releaseNotes": "查看发行说明",
         "check": "检查更新",
         "install": "下载并安装",
+        "portableAction": "下载便携版",
+        "portableDescription": "便携版不会运行安装器；请下载新版压缩包，退出应用并覆盖原文件。data 文件夹会保留现有配置、缓存和日志。",
         "downloading": "正在下载",
         "downloadingProgress": "正在下载 {progress}%",
         "automatic": "自动检查更新",
@@ -356,7 +358,8 @@
         "saveFrequencyFailed": "无法保存检查频率",
         "initializeFailed": "无法初始化更新设置",
         "notificationTitle": "Muse Tune 新版本可用",
-        "notificationBody": "版本 {version} 已发布。前往“设置 → 关于”即可下载并安装。"
+        "notificationBody": "版本 {version} 已发布。前往“设置 → 关于”即可下载并安装。",
+        "notificationPortableBody": "版本 {version} 已发布。前往“设置 → 关于”下载新版便携包并手动覆盖。"
       },
       "project": {
         "title": "项目与许可",

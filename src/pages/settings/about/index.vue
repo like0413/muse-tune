@@ -19,6 +19,7 @@ const {
   updateCheckFrequencySaving,
   downloadProgress,
   errorMessage,
+  isPortable,
   checkForUpdates,
   openReleaseNotes,
   installUpdate,
@@ -57,6 +58,7 @@ watch(
       :update-check-frequency-saving="updateCheckFrequencySaving"
       :download-progress="downloadProgress"
       :error-message="errorMessage"
+      :is-portable="isPortable"
       @check="checkForUpdates"
       @open-release-notes="openReleaseNotes"
       @install="installUpdate"

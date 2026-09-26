@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-use crate::{error::Error, ipc::IpcError};
+use crate::{error::Error, ipc::IpcError, storage::StoragePaths};
 
 const SETTINGS_WINDOW_LABEL: &str = "settings";
 const SETTINGS_SECTION_EVENT: &str = "settings://select-section";
@@ -66,7 +66,10 @@ fn open_or_activate_settings_window(
         )));
     }
 
-    let builder = WebviewWindowBuilder::from_config(app, &window_config)?;
+    let mut builder = WebviewWindowBuilder::from_config(app, &window_config)?;
+    if let Some(directory) = app.state::<StoragePaths>().webview_directory() {
+        builder = builder.data_directory(directory.to_path_buf());
+    }
 
     match builder.build() {
         Ok(_) => Ok(()),

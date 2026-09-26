@@ -13,7 +13,8 @@ use tauri::{AppHandle, Manager, Runtime};
 use crate::{
     lyrics::{LyricsDiagnostics, LyricsService, LyricsStatus},
     media::MediaService,
-    settings_store, taskbar,
+    storage::StoragePaths,
+    taskbar,
 };
 
 pub use model::{
@@ -52,13 +53,10 @@ pub fn collect<R: Runtime>(
         content_width_dip,
         horizontal_offset_dip,
     ) = taskbar::diagnostic_settings();
-    let cache_directory = app.path().app_cache_dir().ok();
-    let log_directory = app.path().app_log_dir().ok();
-    let settings_file = app
-        .path()
-        .app_data_dir()
-        .ok()
-        .map(|path| path.join(settings_store::PATH));
+    let storage_paths = app.state::<StoragePaths>();
+    let cache_directory = storage_paths.cache_directory();
+    let log_directory = storage_paths.log_directory();
+    let settings_file = storage_paths.settings_file();
     let lyrics = lyrics_service.diagnostics();
     let media = MediaDiagnostics::from_snapshots(
         media_service.diagnostics_snapshot(),
@@ -78,11 +76,7 @@ pub fn collect<R: Runtime>(
         displays,
         windows: bar_windows,
     };
-    let storage = storage_diagnostics(
-        settings_file.as_deref(),
-        log_directory.as_deref(),
-        refresh_storage,
-    );
+    let storage = storage_diagnostics(Some(&settings_file), Some(log_directory), refresh_storage);
     let issues = collect_issues(&taskbar, &media, &lyrics);
 
     DiagnosticsSnapshot {
@@ -96,8 +90,8 @@ pub fn collect<R: Runtime>(
             },
             target_arch: std::env::consts::ARCH.to_owned(),
             target_os: std::env::consts::OS.to_owned(),
-            cache_directory: cache_directory.as_deref().map(display_path),
-            log_directory: log_directory.as_deref().map(display_path),
+            cache_directory: Some(display_path(cache_directory)),
+            log_directory: Some(display_path(log_directory)),
         },
         taskbar,
         media,

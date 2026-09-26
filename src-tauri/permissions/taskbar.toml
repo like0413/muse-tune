@@ -4,6 +4,7 @@
 identifier = "taskbar-commands"
 description = "Allows the taskbar windows to control media and their native UI."
 commands.allow = [
+  "get_runtime_environment",
   "get_current_media_session",
   "control_media_session",
   "toggle_current_media_player",
@@ -22,4 +23,5 @@ commands.allow = [
   "get_system_foreground_color",
   "set_taskbar_content_visibility",
   "set_tray_menu_state",
+  "set_update_tray_state",
 ]

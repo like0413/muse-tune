@@ -1,9 +1,9 @@
-use tauri::Runtime;
+use tauri::{Manager, Runtime};
 use tauri_plugin_store::StoreExt;
 
 use crate::media::MediaPlayer;
 use crate::native_defaults::{self, LyricsChineseVariantPreference, LyricsNetworkPolicy};
-use crate::settings_store::PATH as SETTINGS_STORE_PATH;
+use crate::storage::StoragePaths;
 
 use super::model::{LyricsChineseVariant, LyricsOnlineStrategy};
 
@@ -46,7 +46,7 @@ impl Default for LyricsPreferences {
 pub(super) fn restore_lyrics_preferences<R: Runtime>(app: &tauri::App<R>) -> LyricsPreferences {
     let shared = native_defaults::shared();
     let defaults = &shared.taskbar.lyrics;
-    let store = app.store(SETTINGS_STORE_PATH).ok();
+    let store = app.store(app.state::<StoragePaths>().settings_file()).ok();
     let value = store
         .as_ref()
         .and_then(|store| store.get(LYRICS_DISPLAY_KEY))

@@ -4,6 +4,7 @@
 identifier = "settings-commands"
 description = "Allows the settings window to manage configuration, diagnostics, and application data."
 commands.allow = [
+  "get_runtime_environment",
   "get_data_overview",
   "open_data_directory",
   "clear_lyrics_cache",

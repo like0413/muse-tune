@@ -10,7 +10,7 @@ use windows::{
 };
 
 use crate::{
-    error::Error, logging::LOG_STORAGE_CAPACITY_BYTES, lyrics::LyricsService, settings_store,
+    error::Error, logging::LOG_STORAGE_CAPACITY_BYTES, lyrics::LyricsService, storage::StoragePaths,
 };
 
 #[derive(Clone, Copy, serde::Deserialize)]
@@ -57,17 +57,10 @@ pub fn overview<R: Runtime>(
     app: &AppHandle<R>,
     lyrics: &LyricsService,
 ) -> Result<DataOverview, Error> {
-    let config_directory = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| Error::Message(format!("无法定位配置目录: {error}")))?;
-    let log_directory = app
-        .path()
-        .app_log_dir()
-        .map_err(|error| Error::Message(format!("无法定位日志目录: {error}")))?;
-    let settings_file = config_directory.join(settings_store::PATH);
+    let storage = app.state::<StoragePaths>();
+    let settings_file = storage.settings_file();
     let settings_metadata = fs::metadata(&settings_file).ok();
-    let (log_file_count, log_total_bytes) = directory_file_totals(&log_directory);
+    let (log_file_count, log_total_bytes) = directory_file_totals(storage.log_directory());
     let cache = lyrics.cache_diagnostics();
 
     Ok(DataOverview {
@@ -96,14 +89,8 @@ pub fn open_directory<R: Runtime>(
 ) -> Result<(), Error> {
     let path = match kind {
         DataDirectoryKind::Cache => lyrics.cache_directory().to_path_buf(),
-        DataDirectoryKind::Config => app
-            .path()
-            .app_data_dir()
-            .map_err(|error| Error::Message(format!("无法定位配置目录: {error}")))?,
-        DataDirectoryKind::Logs => app
-            .path()
-            .app_log_dir()
-            .map_err(|error| Error::Message(format!("无法定位日志目录: {error}")))?,
+        DataDirectoryKind::Config => app.state::<StoragePaths>().config_directory().to_path_buf(),
+        DataDirectoryKind::Logs => app.state::<StoragePaths>().log_directory().to_path_buf(),
     };
     fs::create_dir_all(&path).map_err(|error| Error::Message(format!("无法创建目录: {error}")))?;
 
@@ -127,7 +114,7 @@ pub fn open_directory<R: Runtime>(
 /// 无需在此处维护迁移逻辑。调用方负责随后重启应用，避免旧值残留在运行中的窗口。
 pub fn reset_configuration<R: Runtime>(app: &AppHandle<R>) -> Result<(), Error> {
     let store = app
-        .store(settings_store::PATH)
+        .store(app.state::<StoragePaths>().settings_file())
         .map_err(|error| Error::Message(format!("无法读取配置存储: {error}")))?;
     store.reset();
     store

@@ -36,7 +36,12 @@ Muse Tune 是一款面向 Windows 11 的任务栏媒体控制器。它通过 Win
 - Windows 11 x64
 - 一个能够发布 Windows 系统媒体会话的音乐播放器
 
-项目发布版本时会在 [GitHub Releases](https://github.com/like0413/muse-tune/releases) 提供 `MuseTune-*-windows-x64.exe`。下载可用版本的安装程序并运行，然后启动 Muse Tune。
+项目发布版本时会在 [GitHub Releases](https://github.com/like0413/muse-tune/releases) 同时提供两种构建：
+
+- `MuseTune-*-windows-x64.exe`：安装版，支持应用内下载并安装更新。
+- `MuseTune-*-windows-x64-portable.zip`：便携版，解压后直接运行 `MuseTune.exe`，无需安装。
+
+便携版首次运行会在 `MuseTune.exe` 相邻位置创建 `data/`，其中分别保存 `config/`、`cache/`、`logs/` 和 `webview/`。移动便携版时请连同 `data/` 一起移动；更新时退出应用、覆盖 `MuseTune.exe`，不要删除 `data/`。便携版可以检查新版本，但不会自动运行安装器，更新按钮会打开 Releases 下载页。
 
 1. 在受支持的播放器中开始播放音乐。
 2. Muse Tune 会自动选择媒体会话，并在任务栏中显示播放器。
@@ -92,6 +97,7 @@ vp exec tauri dev
 vp check
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --locked -- -D warnings
+cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --locked --features portable -- -D warnings
 ```
 
 ## 技术架构

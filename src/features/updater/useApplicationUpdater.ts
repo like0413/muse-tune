@@ -7,6 +7,7 @@ import { check } from '@tauri-apps/plugin-updater'
 import { getErrorMessage, reportBackgroundFailure } from '@/features/feedback/errors'
 import { logDebug } from '@/features/logging'
 import { PROJECT_RELEASES_URL } from '@/features/project/metadata'
+import { getRuntimeEnvironment } from '@/features/runtime/environment'
 
 import { createDownloadProgressTracker } from './download-progress'
 import {
@@ -37,6 +38,7 @@ export function useApplicationUpdater() {
   const updateCheckFrequencySaving = shallowRef(false)
   const downloadProgress = shallowRef<number | null>(null)
   const errorMessage = shallowRef<string | null>(null)
+  const isPortable = shallowRef(false)
   let initialized = false
   let disposed = false
   let resultRevision = 0
@@ -154,6 +156,12 @@ export function useApplicationUpdater() {
     if (!update || installRequestActive || isDownloading.value) return
     installRequestActive = true
     try {
+      const environment = await getRuntimeEnvironment()
+      isPortable.value = environment.portable
+      if (environment.portable) {
+        await openReleaseNotes()
+        return
+      }
       if (requireConfirmation) {
         const shouldInstall = await confirm(t('settings.about.update.installConfirmDescription'), {
           title: t('settings.about.update.installConfirmTitle'),
@@ -241,14 +249,16 @@ export function useApplicationUpdater() {
       }
       unlistenResult = stopListener
       const revisionBeforeRead = resultRevision
-      const [shouldCheck, frequency, result] = await Promise.all([
+      const [shouldCheck, frequency, result, environment] = await Promise.all([
         getAutomaticUpdateCheck(),
         getUpdateCheckFrequency(),
         getUpdateCheckResult(),
+        getRuntimeEnvironment(),
       ])
       if (disposed) return
       automaticCheck.value = shouldCheck
       updateCheckFrequency.value = frequency
+      isPortable.value = environment.portable
       if (resultRevision === revisionBeforeRead) applyAutomaticResult(result)
     } catch (error) {
       status.value = 'error'
@@ -283,6 +293,7 @@ export function useApplicationUpdater() {
     updateCheckFrequencySaving: readonly(updateCheckFrequencySaving),
     downloadProgress: readonly(downloadProgress),
     errorMessage: readonly(errorMessage),
+    isPortable: readonly(isPortable),
     checkForUpdates,
     openReleaseNotes,
     installUpdate,

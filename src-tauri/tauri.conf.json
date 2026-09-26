@@ -1,8 +1,9 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "muse-tune",
+  "productName": "Muse Tune",
+  "mainBinaryName": "MuseTune",
   "version": "1.0.0",
-  "identifier": "com.like.muse-tune",
+  "identifier": "com.like.musetune",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1480",
@@ -23,7 +24,8 @@
         "shadow": false,
         "focusable": false,
         "skipTaskbar": true,
-        "visible": false
+        "visible": false,
+        "create": false
       },
       {
         "label": "settings",
@@ -70,8 +72,8 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": ["nsis"],
-    "shortDescription": "Windows 11 taskbar media controller",
-    "longDescription": "Muse Tune shows and controls the current Windows media session from the Windows 11 taskbar.",
+    "shortDescription": "Windows 11 任务栏媒体控制器",
+    "longDescription": "Muse Tune 可在 Windows 11 任务栏中显示并控制当前系统媒体会话。",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -82,6 +84,7 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
+        "languages": ["SimpChinese"],
         "installerIcon": "icons/icon.ico",
         "uninstallerIcon": "icons/icon.ico"
       }

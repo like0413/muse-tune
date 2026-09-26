@@ -23,7 +23,7 @@ use std::{
 use reqwest::{Url, blocking::Client, redirect};
 use tauri::{Emitter, Manager, Runtime};
 
-use crate::media::MediaPlayer;
+use crate::{media::MediaPlayer, storage::StoragePaths};
 
 use super::settings::LyricsPreferences;
 use super::{
@@ -127,8 +127,8 @@ struct LyricsRuntimeState {
 impl LyricsService {
     /// 初始化缓存、匿名 HTTPS 客户端和设置快照。
     pub fn initialize<R: Runtime>(app: &tauri::App<R>) -> Result<Self, io::Error> {
-        let cache_dir = app.path().app_cache_dir().map_err(io::Error::other)?;
-        let cache = ParsedLyricsCache::new(&cache_dir)?;
+        let storage = app.state::<StoragePaths>();
+        let cache = ParsedLyricsCache::new(storage.cache_directory())?;
         let client = Client::builder()
             .timeout(NETWORK_TIMEOUT)
             // 连接阶段单独设更短的上限：握不上手时尽快换下一个来源，而已建立的连接仍可用满总超时。

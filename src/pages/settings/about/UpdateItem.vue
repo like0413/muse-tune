@@ -43,6 +43,7 @@ const props = defineProps<{
   updateCheckFrequencySaving: boolean
   downloadProgress: number | null
   errorMessage: string | null
+  isPortable: boolean
 }>()
 
 const emit = defineEmits<{
@@ -69,6 +70,7 @@ const statusVariant = computed<BadgeVariants['variant']>(() => {
 })
 
 const installButtonLabel = computed(() => {
+  if (props.isPortable) return t('settings.about.update.portableAction')
   if (!props.isDownloading) return t('settings.about.update.install')
   if (props.downloadProgress === null) return t('settings.about.update.downloading')
   return t('settings.about.update.downloadingProgress', {
@@ -115,6 +117,9 @@ function selectUpdateCheckFrequency(value: unknown) {
           <a :href="PROJECT_RELEASES_URL" @click.prevent="emit('openReleaseNotes')" class="ml-2">{{
             t('settings.about.update.releaseNotes')
           }}</a>
+        </ItemDescription>
+        <ItemDescription v-if="isPortable">
+          {{ t('settings.about.update.portableDescription') }}
         </ItemDescription>
       </ItemContent>
       <ItemActions>
