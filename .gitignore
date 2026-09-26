@@ -47,6 +47,11 @@ __screenshots__/
 .env.*
 !.env.example
 
+# rust generated files
+/target/
+/gen/schemas
+
+# custom
 .tauri
 todo.txt
 **/target/
