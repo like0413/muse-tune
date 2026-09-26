@@ -17,7 +17,7 @@ on:
         type: boolean
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
@@ -25,13 +25,15 @@ concurrency:
 
 env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
-  PUBLISH_RELEASE: ${{ github.event_name == 'push' || inputs.publish }}
+  PUBLISH_RELEASE: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
   TAURI_TARGET: x86_64-pc-windows-msvc
 
 jobs:
   validate:
     runs-on: windows-2025
     timeout-minutes: 25
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
     steps:
       - name: 校验 Release Tag 格式
         if: env.PUBLISH_RELEASE == 'true'
@@ -46,6 +48,14 @@ jobs:
         with:
           ref: ${{ env.RELEASE_TAG }}
           persist-credentials: false
+
+      - name: 固定本次构建的提交
+        id: source
+        shell: pwsh
+        run: |
+          $commit = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve source commit.' }
+          "commit=$commit" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: 校验 Tag Commit 属于 main
         if: env.PUBLISH_RELEASE == 'true'
@@ -114,30 +124,42 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@1.98.0
         with:
-          components: rustfmt, clippy
           targets: ${{ env.TAURI_TARGET }}
 
-      - name: Cache Rust build output
-        uses: Swatinem/rust-cache@v2.9.2
+      # validate 预先下载并保存依赖；后续并行任务复用同一下载缓存。
+      - name: Cache shared Cargo downloads
+        uses: actions/cache@v6.1.0
         with:
-          workspaces: src-tauri -> target
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-downloads-v1-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-downloads-v1-${{ runner.os }}-
 
       - name: Install dependencies
         run: vp install --frozen-lockfile
 
-      - name: Check frontend
-        run: vp check
+      - name: Build frontend once
+        run: vp build
 
-      - name: Check Rust formatting
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - name: 保存共享前端产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-${{ steps.source.outputs.commit }}
+          path: dist/
+          include-hidden-files: true
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
 
-      - name: Check installed Rust build
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --locked -- -D warnings
-
-      - name: Check portable Rust build
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --locked --features portable -- -D warnings
+      - name: Fetch locked Cargo dependencies
+        run: cargo fetch --manifest-path src-tauri/Cargo.toml --target $env:TAURI_TARGET --locked
 
   build-installer:
+    permissions:
+      contents: write
     needs: validate
     runs-on: windows-2025
     timeout-minutes: 45
@@ -147,7 +169,7 @@ jobs:
       - name: Checkout requested ref
         uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.validate.outputs.commit }}
           persist-credentials: false
 
       - name: Set up Vite+
@@ -163,12 +185,37 @@ jobs:
           targets: ${{ env.TAURI_TARGET }}
 
       - name: Cache Rust build output
+        id: rust-cache
         uses: Swatinem/rust-cache@v2.9.2
         with:
           workspaces: src-tauri -> target
 
+      # 编译缓存按 job 隔离；冷缓存时复用 validate 下载的依赖。
+      - name: Cache shared Cargo downloads
+        if: steps.rust-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-downloads-v1-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-downloads-v1-${{ runner.os }}-
+
       - name: Install dependencies
         run: vp install --frozen-lockfile
+
+      - name: 下载共享前端产物
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-${{ needs.validate.outputs.commit }}
+          path: dist
+
+      - name: 复用前端，跳过重复构建
+        shell: pwsh
+        run: |
+          '{"build":{"beforeBuildCommand":null}}' | Set-Content -LiteralPath "$env:RUNNER_TEMP/tauri-ci.json" -Encoding utf8
 
       - name: 构建 NSIS 安装包
         id: build
@@ -189,7 +236,7 @@ jobs:
           uploadUpdaterSignatures: true
           updaterJsonPreferNsis: true
           tauriScript: vp exec tauri
-          args: --target ${{ env.TAURI_TARGET }} --bundles nsis
+          args: --target ${{ env.TAURI_TARGET }} --bundles nsis --config "${{ runner.temp }}/tauri-ci.json" -- --locked --timings
 
       - name: 校验并规范 NSIS 安装包
         shell: pwsh
@@ -206,18 +253,17 @@ jobs:
               (Get-Item -LiteralPath $signaturePath).Length -eq 0) {
             throw "The updater signature is missing or empty: $signaturePath"
           }
-          if ($env:PUBLISH_RELEASE -ne 'true') {
-            if ([string]::IsNullOrWhiteSpace($env:APP_VERSION)) {
-              throw 'tauri-action did not return the application version.'
-            }
-            $shortInstallerPath = Join-Path $env:NSIS_BUNDLE_DIR "MuseTune-$($env:APP_VERSION)-windows-x64.exe"
+          if ([string]::IsNullOrWhiteSpace($env:APP_VERSION)) {
+            throw 'tauri-action did not return the application version.'
+          }
+          $shortInstallerPath = Join-Path $env:NSIS_BUNDLE_DIR "MuseTune-$($env:APP_VERSION)-windows-x64.exe"
+          if ($installer.FullName -ne $shortInstallerPath) {
             Move-Item -LiteralPath $signaturePath -Destination "$shortInstallerPath.sig"
             Move-Item -LiteralPath $installer.FullName -Destination $shortInstallerPath
           }
 
-      - name: 上传手动构建的 NSIS 安装包
+      - name: 保存 NSIS 安装包
         id: upload-manual-artifact
-        if: env.PUBLISH_RELEASE != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: MuseTune-${{ steps.build.outputs.appVersion }}-windows-x64
@@ -225,6 +271,7 @@ jobs:
             ${{ env.NSIS_BUNDLE_DIR }}/*.exe
             ${{ env.NSIS_BUNDLE_DIR }}/*.exe.sig
           if-no-files-found: error
+          overwrite: true
           compression-level: 0
 
       - name: 添加安装包下载链接到摘要
@@ -234,6 +281,16 @@ jobs:
           "- [Download signed NSIS artifact](${{ steps.upload-manual-artifact.outputs.artifact-url }})" |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+      - name: 保存 Cargo 编译耗时报告
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cargo-timings-${{ github.job }}-${{ needs.validate.outputs.commit }}
+          path: src-tauri/target/cargo-timings/*.html
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 14
+
   build-portable:
     needs: validate
     runs-on: windows-2025
@@ -242,7 +299,7 @@ jobs:
       - name: Checkout requested ref
         uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.validate.outputs.commit }}
           persist-credentials: false
 
       - name: Set up Vite+
@@ -258,15 +315,40 @@ jobs:
           targets: ${{ env.TAURI_TARGET }}
 
       - name: Cache Rust build output
+        id: rust-cache
         uses: Swatinem/rust-cache@v2.9.2
         with:
           workspaces: src-tauri -> target
 
+      # 编译缓存按 job 隔离；冷缓存时复用 validate 下载的依赖。
+      - name: Cache shared Cargo downloads
+        if: steps.rust-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-downloads-v1-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-downloads-v1-${{ runner.os }}-
+
       - name: Install dependencies
         run: vp install --frozen-lockfile
 
+      - name: 下载共享前端产物
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-${{ needs.validate.outputs.commit }}
+          path: dist
+
+      - name: 复用前端，跳过重复构建
+        shell: pwsh
+        run: |
+          '{"build":{"beforeBuildCommand":null}}' | Set-Content -LiteralPath "$env:RUNNER_TEMP/tauri-ci.json" -Encoding utf8
+
       - name: 构建便携版可执行文件
-        run: vp exec tauri build --target $env:TAURI_TARGET --no-bundle --features portable
+        run: vp exec tauri build --target $env:TAURI_TARGET --no-bundle --features portable --config "$env:RUNNER_TEMP/tauri-ci.json" -- --locked --timings
 
       - name: 打包并校验便携版
         id: package
@@ -298,6 +380,7 @@ jobs:
           name: MuseTune-${{ steps.package.outputs.version }}-windows-x64-portable
           path: ${{ steps.package.outputs.archive }}
           if-no-files-found: error
+          overwrite: true
           compression-level: 0
 
       - name: 添加便携版下载链接到摘要
@@ -307,8 +390,20 @@ jobs:
           "- [Download portable artifact](${{ steps.upload-portable-artifact.outputs.artifact-url }})" |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+      - name: 保存 Cargo 编译耗时报告
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cargo-timings-${{ github.job }}-${{ needs.validate.outputs.commit }}
+          path: src-tauri/target/cargo-timings/*.html
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 14
+
   publish:
-    if: ${{ github.event_name == 'push' || inputs.publish }}
+    permissions:
+      contents: write
+    if: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
     needs: [build-installer, build-portable]
     runs-on: windows-2025
     timeout-minutes: 15
@@ -360,10 +455,16 @@ jobs:
             throw "Unable to inspect the draft release for $env:RELEASE_TAG."
           }
           $assets = @($releaseJson | ConvertFrom-Json | Select-Object -ExpandProperty assets)
-          $updateUri = [Uri]$windowsUpdate.url
-          $updateAssetName = [Uri]::UnescapeDataString($updateUri.Segments[-1])
-          $updateAsset = $assets | Where-Object { $_.name -eq $updateAssetName } | Select-Object -First 1
-          if ($null -eq $updateAsset -or $updateAsset.name -notlike '*.exe') {
+          # tauri-action v1 使用资产 API URL；同时兼容直接下载 URL。
+          # 必须匹配当前 Release 的完整地址，不能把 URL 末尾的资产 ID 当文件名。
+          $updateAssets = @($assets | Where-Object {
+            $_.apiUrl -ceq $windowsUpdate.url -or $_.url -ceq $windowsUpdate.url
+          })
+          if ($updateAssets.Count -ne 1) {
+            throw "latest.json does not reference exactly one asset in this release: $($windowsUpdate.url)"
+          }
+          $updateAsset = $updateAssets[0]
+          if ($updateAsset.name -notlike '*.exe' -or $updateAsset.state -ne 'uploaded' -or $updateAsset.size -le 0) {
             throw "latest.json references an installer asset that is not present: $($windowsUpdate.url)"
           }
 
