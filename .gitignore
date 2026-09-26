@@ -47,6 +47,6 @@ __screenshots__/
 .env.*
 !.env.example
 
-/docs
 .tauri
 todo.txt
+**/target/

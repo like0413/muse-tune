@@ -1,8 +1,8 @@
 {
   "taskbar": {
-    "widthMin": 200,
-    "widthMax": 360,
-    "width": 250,
+    "widthMin": 150,
+    "widthMax": 300,
+    "width": 220,
     "widthMode": "fixed",
     "horizontalOffsetMin": -500,
     "horizontalOffsetMax": 500,

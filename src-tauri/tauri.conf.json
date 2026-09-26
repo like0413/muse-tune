@@ -16,7 +16,7 @@
         "label": "taskbar",
         "title": "Muse Tune",
         "url": "index.html#/taskbar",
-        "width": 360,
+        "width": 300,
         "height": 48,
         "resizable": false,
         "decorations": false,
