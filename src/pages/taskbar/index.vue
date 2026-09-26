@@ -16,6 +16,7 @@ import { toggleCurrentMediaPlayer } from '@/features/media/client'
 import { useMediaProgress } from '@/features/media/useMediaProgress'
 import { useMediaSession } from '@/features/media/useMediaSession'
 import { useMediaSessionSelectionPolicy } from '@/features/media/useMediaSessionSelectionPolicy'
+import { useTaskbarInteractionSounds } from '@/features/media/useTaskbarInteractionSounds'
 import { useVolumeControl } from '@/features/media/useVolumeControl'
 import { useTaskbarAudioSpectrumSettings } from '@/features/settings/audio-spectrum'
 import { TASKBAR_WIDTH_PRESETS } from '@/features/settings/bar-width'
@@ -77,6 +78,7 @@ const volumeOverlayVisible = shallowRef(false)
 const volumeOverlayReturnsToLyrics = shallowRef(false)
 const volumeOverlayRestoringLyrics = shallowRef(false)
 const { target: volumeTarget, volume, setLevel, adjustLevel, toggleMuted } = useVolumeControl()
+const { playPlayerToggleSound, playVolumeStepSound } = useTaskbarInteractionSounds()
 const volumePercentage = computed(() => Math.round((volume.value?.level ?? 0) * 100))
 
 /** v-for 内的封面锚点仍保持单元素引用，避免模板 ref 被收集成数组。 */
@@ -325,18 +327,24 @@ function handleTaskbarPointerLeave() {
 function handleVolumeWheel(event: WheelEvent) {
   if (!volume.value || event.deltaY === 0) return
   event.preventDefault()
+  const previousPercentage = volumePercentage.value
   adjustLevel(event.deltaY < 0 ? 1 : -1)
+  if (volumePercentage.value !== previousPercentage) playVolumeStepSound()
   showVolumeOverlay()
 }
 
 /** 让弹层内的滑杆与滚轮共用同一音量入口并保持展示。 */
 function handleVolumeLevel(level: number) {
+  if (Math.round(level * 100) === volumePercentage.value) return
   setLevel(level)
+  playVolumeStepSound()
   showVolumeOverlay()
 }
 
 function handleVolumeAdjustment(direction: 1 | -1) {
+  const previousPercentage = volumePercentage.value
   adjustLevel(direction)
+  if (volumePercentage.value !== previousPercentage) playVolumeStepSound()
   showVolumeOverlay()
 }
 
@@ -357,6 +365,7 @@ watch(isTaskbarHovered, (hovered) => {
 async function togglePlayer() {
   try {
     await toggleCurrentMediaPlayer()
+    playPlayerToggleSound()
   } catch (error) {
     reportBackgroundFailure('开关当前播放器窗口失败', error)
   }
