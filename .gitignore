@@ -18,6 +18,8 @@ coverage
 **/target/
 **/gen/schemas
 **/artifact/
+# 发布说明、来源证据等 CI / 本地生成产物
+/artifacts/
 
 # 工具生成的本地缓存
 **/.vite/

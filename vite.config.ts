@@ -25,7 +25,7 @@ export default defineConfig({
     ],
   },
   fmt: {
-    ignorePatterns: ['**/.agents/**', 'auto-imports.d.ts', 'components.d.ts'],
+    ignorePatterns: ['**/.agents/**', '**/artifacts/**', 'auto-imports.d.ts', 'components.d.ts'],
     semi: false,
     singleQuote: true,
     experimentalSortImports: true,
