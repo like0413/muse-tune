@@ -6,15 +6,15 @@ const text = z
   .string()
   .trim()
   .min(1)
-  .max(800)
   .regex(/^[^\r\n<>]+$/)
 export const notesSchema = z.strictObject({
   changes: z
     .array(
       z.strictObject({
         kind: z.enum(['added', 'changed', 'fixed']),
-        title: text.max(120),
-        description: text,
+        // 上限留出必要的产品名和升级注意事项；超长时拒绝发布，不截断文字。
+        title: text.max(40),
+        description: text.max(160),
         sources: z.array(z.string().regex(/^[a-f0-9]{40}$/)).min(1),
       }),
     )
