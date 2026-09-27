@@ -1,6 +1,6 @@
 [package]
 name = "muse-tune"
-version = "1.0.2"
+version = "1.0.3"
 description = "A Windows 11 taskbar media controller"
 authors = ["like0413"]
 license = "MIT"

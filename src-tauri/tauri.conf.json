@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Muse Tune",
   "mainBinaryName": "MuseTune",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "identifier": "com.like.musetune",
   "build": {
     "frontendDist": "../dist",
