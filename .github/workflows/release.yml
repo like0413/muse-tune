@@ -176,13 +176,20 @@ jobs:
         run: vp install --frozen-lockfile
 
       - name: 用 DeepSeek 生成中文发布说明
-        if: env.PUBLISH_RELEASE == 'true'
+        if: env.PUBLISH_RELEASE == 'true' && env.RELEASE_TAG != 'v1.0.0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           DEEPSEEK_MODEL: ${{ vars.DEEPSEEK_MODEL }}
           SOURCE_COMMIT: ${{ needs.validate.outputs.commit }}
         run: vp run release:notes
+
+      # 首版没有上一条正式 Release，直接使用已审阅的产品发布说明。
+      - name: 准备首版中文发布说明
+        if: env.PUBLISH_RELEASE == 'true' && env.RELEASE_TAG == 'v1.0.0'
+        run: |
+          mkdir -p artifacts/release-notes
+          cp docs/releasing/first-release.md artifacts/release-notes/release.md
 
       - name: 保存发布说明与来源
         if: env.PUBLISH_RELEASE == 'true'
