@@ -1,0 +1,53 @@
+name: Refresh website changelog
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      CLOUDFLARE_PAGES_DEPLOY_HOOK:
+        required: true
+      EDGEONE_PAGES_DEPLOY_HOOK:
+        required: false
+
+permissions: {}
+
+concurrency:
+  group: refresh-website
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    name: Notify ${{ matrix.provider }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [cloudflare, edgeone]
+    steps:
+      # 两个平台分别触发；EdgeOne 未配置时跳过。URL 本身即凭据，不打印响应或异常详情。
+      - name: Trigger deployment hook
+        shell: pwsh
+        env:
+          DEPLOY_PROVIDER: ${{ matrix.provider }}
+          CLOUDFLARE_HOOK: ${{ secrets.CLOUDFLARE_PAGES_DEPLOY_HOOK }}
+          EDGEONE_HOOK: ${{ secrets.EDGEONE_PAGES_DEPLOY_HOOK }}
+        run: |
+          $hook = if ($env:DEPLOY_PROVIDER -eq 'cloudflare') { $env:CLOUDFLARE_HOOK } else { $env:EDGEONE_HOOK }
+          if ([string]::IsNullOrWhiteSpace($hook)) {
+            if ($env:DEPLOY_PROVIDER -eq 'edgeone') {
+              '- edgeone skipped: deploy hook is not configured.' |
+                Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+              return
+            }
+            throw "Missing deploy hook secret for $env:DEPLOY_PROVIDER. Configure it in the MuseTune application repository."
+          }
+          try {
+            $uri = [uri]$hook
+            if (-not $uri.IsAbsoluteUri -or $uri.Scheme -ne 'https') { throw 'Invalid URL' }
+            Invoke-WebRequest -Uri $uri -Method Post -TimeoutSec 30 -MaximumRedirection 0 -ErrorAction Stop | Out-Null
+          } catch {
+            throw "Deployment notification failed for $env:DEPLOY_PROVIDER. Check the hook in the platform console; the secret URL is omitted."
+          }
+          "- $env:DEPLOY_PROVIDER accepted the deployment request. Check the platform for the build and deployment result." |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8

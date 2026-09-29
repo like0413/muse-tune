@@ -40,7 +40,7 @@ function escapeMarkdown(value: string) {
   return value.replace(/([\\`*_{}[\]()#+.!|~>@])/g, '\\$1')
 }
 
-/** 固定中文分类，网站直接展示同一份 Release body，不生成翻译副本。 */
+/** 固定中文分类，网站从同一份 Release body 提取条目，不生成翻译副本。 */
 export function renderNotes(notes: z.infer<typeof notesSchema>, source: ReleaseSource) {
   const sections: string[] = []
   const headings = ['新增', '变更', '修复']

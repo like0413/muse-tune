@@ -114,29 +114,23 @@ jobs:
             }
           }
 
+  prepare-frontend:
+    needs: validate
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+
       - name: Set up Vite+
         uses: voidzero-dev/setup-vp@v1.18.0
         with:
           node-version: 24.19.0
           cache: true
           run-install: false
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@1.98.0
-        with:
-          targets: ${{ env.TAURI_TARGET }}
-
-      # validate 预先下载并保存依赖；后续并行任务复用同一下载缓存。
-      - name: Cache shared Cargo downloads
-        uses: actions/cache@v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          key: cargo-downloads-v1-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cargo-downloads-v1-${{ runner.os }}-
 
       - name: Install dependencies
         run: vp install --frozen-lockfile
@@ -147,19 +141,17 @@ jobs:
       - name: 保存共享前端产物
         uses: actions/upload-artifact@v7
         with:
-          name: frontend-${{ steps.source.outputs.commit }}
+          name: frontend-${{ needs.validate.outputs.commit }}
           path: dist/
           include-hidden-files: true
           if-no-files-found: error
           overwrite: true
           retention-days: 7
 
-      - name: Fetch locked Cargo dependencies
-        run: cargo fetch --manifest-path src-tauri/Cargo.toml --target $env:TAURI_TARGET --locked
-
   release-notes:
     needs: validate
-    runs-on: ubuntu-latest
+    # 固定已验证的系统版本，避免 ubuntu-latest 自动迁移到 Ubuntu 26 改变发布环境。
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       # 使用工作流所在提交的脚本，手动指定旧标签时也能使用新版发布工具。
@@ -205,7 +197,7 @@ jobs:
   build-installer:
     permissions:
       contents: write
-    needs: [validate, release-notes]
+    needs: [validate, prepare-frontend, release-notes]
     runs-on: windows-2025
     timeout-minutes: 45
     env:
@@ -229,24 +221,12 @@ jobs:
         with:
           targets: ${{ env.TAURI_TARGET }}
 
+      # rust-cache 同时缓存 Cargo 依赖下载与编译产物；不再另建共享下载缓存。
       - name: Cache Rust build output
         id: rust-cache
         uses: Swatinem/rust-cache@v2.9.2
         with:
           workspaces: src-tauri -> target
-
-      # 编译缓存按 job 隔离；冷缓存时复用 validate 下载的依赖。
-      - name: Cache shared Cargo downloads
-        if: steps.rust-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          key: cargo-downloads-v1-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cargo-downloads-v1-${{ runner.os }}-
 
       - name: Install dependencies
         run: vp install --frozen-lockfile
@@ -355,7 +335,7 @@ jobs:
           retention-days: 14
 
   build-portable:
-    needs: validate
+    needs: [validate, prepare-frontend]
     runs-on: windows-2025
     timeout-minutes: 45
     steps:
@@ -377,24 +357,12 @@ jobs:
         with:
           targets: ${{ env.TAURI_TARGET }}
 
+      # 安装版与便携版使用不同特性，分别保留各自的编译缓存。
       - name: Cache Rust build output
         id: rust-cache
         uses: Swatinem/rust-cache@v2.9.2
         with:
           workspaces: src-tauri -> target
-
-      # 编译缓存按 job 隔离；冷缓存时复用 validate 下载的依赖。
-      - name: Cache shared Cargo downloads
-        if: steps.rust-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          key: cargo-downloads-v1-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cargo-downloads-v1-${{ runner.os }}-
 
       - name: Install dependencies
         run: vp install --frozen-lockfile
@@ -556,3 +524,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "$env:RELEASE_TAG" --repo "$env:GITHUB_REPOSITORY" --draft=false
+
+  refresh-website:
+    needs: publish
+    # 网站只展示正式版；只有公开发布成功后才通知，不依赖 GITHUB_TOKEN 触发 release 事件。
+    if: ${{ !contains(inputs.release_tag || github.ref_name, '-') }}
+    uses: ./.github/workflows/notify-website.yml
+    secrets:
+      CLOUDFLARE_PAGES_DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_PAGES_DEPLOY_HOOK }}
+      EDGEONE_PAGES_DEPLOY_HOOK: ${{ secrets.EDGEONE_PAGES_DEPLOY_HOOK }}
