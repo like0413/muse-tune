@@ -9,7 +9,7 @@ import {
   FieldLabel,
   FieldTitle,
 } from '@/components/ui/field'
-import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
+import { ItemContent, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
@@ -101,7 +101,6 @@ onMounted(loadAppearance)
     </ItemMedia>
     <ItemContent>
       <ItemTitle>{{ t('settings.taskbar.cover.title') }}</ItemTitle>
-      <ItemDescription>{{ t('settings.taskbar.cover.description') }}</ItemDescription>
     </ItemContent>
 
     <template #content>
@@ -109,9 +108,6 @@ onMounted(loadAppearance)
         <Field orientation="horizontal">
           <FieldContent>
             <FieldTitle>{{ t('settings.taskbar.cover.visible') }}</FieldTitle>
-            <FieldDescription>{{
-              t('settings.taskbar.cover.visibleDescription')
-            }}</FieldDescription>
           </FieldContent>
           <Tabs :model-value="selectedAppearance.visibility" @update:model-value="selectVisibility">
             <TabsList>

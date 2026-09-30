@@ -25,28 +25,26 @@
     "general": {
       "language": {
         "title": "界面语言",
-        "description": "选择设置页与应用界面使用的语言"
+        "description": "切换简繁体时，歌词同步切换（跟随界面时）"
       },
       "colorMode": {
         "title": "颜色模式",
-        "description": "选择浅色、深色或跟随 Windows 设置",
         "auto": "跟随系统",
         "dark": "深色",
         "light": "浅色"
       },
       "reducedMotion": {
         "title": "减少动态效果",
-        "description": "减少歌词、封面与界面动画；关闭后跟随 Windows 动画设置"
+        "description": "减少歌词、封面和界面动画；关闭后跟随 Windows 动画设置"
       },
       "disableGpuAcceleration": {
         "title": "禁用 GPU 加速",
-        "description": "改用 CPU 渲染以降低内存占用；可能提高 CPU 负载并略微降低动画流畅度，重启后生效",
+        "description": "禁用 GPU 加速以降低内存占用；可能提高 CPU 负载并略微降低动画流畅度，重启后生效",
         "restartRequired": "该更改将在重启应用后生效",
         "restartNow": "立即重启"
       },
       "autostart": {
-        "title": "开机自启",
-        "description": "登录 Windows 后自动启动 Muse Tune"
+        "title": "开机自启"
       }
     },
     "taskbar": {
@@ -58,37 +56,34 @@
       },
       "placement": {
         "title": "组件位置",
-        "description": "选择组件位于任务栏左侧或右侧；自动模式会适配任务栏布局",
+        "description": "自动模式：任务栏图标居中时放在左侧，否则放在右侧",
         "left": "左侧",
         "auto": "自动",
         "right": "右侧"
       },
       "horizontalOffset": {
         "title": "水平偏移",
-        "description": "相对默认位置水平移动；正值向右，负值向左，单位为像素"
+        "description": "正值向右，负值向左；单位为逻辑像素，随系统缩放调整"
       },
       "overlap": {
         "title": "遮挡优先级",
-        "description": "空间不足时，允许组件覆盖任务栏项目，或裁剪组件以避让它们",
+        "description": "空间不足时，选择覆盖任务栏项目，或裁剪组件以避让",
         "bar": "组件优先",
         "taskbar": "任务栏优先"
       },
       "autoHide": {
         "title": "自动隐藏",
-        "description": "在没有媒体会话或播放暂停时自动隐藏组件",
         "noSession": "无媒体会话时隐藏",
-        "noSessionDescription": "Windows 中没有可用的媒体会话时隐藏组件",
-        "paused": "暂停时隐藏",
-        "pausedDescription": "当前媒体会话暂停播放时隐藏组件"
+        "paused": "暂停时隐藏"
       },
       "transparency": {
         "title": "背景透明度",
-        "description": "调整主题背景的透明度，不影响文字与控件",
+        "description": "仅影响主题背景，不改变文字和控件的透明度",
         "coverDisabled": "模糊封面使用独立效果；切换为主题背景后可调整透明度"
       },
       "backgroundStyle": {
         "title": "背景样式",
-        "description": "选择主题背景或模糊封面作为组件背景",
+        "description": "使用主题背景或模糊封面；模糊封面不支持全高渐变进度",
         "theme": "主题背景",
         "coverBlur": "模糊封面",
         "compatibilityTitle": "确认更改",
@@ -97,7 +92,7 @@
       },
       "width": {
         "title": "组件宽度",
-        "description": "选择预设宽度、自定义宽度或自动填充可用空间",
+        "description": "自适应会填充任务栏可用空间，最小宽度为 200px",
         "presets": "组件宽度预设",
         "compact": "紧凑",
         "standard": "标准",
@@ -108,19 +103,18 @@
       },
       "display": {
         "title": "目标显示器",
-        "description": "选择在哪些显示器的任务栏上显示组件",
         "placeholder": "选择显示器",
         "all": "全部显示器",
         "unavailable": "之前选择的显示器（当前不可用）",
-        "primary": "主显示器"
+        "primary": "主显示器",
+        "description": "选择在哪些显示器的任务栏上显示组件"
       },
       "controls": {
-        "title": "控制按钮",
-        "description": "设置播放控制按钮的显示与排列",
+        "title": "播放控制",
         "visible": "显示按钮组",
         "visibleDescription": "显示或隐藏整组播放控制按钮",
         "buttons": "显示的按钮",
-        "buttonsDescription": "选择要显示的按钮，并拖动调整排列顺序",
+        "buttonsDescription": "勾选要显示的按钮，拖动调整顺序",
         "order": "控制按钮顺序",
         "volumeTarget": "音量控制对象",
         "volumeTargetDescription": "将鼠标悬停在任务栏播放器上并滚动鼠标滚轮即可调节",
@@ -134,9 +128,7 @@
       },
       "cover": {
         "title": "封面",
-        "description": "设置封面的显示模式、形状与播放效果",
         "visible": "显示封面",
-        "visibleDescription": "选择在普通模式、歌词模式或两者中显示封面",
         "square": "方形",
         "rounded": "圆角",
         "circle": "圆形",
@@ -145,39 +137,35 @@
         "lyricsOnly": "仅歌词模式",
         "hidden": "始终隐藏",
         "shape": "封面形状",
-        "shapeDescription": "选择封面的裁切形状",
         "rotate": "播放时旋转",
-        "rotateDescription": "播放时持续旋转，暂停时保持当前位置",
+        "rotateDescription": "播放时旋转，暂停时停留在当前位置",
         "source": "显示播放器来源",
-        "sourceDescription": "在封面右下角显示当前播放器的小图标"
+        "sourceDescription": "在封面右下角显示播放器图标",
+        "shapeDescription": "仅圆形封面支持播放时旋转"
       },
       "elementOrder": {
         "title": "元素排列",
-        "description": "分别调整普通模式与歌词模式中的元素顺序",
+        "description": "拖动调整顺序，普通模式与歌词模式分别保存",
         "normal": "普通模式",
         "lyrics": "歌词模式"
       },
       "progress": {
         "title": "进度条",
-        "description": "设置播放进度的显示样式与位置",
         "visible": "显示进度条",
         "style": "进度样式",
-        "styleDescription": "选择条形、封面环形或覆盖组件高度的渐变进度",
         "bar": "条形进度",
         "coverRing": "封面环形",
         "gradient": "全高渐变",
         "position": "横条位置",
-        "positionDescription": "将条形进度放在组件的顶部或底部",
         "top": "顶部",
-        "bottom": "底部"
+        "bottom": "底部",
+        "positionDescription": "仅条形进度支持顶部或底部位置"
       },
       "spectrum": {
         "title": "频谱",
-        "description": "显示当前播放器音频的实时频谱",
         "visible": "显示频谱",
-        "visibleDescription": "关闭后会停止音频采集与频谱计算",
+        "visibleDescription": "关闭后停止音频采集和频谱计算",
         "barCount": "频谱条数量",
-        "barCountDescription": "数量越少越简洁，越多则能显示更细致的频率变化",
         "width": "频谱宽度",
         "widthDescription": "普通模式覆盖内容，歌词模式独立占用空间",
         "vertical": "垂直位置",
@@ -185,37 +173,32 @@
         "sensitivity": "灵敏度",
         "sensitivityDescription": "调整频谱对输入音量变化的响应幅度",
         "smoothing": "动态平滑",
-        "smoothingDescription": "数值越高，动画越平稳，但响应变化越慢",
+        "smoothingDescription": "数值越高越平稳，但响应越慢",
         "frameRate": "帧率",
-        "frameRateDescription": "降低帧率可减少频谱采样、通信与绘制开销"
+        "frameRateDescription": "降低帧率可减少频谱结果更新、通信和绘制开销"
       },
       "trackInfo": {
         "title": "歌曲信息",
-        "description": "设置歌曲信息的对齐与滚动方式",
         "visible": "显示歌曲信息",
         "visibleDescription": "关闭后隐藏歌名与歌手，并将空间留给其他元素",
-        "alignmentDescription": "调整歌名与歌手在可用区域内的对齐方式",
         "scroll": "歌名超出时滚动",
-        "scrollDescription": "关闭后，超出可用宽度的内容将以省略号显示",
+        "scrollDescription": "超出宽度时滚动；关闭或启用减少动态效果后显示省略号",
         "speed": "滚动速度",
-        "speedDescription": "以每秒移动的像素数调整滚动速度",
         "mode": "滚动方式",
-        "modeDescription": "选择歌名到达边界后的滚动行为",
         "loop": "循环",
         "restart": "返回起点",
         "alternate": "往返滚动"
       },
       "lyrics": {
         "title": "歌词",
-        "description": "设置任务栏歌词的内容、外观与同步方式",
         "enabled": "开启歌词",
         "enabledDescription": "关闭后恢复显示歌曲信息与播放控制",
         "lines": "显示行数",
-        "linesDescription": "选择单行或双行显示；双行模式可设置第二行内容",
+        "linesDescription": "双行模式可单独设置第二行内容",
         "single": "单行",
         "double": "双行",
         "secondary": "第二行内容",
-        "secondaryDescription": "“翻译优先”会在没有翻译时自动显示下一句",
+        "secondaryDescription": "翻译优先：没有翻译时显示下一句",
         "translationOnly": "仅翻译",
         "nextLine": "下一句",
         "translationFirst": "翻译优先",
@@ -226,11 +209,9 @@
         "traditional": "繁体",
         "wordHighlight": "逐字高亮",
         "wordHighlightDescription": "仅对包含逐字时间轴的歌词生效",
-        "alignmentDescription": "调整歌词在可用区域内的水平位置",
         "size": "歌词字号",
         "sizeDescription": "字号范围为 10–18px；双行模式会自动收紧行距",
         "colors": "歌词颜色",
-        "colorsDescription": "跟随组件主题色，或分别设置已播放与未播放颜色",
         "followTheme": "跟随主题",
         "playedColor": "已播放颜色",
         "playedColorDescription": "逐字歌词中已经播放的文字",
@@ -238,13 +219,12 @@
         "unplayedColorDescription": "用于未播放文字与第二行歌词",
         "invalidColor": "请输入 #RRGGBB 格式的颜色",
         "font": "歌词字体",
-        "fontDescription": "使用 Windows 字体；打开列表时会自动发现新安装的字体",
+        "fontDescription": "使用 Windows 字体；打开列表时刷新已安装字体",
         "systemFont": "系统默认",
         "searchFonts": "搜索系统字体…",
         "fontLoadFailed": "系统字体读取失败",
         "noFonts": "未找到字体",
-        "animation": "动画效果",
-        "animationDescription": "选择切换歌词时的移动与淡入淡出效果",
+        "animation": "歌词切换动画",
         "animationPlaceholder": "选择动画",
         "animationUp": "向上移动",
         "animationFade": "原地渐隐渐显",
@@ -252,7 +232,7 @@
         "preRollOn": "开启：动画在人声开始前完成，节奏更紧凑；连续演唱时，上一句可能提前离场。",
         "preRollOff": "关闭：严格按时间戳切换，动画与人声同时开始。",
         "offset": "时间偏移",
-        "offsetDescription": "校准歌词时间；正值延后，负值提前，不影响动画提前量",
+        "offsetDescription": "正值延后，负值提前；不影响动画提前量",
         "network": "联网策略",
         "networkDescription": "选择自动联网获取，或仅使用本地歌词与现有缓存",
         "localOnly": "仅本地与缓存",
@@ -267,7 +247,7 @@
         "title": "播放器选择",
         "description": "设置多个播放器同时存在时优先显示哪一个",
         "strategy": "选择策略",
-        "strategyDescription": "“最近播放优先”只在播放器实际开始播放时切换，单纯打开应用不会触发切换",
+        "strategyDescription": "最近播放优先：开始播放时才切换，仅打开应用不会切换",
         "placeholder": "选择策略",
         "recent": "最近开始播放优先",
         "sticky": "播放时保持当前播放器",
@@ -280,7 +260,7 @@
       },
       "theme": {
         "title": "组件主题色",
-        "description": "为进度条、频谱与音量条选择封面色、Windows 强调色或自定义颜色",
+        "description": "设置任务栏组件的强调色",
         "cover": "封面主色",
         "system": "Windows 强调色",
         "presets": "候选颜色",
@@ -300,7 +280,6 @@
       "files": "{count} 个文件",
       "cache": {
         "title": "歌词缓存",
-        "description": "管理 Muse Tune 保存的歌词缓存",
         "clearCurrent": "清除当前歌曲",
         "refreshCurrent": "重新获取当前歌曲",
         "clearAll": "清除全部缓存",
@@ -316,7 +295,6 @@
       },
       "config": {
         "title": "应用配置",
-        "description": "管理应用设置与用户偏好",
         "reset": "重置应用设置",
         "resetConfirmTitle": "重置所有应用设置？",
         "resetConfirmDescription": "所有设置将恢复默认值，Muse Tune 随后会自动重启。此操作无法撤销。",
@@ -325,7 +303,6 @@
       },
       "logs": {
         "title": "运行日志",
-        "description": "查看应用运行记录与错误信息",
         "clearHistory": "清除历史日志",
         "clearConfirmTitle": "清除历史日志？",
         "clearConfirmDescription": "已归档的历史日志将被删除；当前日志会保留并继续记录，无需重启应用。",
@@ -334,23 +311,15 @@
     },
     "about": {
       "update": {
-        "title": "应用更新",
+        "title": "版本与更新",
         "versions": "当前 {current} · 最新 {latest}",
         "detected": "自动检查发现版本 {version}",
-        "source": "从 GitHub Releases 获取稳定版本",
-        "releaseNotes": "查看发行说明",
         "check": "检查更新",
         "install": "下载并安装",
         "portableAction": "下载便携版",
         "portableDescription": "便携版不会运行安装器；请下载新版压缩包，退出应用并覆盖原文件。data 文件夹会保留现有配置、缓存和日志。",
         "downloading": "正在下载",
         "downloadingProgress": "正在下载 {progress}%",
-        "automatic": "自动检查更新",
-        "automaticDescription": "应用运行时按所选频率检查新版本",
-        "frequency": "自动检查频率",
-        "daily": "每天",
-        "weekly": "每周",
-        "monthly": "每月",
         "downloadProgress": "更新下载进度",
         "latest": "已是最新版",
         "available": "有新版本可用",
@@ -360,20 +329,30 @@
         "installConfirmDescription": "下载完成后，Muse Tune 将自动退出并安装更新。是否继续？",
         "installerFailed": "无法启动安装程序",
         "installFailed": "更新安装失败：{reason}",
-        "saveAutomaticFailed": "无法保存自动检查设置",
-        "saveFrequencyFailed": "无法保存检查频率",
         "initializeFailed": "无法初始化更新设置",
         "notificationTitle": "Muse Tune 新版本可用",
         "notificationBody": "版本 {version} 已发布。前往“设置 → 关于”即可下载并安装。",
         "notificationPortableBody": "版本 {version} 已发布。前往“设置 → 关于”下载新版便携包并手动覆盖。"
       },
       "project": {
-        "title": "项目与许可",
         "description": "开源软件 · MIT 许可证",
         "website": "官方网站",
-        "repository": "源代码仓库",
-        "issues": "报告问题",
-        "openFailed": "无法在默认浏览器中打开链接"
+        "openFailed": "无法在默认浏览器中打开链接",
+        "createdBy": "由",
+        "changelog": "更新日志"
+      },
+      "feedback": {
+        "title": "交流与反馈",
+        "description": "遇到问题，或有新的想法？选择你喜欢的方式。",
+        "qq": "QQ 群交流",
+        "copy": "复制群号",
+        "copied": "已复制群号",
+        "copyFailed": "复制失败，请手动复制群号",
+        "form": "在线反馈",
+        "formDescription": "提交问题或建议",
+        "openForm": "打开表单",
+        "issuesDescription": "查看与讨论公开问题",
+        "openIssues": "查看 Issues"
       }
     }
   },
@@ -397,7 +376,8 @@
     "openDirectory": "打开文件夹",
     "continue": "继续",
     "copied": "已复制",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "centerAligned": "居中"
   },
   "media": {
     "previous": "上一曲",
@@ -414,7 +394,10 @@
   },
   "taskbar": {
     "player": "Muse Tune 任务栏播放器",
-    "lyrics": { "current": "当前歌词", "noLyrics": "暂无歌词" },
+    "lyrics": {
+      "current": "当前歌词",
+      "noLyrics": "暂无歌词"
+    },
     "menu": {
       "normalCover": "普通模式封面",
       "lyricsCover": "歌词模式封面",
@@ -494,7 +477,11 @@
       "miss": "未命中",
       "failed": "失败"
     },
-    "issues": { "title": "当前问题", "count": "{count} 项", "none": "未发现异常" },
+    "issues": {
+      "title": "当前问题",
+      "count": "{count} 项",
+      "none": "未发现异常"
+    },
     "audio": {
       "title": "音频能力",
       "description": "Windows 应用音频会话与按进程频谱采集状态",

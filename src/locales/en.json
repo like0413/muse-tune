@@ -25,11 +25,10 @@
     "general": {
       "language": {
         "title": "Display language",
-        "description": "Choose the language used throughout Muse Tune"
+        "description": "Lyrics follow Simplified/Traditional Chinese changes when set to follow the interface"
       },
       "colorMode": {
         "title": "Color mode",
-        "description": "Use a light or dark theme, or match the Windows setting",
         "auto": "System",
         "dark": "Dark",
         "light": "Light"
@@ -40,13 +39,12 @@
       },
       "disableGpuAcceleration": {
         "title": "Disable GPU acceleration",
-        "description": "Render with the CPU to lower memory usage; may raise CPU load and soften animations. Takes effect after restarting",
+        "description": "Disable GPU acceleration to reduce memory use; CPU load may increase and animations may be less smooth. Takes effect after restarting.",
         "restartRequired": "This change takes effect after restarting the app",
         "restartNow": "Restart now"
       },
       "autostart": {
-        "title": "Launch at startup",
-        "description": "Start Muse Tune automatically when you sign in to Windows"
+        "title": "Launch at startup"
       }
     },
     "taskbar": {
@@ -58,14 +56,14 @@
       },
       "placement": {
         "title": "Component placement",
-        "description": "Place the component on the left or right; Automatic adapts to the taskbar layout",
+        "description": "Auto places the player on the left when taskbar icons are centered, otherwise on the right",
         "left": "Left",
         "auto": "Automatic",
         "right": "Right"
       },
       "horizontalOffset": {
         "title": "Horizontal offset",
-        "description": "Move from the default position; positive values move right and negative values move left, in pixels"
+        "description": "Positive moves right; negative moves left. Logical pixels scale with the system DPI."
       },
       "overlap": {
         "title": "Overlap priority",
@@ -75,15 +73,12 @@
       },
       "autoHide": {
         "title": "Auto-hide",
-        "description": "Hide the component when no media session exists or playback is paused",
         "noSession": "Hide with no media session",
-        "noSessionDescription": "Hide the component when Windows has no available media session",
-        "paused": "Hide while paused",
-        "pausedDescription": "Hide the component when the current media session is paused"
+        "paused": "Hide while paused"
       },
       "transparency": {
         "title": "Background transparency",
-        "description": "Adjust the theme background transparency without affecting text or controls",
+        "description": "Only affects the theme background, not text or controls",
         "coverDisabled": "Blurred artwork uses its own effect; switch to the theme background to adjust transparency"
       },
       "backgroundStyle": {
@@ -97,7 +92,7 @@
       },
       "width": {
         "title": "Component width",
-        "description": "Choose a preset, set a custom width, or fill the available taskbar space",
+        "description": "Auto fills available taskbar space, with a minimum width of 200px",
         "presets": "Component width preset",
         "compact": "Compact",
         "standard": "Standard",
@@ -108,19 +103,18 @@
       },
       "display": {
         "title": "Target display",
-        "description": "Choose which displays show the component on their taskbar",
         "placeholder": "Select a display",
         "all": "All displays",
         "unavailable": "Previously selected display (currently unavailable)",
-        "primary": "Primary"
+        "primary": "Primary",
+        "description": "Choose which displays show the taskbar player"
       },
       "controls": {
         "title": "Playback controls",
-        "description": "Choose which playback controls appear and how they are arranged",
         "visible": "Show playback controls",
         "visibleDescription": "Show or hide the entire group of playback controls",
         "buttons": "Visible buttons",
-        "buttonsDescription": "Choose which buttons to show, then drag to reorder them",
+        "buttonsDescription": "Select buttons to show and drag to reorder",
         "order": "Playback control order",
         "volumeTarget": "Volume control target",
         "volumeTargetDescription": "Hover over the taskbar player and scroll the mouse wheel to adjust it",
@@ -134,9 +128,7 @@
       },
       "cover": {
         "title": "Artwork",
-        "description": "Configure artwork visibility, shape, and playback effects",
         "visible": "Show artwork",
-        "visibleDescription": "Show artwork in normal mode, lyrics mode, or both",
         "square": "Square",
         "rounded": "Rounded",
         "circle": "Circle",
@@ -145,39 +137,35 @@
         "lyricsOnly": "Lyrics only",
         "hidden": "Hidden",
         "shape": "Artwork shape",
-        "shapeDescription": "Choose how the artwork is cropped",
         "rotate": "Rotate while playing",
-        "rotateDescription": "Rotate continuously during playback and hold the current position while paused",
+        "rotateDescription": "Rotates during playback and stays in place when paused",
         "source": "Show player source",
-        "sourceDescription": "Show the current player's icon in the lower-right corner of the artwork"
+        "sourceDescription": "Show the current player's icon in the lower-right corner of the artwork",
+        "shapeDescription": "Playback rotation is only available for circular covers"
       },
       "elementOrder": {
         "title": "Element order",
-        "description": "Set element order independently for normal and lyrics modes",
+        "description": "Drag to reorder; normal and lyrics modes are saved separately",
         "normal": "Normal mode",
         "lyrics": "Lyrics mode"
       },
       "progress": {
         "title": "Playback progress",
-        "description": "Configure the style and position of the playback progress indicator",
         "visible": "Show playback progress",
         "style": "Progress style",
-        "styleDescription": "Use a horizontal bar, a ring around the cover, or a full-height gradient",
         "bar": "Progress bar",
         "coverRing": "Cover ring",
         "gradient": "Full-height gradient",
         "position": "Bar position",
-        "positionDescription": "Place the progress bar at the top or bottom",
         "top": "Top",
-        "bottom": "Bottom"
+        "bottom": "Bottom",
+        "positionDescription": "Top and bottom positions are supported only for the bar style"
       },
       "spectrum": {
         "title": "Audio spectrum",
-        "description": "Visualize audio from the current player in real time",
         "visible": "Show audio spectrum",
         "visibleDescription": "Turning this off stops audio capture and spectrum processing",
         "barCount": "Number of bars",
-        "barCountDescription": "Fewer bars create a simpler look; more bars show finer frequency detail",
         "width": "Spectrum width",
         "widthDescription": "It overlays content in normal mode and occupies its own space in lyrics mode",
         "vertical": "Vertical alignment",
@@ -187,31 +175,26 @@
         "smoothing": "Smoothing",
         "smoothingDescription": "Higher values produce steadier motion but react more slowly",
         "frameRate": "Frame rate",
-        "frameRateDescription": "Lower frame rates reduce spectrum sampling, communication, and rendering work"
+        "frameRateDescription": "Lower frame rates reduce spectrum updates, communication and rendering work"
       },
       "trackInfo": {
         "title": "Track information",
-        "description": "Configure track information alignment and title scrolling",
         "visible": "Show track information",
         "visibleDescription": "When off, hide the title and artist and free the space for other elements",
-        "alignmentDescription": "Align the title and artist within the available area",
         "scroll": "Scroll overflowing titles",
-        "scrollDescription": "When off, truncate titles that exceed the available width",
+        "scrollDescription": "Scrolls overflowing titles; disabling this or enabling reduced motion shows an ellipsis",
         "speed": "Scroll speed",
-        "speedDescription": "Set the movement speed in pixels per second",
         "mode": "Scroll behavior",
-        "modeDescription": "Choose how the title moves after reaching the end",
         "loop": "Continuous loop",
         "restart": "Restart",
         "alternate": "Back and forth"
       },
       "lyrics": {
         "title": "Lyrics",
-        "description": "Configure lyric content, appearance, and timing on the taskbar",
         "enabled": "Enable lyrics",
         "enabledDescription": "When off, restore track information and playback controls",
         "lines": "Line layout",
-        "linesDescription": "Choose one or two lines; two-line mode lets you select the secondary content",
+        "linesDescription": "Two-line mode lets you choose the second line’s content",
         "single": "Single line",
         "double": "Double line",
         "secondary": "Second-line content",
@@ -226,11 +209,9 @@
         "traditional": "Traditional",
         "wordHighlight": "Word highlighting",
         "wordHighlightDescription": "Available only for lyrics that include word-level timing",
-        "alignmentDescription": "Align lyrics within the available horizontal space",
         "size": "Font size",
         "sizeDescription": "Choose 10–18px; two-line mode automatically uses tighter spacing",
         "colors": "Lyric colors",
-        "colorsDescription": "Use the component accent color or set played and unplayed colors separately",
         "followTheme": "Use accent color",
         "playedColor": "Played color",
         "playedColorDescription": "Text already reached in word-timed lyrics",
@@ -243,8 +224,7 @@
         "searchFonts": "Search system fonts…",
         "fontLoadFailed": "Could not load system fonts",
         "noFonts": "No fonts found",
-        "animation": "Animation",
-        "animationDescription": "Choose how lyrics move or fade when the active line changes",
+        "animation": "Lyrics transition",
         "animationPlaceholder": "Select an animation",
         "animationUp": "Move upward",
         "animationFade": "Fade in place",
@@ -252,7 +232,7 @@
         "preRollOn": "On: finishes the transition just before the lyric timestamp for tighter timing; during continuous vocals, the previous line may leave early.",
         "preRollOff": "Off: starts the transition at the lyric timestamp, in sync with the vocals.",
         "offset": "Timing offset",
-        "offsetDescription": "Calibrate lyric timing: positive values delay lyrics and negative values advance them without changing transition lead time",
+        "offsetDescription": "Positive delays lyrics; negative advances them. Does not affect animation pre-roll.",
         "network": "Network policy",
         "networkDescription": "Allow online lookup, or use only local lyrics and the existing cache",
         "localOnly": "Local and cache only",
@@ -280,7 +260,7 @@
       },
       "theme": {
         "title": "Component accent color",
-        "description": "Use artwork color, the Windows accent, or a custom color for progress, spectrum, and volume controls",
+        "description": "Set the accent color for the taskbar player",
         "cover": "Artwork color",
         "system": "Windows accent",
         "presets": "Preset colors",
@@ -300,7 +280,6 @@
       "files": "{count} files",
       "cache": {
         "title": "Lyrics cache",
-        "description": "Manage lyrics cached by Muse Tune",
         "clearCurrent": "Clear current song",
         "refreshCurrent": "Refresh current song",
         "clearAll": "Clear all cached lyrics",
@@ -316,7 +295,6 @@
       },
       "config": {
         "title": "App settings",
-        "description": "Manage saved app settings and preferences",
         "reset": "Reset app settings",
         "resetConfirmTitle": "Reset all app settings?",
         "resetConfirmDescription": "All settings will return to their defaults and Muse Tune will restart. This cannot be undone.",
@@ -325,7 +303,6 @@
       },
       "logs": {
         "title": "Runtime logs",
-        "description": "Review app activity and recorded errors",
         "clearHistory": "Clear archived logs",
         "clearConfirmTitle": "Clear archived logs?",
         "clearConfirmDescription": "Archived log files will be deleted. The active log will remain and continue recording without restarting the app.",
@@ -334,23 +311,15 @@
     },
     "about": {
       "update": {
-        "title": "App updates",
+        "title": "Version & updates",
         "versions": "Current {current} · Latest {latest}",
         "detected": "Automatic check found version {version}",
-        "source": "Stable releases are provided through GitHub Releases",
-        "releaseNotes": "View release notes",
         "check": "Check for updates",
         "install": "Download and install",
         "portableAction": "Download portable build",
         "portableDescription": "The portable build does not run an installer. Download the new archive, exit Muse Tune, and replace the existing executable. The data folder keeps your settings, cache, and logs.",
         "downloading": "Downloading",
         "downloadingProgress": "Downloading {progress}%",
-        "automatic": "Automatically check for updates",
-        "automaticDescription": "Check for new versions at the selected interval while Muse Tune is running",
-        "frequency": "Update check interval",
-        "daily": "Daily",
-        "weekly": "Weekly",
-        "monthly": "Monthly",
         "downloadProgress": "Update download progress",
         "latest": "Up to date",
         "available": "New version available",
@@ -360,20 +329,30 @@
         "installConfirmDescription": "After the download finishes, Muse Tune will close and install the update. Continue?",
         "installerFailed": "Could not start the installer",
         "installFailed": "Update installation failed: {reason}",
-        "saveAutomaticFailed": "Could not save automatic update checks",
-        "saveFrequencyFailed": "Could not save the update check interval",
         "initializeFailed": "Could not initialize update settings",
         "notificationTitle": "A Muse Tune update is available",
         "notificationBody": "Version {version} is available. Open Settings → About to download and install it.",
         "notificationPortableBody": "Version {version} is available. Open Settings → About to download the new portable archive and replace it manually."
       },
       "project": {
-        "title": "Project and license",
         "description": "Open-source software · MIT License",
         "website": "Official website",
-        "repository": "Source repository",
-        "issues": "Report an issue",
-        "openFailed": "Could not open the link in your default browser"
+        "openFailed": "Could not open the link in your default browser",
+        "createdBy": "Created by",
+        "changelog": "Changelog"
+      },
+      "feedback": {
+        "title": "Community & feedback",
+        "description": "Found a problem or have an idea? Choose how to get in touch.",
+        "qq": "QQ community",
+        "copy": "Copy group number",
+        "copied": "Copied",
+        "copyFailed": "Copy failed. Please copy the group number manually.",
+        "form": "Feedback form",
+        "formDescription": "Share a problem or suggestion",
+        "openForm": "Open form",
+        "issuesDescription": "View and discuss public issues",
+        "openIssues": "View Issues"
       }
     }
   },
@@ -397,7 +376,8 @@
     "openDirectory": "Open folder",
     "continue": "Continue",
     "copied": "Copied",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "centerAligned": "Center"
   },
   "media": {
     "previous": "Previous",
@@ -497,7 +477,11 @@
       "miss": "Miss",
       "failed": "Failed"
     },
-    "issues": { "title": "Current issues", "count": "{count} issues", "none": "No problems found" },
+    "issues": {
+      "title": "Current issues",
+      "count": "{count} issues",
+      "none": "No problems found"
+    },
     "audio": {
       "title": "Audio capabilities",
       "description": "Windows app audio session and per-process spectrum capture status",

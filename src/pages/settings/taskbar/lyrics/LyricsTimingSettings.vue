@@ -79,7 +79,6 @@ function selectAnimation(value: unknown) {
   <Field orientation="horizontal" :data-disabled="!settings.enabled">
     <FieldContent>
       <FieldTitle>{{ t('settings.taskbar.lyrics.animation') }}</FieldTitle>
-      <FieldDescription>{{ t('settings.taskbar.lyrics.animationDescription') }}</FieldDescription>
     </FieldContent>
     <Select
       :model-value="settings.animation"

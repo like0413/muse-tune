@@ -38,9 +38,9 @@ const emit = defineEmits<{
 const alignmentOptions = computed(
   () =>
     [
-      { value: 'left', label: t('common.left') },
-      { value: 'center', label: t('common.center') },
-      { value: 'right', label: t('common.right') },
+      { value: 'left', label: t('common.leftAligned') },
+      { value: 'center', label: t('common.centerAligned') },
+      { value: 'right', label: t('common.rightAligned') },
     ] as const,
 )
 const lineModeOptions = computed(
@@ -137,7 +137,6 @@ function selectSecondaryLine(value: unknown) {
   <Field orientation="horizontal" :data-disabled="!settings.enabled">
     <FieldContent>
       <FieldTitle>{{ t('common.alignment') }}</FieldTitle>
-      <FieldDescription>{{ t('settings.taskbar.lyrics.alignmentDescription') }}</FieldDescription>
     </FieldContent>
     <Tabs :model-value="settings.alignment" @update:model-value="selectAlignment">
       <TabsList>

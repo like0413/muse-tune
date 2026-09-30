@@ -11,15 +11,9 @@ import { getRuntimeEnvironment } from '@/features/runtime/environment'
 
 import { createDownloadProgressTracker } from './download-progress'
 import {
-  DEFAULT_UPDATE_CHECK_FREQUENCY,
-  getAutomaticUpdateCheck,
-  getUpdateCheckFrequency,
   getUpdateCheckResult,
   listenUpdateCheckResultChange,
-  setAutomaticUpdateCheck,
-  setUpdateCheckFrequency,
   setUpdateCheckResult,
-  type UpdateCheckFrequency,
   type UpdateCheckResult,
 } from './settings'
 import type { AvailableUpdateView, UpdateStatus } from './types'
@@ -32,10 +26,6 @@ export function useApplicationUpdater() {
   const isDownloading = shallowRef(false)
   const availableUpdate = shallowRef<Update | null>(null)
   const detectedVersion = shallowRef<string | null>(null)
-  const automaticCheck = shallowRef(true)
-  const automaticCheckSaving = shallowRef(false)
-  const updateCheckFrequency = shallowRef<UpdateCheckFrequency>(DEFAULT_UPDATE_CHECK_FREQUENCY)
-  const updateCheckFrequencySaving = shallowRef(false)
   const downloadProgress = shallowRef<number | null>(null)
   const errorMessage = shallowRef<string | null>(null)
   const isPortable = shallowRef(false)
@@ -119,6 +109,7 @@ export function useApplicationUpdater() {
       void setUpdateCheckResult({
         checkedAt,
         attemptedAt: checkedAt,
+        consecutiveFailures: 0,
         availableVersion: update?.version ?? null,
       }).catch((error) => console.debug('保存更新检测结果失败', error))
     } catch (error) {
@@ -200,41 +191,7 @@ export function useApplicationUpdater() {
     if (!disposed && availableUpdate.value) await performInstallUpdate(false)
   }
 
-  /** 更新应用级自动检测开关；实际检查由任务栏调度器执行。 */
-  async function updateAutomaticCheck(enabled: boolean) {
-    if (automaticCheckSaving.value) return
-    const previous = automaticCheck.value
-    automaticCheck.value = enabled
-    automaticCheckSaving.value = true
-    try {
-      automaticCheck.value = await setAutomaticUpdateCheck(enabled)
-    } catch (error) {
-      automaticCheck.value = previous
-      reportBackgroundFailure('保存自动检测设置失败', error)
-      errorMessage.value = getErrorMessage(error, t('settings.about.update.saveAutomaticFailed'))
-    } finally {
-      automaticCheckSaving.value = false
-    }
-  }
-
-  /** 更新应用级自动检测周期。 */
-  async function updateAutomaticCheckFrequency(frequency: UpdateCheckFrequency) {
-    if (updateCheckFrequencySaving.value || frequency === updateCheckFrequency.value) return
-    const previous = updateCheckFrequency.value
-    updateCheckFrequency.value = frequency
-    updateCheckFrequencySaving.value = true
-    try {
-      updateCheckFrequency.value = await setUpdateCheckFrequency(frequency)
-    } catch (error) {
-      updateCheckFrequency.value = previous
-      reportBackgroundFailure('保存检测周期失败', error)
-      errorMessage.value = getErrorMessage(error, t('settings.about.update.saveFrequencyFailed'))
-    } finally {
-      updateCheckFrequencySaving.value = false
-    }
-  }
-
-  /** 首次进入关于页时读取策略、最近结果并订阅后台检测结果。 */
+  /** 首次进入关于页时读取最近结果并订阅后台检测结果。 */
   async function initialize() {
     if (initialized) return
     initialized = true
@@ -249,15 +206,11 @@ export function useApplicationUpdater() {
       }
       unlistenResult = stopListener
       const revisionBeforeRead = resultRevision
-      const [shouldCheck, frequency, result, environment] = await Promise.all([
-        getAutomaticUpdateCheck(),
-        getUpdateCheckFrequency(),
+      const [result, environment] = await Promise.all([
         getUpdateCheckResult(),
         getRuntimeEnvironment(),
       ])
       if (disposed) return
-      automaticCheck.value = shouldCheck
-      updateCheckFrequency.value = frequency
       isPortable.value = environment.portable
       if (resultRevision === revisionBeforeRead) applyAutomaticResult(result)
     } catch (error) {
@@ -267,13 +220,8 @@ export function useApplicationUpdater() {
     }
   }
 
-  /** 每次进入关于页都静默刷新结果，不展示加载态或网络错误。 */
-  async function activate() {
-    await initialize()
-    if (!disposed) await checkForUpdates({ silent: true })
-  }
-
-  onActivated(() => void activate())
+  /** 进入关于页只同步已保存的结果，后台调度负责定期检查。 */
+  onActivated(() => void initialize())
   onUnmounted(() => {
     disposed = true
     unlistenResult?.()
@@ -287,10 +235,6 @@ export function useApplicationUpdater() {
     isDownloading: readonly(isDownloading),
     availableUpdate: availableUpdateView,
     detectedVersion: readonly(detectedVersion),
-    automaticCheck: readonly(automaticCheck),
-    automaticCheckSaving: readonly(automaticCheckSaving),
-    updateCheckFrequency: readonly(updateCheckFrequency),
-    updateCheckFrequencySaving: readonly(updateCheckFrequencySaving),
     downloadProgress: readonly(downloadProgress),
     errorMessage: readonly(errorMessage),
     isPortable: readonly(isPortable),
@@ -298,7 +242,5 @@ export function useApplicationUpdater() {
     openReleaseNotes,
     installUpdate,
     installUpdateAutomatically,
-    updateAutomaticCheck,
-    updateAutomaticCheckFrequency,
   }
 }

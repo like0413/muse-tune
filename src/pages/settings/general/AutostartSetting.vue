@@ -2,14 +2,7 @@
 import { Rocket } from '@lucide/vue'
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
 
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemMedia,
-  ItemTitle,
-} from '@/components/ui/item'
+import { Item, ItemActions, ItemContent, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
 import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 
@@ -51,7 +44,6 @@ onActivated(() => {
     </ItemMedia>
     <ItemContent>
       <ItemTitle>{{ t('settings.general.autostart.title') }}</ItemTitle>
-      <ItemDescription>{{ t('settings.general.autostart.description') }}</ItemDescription>
     </ItemContent>
     <ItemActions>
       <Switch

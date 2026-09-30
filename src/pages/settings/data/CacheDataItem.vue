@@ -14,14 +14,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemFooter,
-  ItemTitle,
-} from '@/components/ui/item'
+import { Item, ItemActions, ItemContent, ItemFooter, ItemTitle } from '@/components/ui/item'
 import { Progress } from '@/components/ui/progress'
 import type { CacheOverview } from '@/features/data-management/types'
 import { formatBytes } from '@/features/i18n/format'
@@ -57,7 +50,6 @@ const usagePercentage = computed(() => {
         <Database class="size-4 text-indigo-500" />
         {{ t('settings.data.cache.title') }}
       </ItemTitle>
-      <ItemDescription>{{ t('settings.data.cache.description') }}</ItemDescription>
     </ItemContent>
     <ItemActions>
       <Button

@@ -4,13 +4,7 @@ import { moveArrayElement, useSortable } from '@vueuse/integrations/useSortable'
 import type { SortableEvent } from 'sortablejs'
 import type { ShallowRef } from 'vue'
 
-import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldGroup,
-  FieldTitle,
-} from '@/components/ui/field'
+import { Field, FieldContent, FieldGroup, FieldTitle } from '@/components/ui/field'
 import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {

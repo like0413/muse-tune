@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ItemGroup } from '@/components/ui/item'
 import { useAutomaticUpdateInstallRequest } from '@/features/updater/install-intent'
 import { useApplicationUpdater } from '@/features/updater/useApplicationUpdater'
 
-import ProjectInfoItem from './ProjectInfoItem.vue'
+import ProjectFeedback from './ProjectFeedback.vue'
+import ProjectOverview from './ProjectOverview.vue'
 import UpdateItem from './UpdateItem.vue'
+
+defineProps<{ applicationVersion: string }>()
 
 const {
   status,
@@ -13,19 +15,12 @@ const {
   isDownloading,
   availableUpdate,
   detectedVersion,
-  automaticCheck,
-  automaticCheckSaving,
-  updateCheckFrequency,
-  updateCheckFrequencySaving,
   downloadProgress,
   errorMessage,
   isPortable,
   checkForUpdates,
-  openReleaseNotes,
   installUpdate,
   installUpdateAutomatically,
-  updateAutomaticCheck,
-  updateAutomaticCheckFrequency,
 } = useApplicationUpdater()
 
 const automaticInstallRequest = useAutomaticUpdateInstallRequest()
@@ -44,7 +39,8 @@ watch(
 </script>
 
 <template>
-  <ItemGroup class="gap-3">
+  <div class="flex w-full flex-col gap-3">
+    <ProjectOverview :application-version="applicationVersion" />
     <UpdateItem
       :status="status"
       :status-label="statusLabel"
@@ -52,19 +48,12 @@ watch(
       :is-downloading="isDownloading"
       :update="availableUpdate"
       :detected-version="detectedVersion"
-      :automatic-check="automaticCheck"
-      :automatic-check-saving="automaticCheckSaving"
-      :update-check-frequency="updateCheckFrequency"
-      :update-check-frequency-saving="updateCheckFrequencySaving"
       :download-progress="downloadProgress"
       :error-message="errorMessage"
       :is-portable="isPortable"
       @check="checkForUpdates"
-      @open-release-notes="openReleaseNotes"
       @install="installUpdate"
-      @update-automatic-check="updateAutomaticCheck"
-      @update-automatic-check-frequency="updateAutomaticCheckFrequency"
     />
-    <ProjectInfoItem />
-  </ItemGroup>
+    <ProjectFeedback />
+  </div>
 </template>

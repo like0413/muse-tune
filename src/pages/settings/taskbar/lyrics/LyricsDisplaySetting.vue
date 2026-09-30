@@ -2,7 +2,7 @@
 import { Captions } from '@lucide/vue'
 
 import { FieldGroup } from '@/components/ui/field'
-import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
+import { ItemContent, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
 import { useLyricsDisplaySetting } from '@/features/settings/controllers/useLyricsDisplaySetting'
 
@@ -31,7 +31,6 @@ const {
     </ItemMedia>
     <ItemContent>
       <ItemTitle>{{ t('settings.taskbar.lyrics.title') }}</ItemTitle>
-      <ItemDescription>{{ t('settings.taskbar.lyrics.description') }}</ItemDescription>
     </ItemContent>
     <template #actions>
       <Switch

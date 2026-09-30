@@ -25,11 +25,10 @@
     "general": {
       "language": {
         "title": "顯示語言",
-        "description": "選擇設定頁面與應用程式介面使用的語言"
+        "description": "切換簡繁體時，歌詞同步切換（跟隨介面時）"
       },
       "colorMode": {
         "title": "色彩模式",
-        "description": "選擇淺色、深色或跟隨 Windows 設定",
         "auto": "跟隨系統",
         "dark": "深色",
         "light": "淺色"
@@ -40,13 +39,12 @@
       },
       "disableGpuAcceleration": {
         "title": "停用 GPU 加速",
-        "description": "改用 CPU 轉譯以降低記憶體佔用；可能提高 CPU 負載並略微降低動畫流暢度，重啟後生效",
+        "description": "停用 GPU 加速以降低記憶體佔用；可能提高 CPU 負載並略微降低動畫流暢度，重新啟動後生效",
         "restartRequired": "這項變更將在重啟應用程式後生效",
         "restartNow": "立即重啟"
       },
       "autostart": {
-        "title": "開機自動啟動",
-        "description": "登入 Windows 後自動啟動 Muse Tune"
+        "title": "開機自動啟動"
       }
     },
     "taskbar": {
@@ -58,14 +56,14 @@
       },
       "placement": {
         "title": "元件位置",
-        "description": "選擇元件位於工作列左側或右側；自動模式會配合工作列版面",
+        "description": "自動模式：工作列圖示置中時放在左側，否則放在右側",
         "left": "左側",
         "auto": "自動",
         "right": "右側"
       },
       "horizontalOffset": {
         "title": "水平偏移",
-        "description": "相對預設位置水平移動；正值向右，負值向左，單位為像素"
+        "description": "正值向右，負值向左；單位為邏輯像素，隨系統縮放調整"
       },
       "overlap": {
         "title": "遮擋優先順序",
@@ -75,15 +73,12 @@
       },
       "autoHide": {
         "title": "自動隱藏",
-        "description": "在沒有媒體工作階段或播放暫停時自動隱藏元件",
         "noSession": "無媒體工作階段時隱藏",
-        "noSessionDescription": "Windows 中沒有可用的媒體工作階段時隱藏元件",
-        "paused": "暫停時隱藏",
-        "pausedDescription": "目前媒體工作階段暫停播放時隱藏元件"
+        "paused": "暫停時隱藏"
       },
       "transparency": {
         "title": "背景透明度",
-        "description": "調整主題背景的透明度，不影響文字與控制項",
+        "description": "僅影響主題背景，不改變文字和控制項的透明度",
         "coverDisabled": "模糊封面使用獨立效果；切換為主題背景後可調整透明度"
       },
       "backgroundStyle": {
@@ -97,7 +92,7 @@
       },
       "width": {
         "title": "元件寬度",
-        "description": "選擇預設寬度、自訂寬度或自動填滿可用空間",
+        "description": "自適應會填滿工作列可用空間，最小寬度為 200px",
         "presets": "元件寬度預設",
         "compact": "精簡",
         "standard": "標準",
@@ -108,19 +103,18 @@
       },
       "display": {
         "title": "目標顯示器",
-        "description": "選擇要在哪些顯示器的工作列上顯示元件",
         "placeholder": "選擇顯示器",
         "all": "所有顯示器",
         "unavailable": "先前選擇的顯示器（目前無法使用）",
-        "primary": "主要顯示器"
+        "primary": "主要顯示器",
+        "description": "選擇在哪些顯示器的工作列上顯示元件"
       },
       "controls": {
-        "title": "控制按鈕",
-        "description": "設定播放控制按鈕的顯示與排列",
+        "title": "播放控制",
         "visible": "顯示按鈕群組",
         "visibleDescription": "顯示或隱藏整組播放控制按鈕",
         "buttons": "顯示的按鈕",
-        "buttonsDescription": "選擇要顯示的按鈕，並拖曳調整排列順序",
+        "buttonsDescription": "勾選要顯示的按鈕，拖曳調整順序",
         "order": "控制按鈕順序",
         "volumeTarget": "音量控制對象",
         "volumeTargetDescription": "將滑鼠停留在工作列播放器上並滾動滑鼠滾輪即可調整",
@@ -134,9 +128,7 @@
       },
       "cover": {
         "title": "封面",
-        "description": "設定封面的顯示模式、形狀與播放效果",
         "visible": "顯示封面",
-        "visibleDescription": "選擇在一般模式、歌詞模式或兩者中顯示封面",
         "square": "方形",
         "rounded": "圓角",
         "circle": "圓形",
@@ -145,39 +137,35 @@
         "lyricsOnly": "僅歌詞模式",
         "hidden": "永遠隱藏",
         "shape": "封面形狀",
-        "shapeDescription": "選擇封面的裁切形狀",
         "rotate": "播放時旋轉",
-        "rotateDescription": "播放時持續旋轉，暫停時保持目前位置",
+        "rotateDescription": "播放時旋轉，暫停時停留在目前位置",
         "source": "顯示播放器來源",
-        "sourceDescription": "在封面右下角顯示目前播放器的小圖示"
+        "sourceDescription": "在封面右下角顯示目前播放器的小圖示",
+        "shapeDescription": "僅圓形封面支援播放時旋轉"
       },
       "elementOrder": {
         "title": "元素排列",
-        "description": "分別調整一般模式與歌詞模式中的元素順序",
+        "description": "拖曳調整順序，一般模式與歌詞模式分別儲存",
         "normal": "一般模式",
         "lyrics": "歌詞模式"
       },
       "progress": {
         "title": "進度列",
-        "description": "設定播放進度的顯示樣式與位置",
         "visible": "顯示進度列",
         "style": "進度樣式",
-        "styleDescription": "選擇水平、封面環形或覆蓋元件高度的漸層進度",
         "bar": "水平進度列",
         "coverRing": "封面環形",
         "gradient": "全高漸層",
         "position": "進度列位置",
-        "positionDescription": "將水平進度列放在元件頂部或底部",
         "top": "頂部",
-        "bottom": "底部"
+        "bottom": "底部",
+        "positionDescription": "僅條形進度支援頂部或底部位置"
       },
       "spectrum": {
         "title": "頻譜",
-        "description": "顯示目前播放器音訊的即時頻譜",
         "visible": "顯示頻譜",
         "visibleDescription": "關閉後會停止音訊擷取與頻譜計算",
         "barCount": "頻譜列數量",
-        "barCountDescription": "數量越少越簡潔，越多則能顯示更細緻的頻率變化",
         "width": "頻譜寬度",
         "widthDescription": "一般模式覆蓋內容，歌詞模式獨立佔用空間",
         "vertical": "垂直位置",
@@ -187,31 +175,26 @@
         "smoothing": "動態平滑",
         "smoothingDescription": "數值越高，動畫越平穩，但反應變化越慢",
         "frameRate": "幀率",
-        "frameRateDescription": "降低幀率可減少頻譜取樣、通訊與繪製開銷"
+        "frameRateDescription": "降低影格率可減少頻譜結果更新、通訊和繪製開銷"
       },
       "trackInfo": {
         "title": "歌曲資訊",
-        "description": "設定歌曲資訊的對齊與捲動方式",
         "visible": "顯示歌曲資訊",
         "visibleDescription": "關閉後隱藏歌名與歌手，並將空間留給其他元素",
-        "alignmentDescription": "調整歌名與歌手在可用區域內的對齊方式",
         "scroll": "歌名超出時捲動",
-        "scrollDescription": "關閉後，超出可用寬度的內容將以省略符號顯示",
+        "scrollDescription": "超出寬度時捲動；關閉或啟用減少動態效果後顯示刪節號",
         "speed": "捲動速度",
-        "speedDescription": "以每秒移動的像素數調整捲動速度",
         "mode": "捲動方式",
-        "modeDescription": "選擇歌名到達邊界後的捲動行為",
         "loop": "循環",
         "restart": "返回起點",
         "alternate": "往返捲動"
       },
       "lyrics": {
         "title": "歌詞",
-        "description": "設定工作列歌詞的內容、外觀與同步方式",
         "enabled": "開啟歌詞",
         "enabledDescription": "關閉後恢復顯示歌曲資訊與播放控制",
         "lines": "顯示行數",
-        "linesDescription": "選擇單行或雙行顯示；雙行模式可設定第二行內容",
+        "linesDescription": "雙行模式可單獨設定第二行內容",
         "single": "單行",
         "double": "雙行",
         "secondary": "第二行內容",
@@ -226,11 +209,9 @@
         "traditional": "繁體",
         "wordHighlight": "逐字醒目提示",
         "wordHighlightDescription": "僅對包含逐字時間軸的歌詞生效",
-        "alignmentDescription": "調整歌詞在可用區域內的水平位置",
         "size": "歌詞字級",
         "sizeDescription": "字級範圍為 10–18px；雙行模式會自動縮小行距",
         "colors": "歌詞顏色",
-        "colorsDescription": "跟隨元件主題色，或分別設定已播放與未播放顏色",
         "followTheme": "跟隨主題",
         "playedColor": "已播放顏色",
         "playedColorDescription": "逐字歌詞中已經播放的文字",
@@ -243,8 +224,7 @@
         "searchFonts": "搜尋系統字型…",
         "fontLoadFailed": "系統字型讀取失敗",
         "noFonts": "找不到字型",
-        "animation": "動畫效果",
-        "animationDescription": "選擇切換歌詞時的移動與淡入淡出效果",
+        "animation": "歌詞切換動畫",
         "animationPlaceholder": "選擇動畫",
         "animationUp": "向上移動",
         "animationFade": "原地漸隱漸顯",
@@ -252,7 +232,7 @@
         "preRollOn": "開啟：動畫在人聲開始前完成，節奏更緊湊；連續演唱時，上一句可能提前離場。",
         "preRollOff": "關閉：嚴格依時間戳記切換，動畫與人聲同時開始。",
         "offset": "時間偏移",
-        "offsetDescription": "校準歌詞時間；正值延後，負值提前，不影響動畫提前量",
+        "offsetDescription": "正值延後，負值提前；不影響動畫提前量",
         "network": "網路策略",
         "networkDescription": "選擇自動連線取得，或僅使用本機歌詞與現有快取",
         "localOnly": "僅本機與快取",
@@ -280,7 +260,7 @@
       },
       "theme": {
         "title": "元件主題色",
-        "description": "為進度列、頻譜與音量列選擇封面色、Windows 強調色或自訂顏色",
+        "description": "設定工作列元件的強調色",
         "cover": "封面主色",
         "system": "Windows 強調色",
         "presets": "候選顏色",
@@ -300,7 +280,6 @@
       "files": "{count} 個檔案",
       "cache": {
         "title": "歌詞快取",
-        "description": "管理 Muse Tune 儲存的歌詞快取",
         "clearCurrent": "清除目前歌曲",
         "refreshCurrent": "重新取得目前歌曲",
         "clearAll": "清除全部快取",
@@ -316,7 +295,6 @@
       },
       "config": {
         "title": "應用程式設定",
-        "description": "管理應用程式設定與使用者偏好",
         "reset": "重設應用程式設定",
         "resetConfirmTitle": "重設所有應用程式設定？",
         "resetConfirmDescription": "所有設定將恢復預設值，Muse Tune 隨後會自動重新啟動。此操作無法復原。",
@@ -325,7 +303,6 @@
       },
       "logs": {
         "title": "執行日誌",
-        "description": "檢視應用程式執行記錄與錯誤資訊",
         "clearHistory": "清除歷史日誌",
         "clearConfirmTitle": "清除歷史日誌？",
         "clearConfirmDescription": "已封存的歷史日誌將被刪除；目前日誌會保留並繼續記錄，無需重新啟動應用程式。",
@@ -334,23 +311,15 @@
     },
     "about": {
       "update": {
-        "title": "應用程式更新",
+        "title": "版本與更新",
         "versions": "目前 {current} · 最新 {latest}",
         "detected": "自動檢查發現版本 {version}",
-        "source": "從 GitHub Releases 取得穩定版本",
-        "releaseNotes": "查看版本資訊",
         "check": "檢查更新",
         "install": "下載並安裝",
         "portableAction": "下載可攜版",
         "portableDescription": "可攜版不會執行安裝程式；請下載新版壓縮檔，結束應用程式並覆蓋原檔。data 資料夾會保留現有設定、快取與日誌。",
         "downloading": "正在下載",
         "downloadingProgress": "正在下載 {progress}%",
-        "automatic": "自動檢查更新",
-        "automaticDescription": "應用程式執行時依所選頻率檢查新版本",
-        "frequency": "自動檢查頻率",
-        "daily": "每天",
-        "weekly": "每週",
-        "monthly": "每月",
         "downloadProgress": "更新下載進度",
         "latest": "已是最新版本",
         "available": "有新版本可用",
@@ -360,20 +329,30 @@
         "installConfirmDescription": "下載完成後，Muse Tune 將自動結束並安裝更新。是否繼續？",
         "installerFailed": "無法啟動安裝程式",
         "installFailed": "更新安裝失敗：{reason}",
-        "saveAutomaticFailed": "無法儲存自動檢查設定",
-        "saveFrequencyFailed": "無法儲存檢查頻率",
         "initializeFailed": "無法初始化更新設定",
         "notificationTitle": "Muse Tune 新版本可用",
         "notificationBody": "版本 {version} 已發布。前往「設定 → 關於」即可下載並安裝。",
         "notificationPortableBody": "版本 {version} 已發布。前往「設定 → 關於」下載新版可攜版並手動覆蓋。"
       },
       "project": {
-        "title": "專案與授權",
         "description": "開放原始碼軟體 · MIT 授權條款",
         "website": "官方網站",
-        "repository": "原始碼儲存庫",
-        "issues": "回報問題",
-        "openFailed": "無法在預設瀏覽器中開啟連結"
+        "openFailed": "無法在預設瀏覽器中開啟連結",
+        "createdBy": "開發者",
+        "changelog": "更新日誌"
+      },
+      "feedback": {
+        "title": "交流與回饋",
+        "description": "遇到問題，或有新的想法？選擇你喜歡的方式。",
+        "qq": "QQ 群交流",
+        "copy": "複製群號",
+        "copied": "已複製群號",
+        "copyFailed": "複製失敗，請手動複製群號",
+        "form": "線上回饋",
+        "formDescription": "提交問題或建議",
+        "openForm": "開啟表單",
+        "issuesDescription": "查看與討論公開問題",
+        "openIssues": "查看 Issues"
       }
     }
   },
@@ -397,7 +376,8 @@
     "openDirectory": "開啟資料夾",
     "continue": "繼續",
     "copied": "已複製",
-    "refresh": "重新整理"
+    "refresh": "重新整理",
+    "centerAligned": "置中"
   },
   "media": {
     "previous": "上一首",
@@ -414,7 +394,10 @@
   },
   "taskbar": {
     "player": "Muse Tune 工作列播放器",
-    "lyrics": { "current": "目前歌詞", "noLyrics": "暫無歌詞" },
+    "lyrics": {
+      "current": "目前歌詞",
+      "noLyrics": "暫無歌詞"
+    },
     "menu": {
       "normalCover": "一般模式封面",
       "lyricsCover": "歌詞模式封面",
@@ -494,7 +477,11 @@
       "miss": "未命中",
       "failed": "失敗"
     },
-    "issues": { "title": "目前問題", "count": "{count} 項", "none": "未發現異常" },
+    "issues": {
+      "title": "目前問題",
+      "count": "{count} 項",
+      "none": "未發現異常"
+    },
     "audio": {
       "title": "音訊能力",
       "description": "Windows 應用程式音訊工作階段與依程序頻譜擷取狀態",

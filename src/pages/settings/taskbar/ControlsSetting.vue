@@ -11,7 +11,7 @@ import {
   FieldGroup,
   FieldTitle,
 } from '@/components/ui/field'
-import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
+import { ItemContent, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -222,7 +222,6 @@ onMounted(() => {
     </ItemMedia>
     <ItemContent>
       <ItemTitle>{{ t('settings.taskbar.controls.title') }}</ItemTitle>
-      <ItemDescription>{{ t('settings.taskbar.controls.description') }}</ItemDescription>
     </ItemContent>
     <template #actions>
       <Switch

@@ -210,9 +210,13 @@ onUnmounted(() => unlistenSection?.())
       </header>
       <Separator />
 
-      <div class="settings-scrollbar flex-1 overflow-y-auto p-4">
+      <div class="settings-scrollbar flex-1 overflow-y-auto">
         <KeepAlive :max="navigationItems.length">
-          <component :is="activePanel" class="w-full" />
+          <component
+            :is="activePanel"
+            v-bind="activeSection === 'about' ? { applicationVersion } : {}"
+            class="w-full"
+          />
         </KeepAlive>
       </div>
     </SidebarInset>

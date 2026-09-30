@@ -9,7 +9,7 @@ import {
   FieldLabel,
   FieldTitle,
 } from '@/components/ui/field'
-import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
+import { ItemContent, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -61,7 +61,6 @@ const {
     </ItemMedia>
     <ItemContent>
       <ItemTitle>{{ t('settings.taskbar.trackInfo.title') }}</ItemTitle>
-      <ItemDescription>{{ t('settings.taskbar.trackInfo.description') }}</ItemDescription>
     </ItemContent>
     <template #actions>
       <Switch
@@ -97,9 +96,6 @@ const {
         >
           <FieldContent>
             <FieldTitle>{{ t('settings.taskbar.trackInfo.mode') }}</FieldTitle>
-            <FieldDescription>{{
-              t('settings.taskbar.trackInfo.modeDescription')
-            }}</FieldDescription>
           </FieldContent>
           <Tabs :model-value="selectedScrolling.mode" @update:model-value="selectScrollMode">
             <TabsList>
@@ -121,9 +117,6 @@ const {
         >
           <FieldContent>
             <FieldTitle>{{ t('settings.taskbar.trackInfo.speed') }}</FieldTitle>
-            <FieldDescription>{{
-              t('settings.taskbar.trackInfo.speedDescription')
-            }}</FieldDescription>
           </FieldContent>
           <div class="flex w-56 items-center gap-3">
             <Slider
@@ -145,9 +138,6 @@ const {
         <Field orientation="horizontal" :data-disabled="!selectedVisible">
           <FieldContent>
             <FieldTitle>{{ t('common.alignment') }}</FieldTitle>
-            <FieldDescription>{{
-              t('settings.taskbar.trackInfo.alignmentDescription')
-            }}</FieldDescription>
           </FieldContent>
           <Tabs :model-value="selectedAlignment" @update:model-value="selectAlignment">
             <TabsList>

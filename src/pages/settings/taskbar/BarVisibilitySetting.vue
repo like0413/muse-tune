@@ -1,14 +1,8 @@
 <script setup lang="ts">
 import { EyeOff } from '@lucide/vue'
 
-import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from '@/components/ui/field'
-import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
+import { Field, FieldContent, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { ItemContent, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
 import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
 import {
@@ -62,7 +56,6 @@ onMounted(loadPreference)
     </ItemMedia>
     <ItemContent>
       <ItemTitle>{{ t('settings.taskbar.autoHide.title') }}</ItemTitle>
-      <ItemDescription>{{ t('settings.taskbar.autoHide.description') }}</ItemDescription>
     </ItemContent>
 
     <template #content>
@@ -72,9 +65,6 @@ onMounted(loadPreference)
             <FieldLabel for="taskbar-hide-without-session">{{
               t('settings.taskbar.autoHide.noSession')
             }}</FieldLabel>
-            <FieldDescription>{{
-              t('settings.taskbar.autoHide.noSessionDescription')
-            }}</FieldDescription>
           </FieldContent>
           <Switch
             id="taskbar-hide-without-session"
@@ -89,9 +79,6 @@ onMounted(loadPreference)
             <FieldLabel for="taskbar-hide-when-paused">{{
               t('settings.taskbar.autoHide.paused')
             }}</FieldLabel>
-            <FieldDescription>{{
-              t('settings.taskbar.autoHide.pausedDescription')
-            }}</FieldDescription>
           </FieldContent>
           <Switch
             id="taskbar-hide-when-paused"

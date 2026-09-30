@@ -23,7 +23,13 @@
     "dialog:allow-message",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://github.com/like0413/muse-tune*" }]
+      "allow": [
+        { "url": "https://github.com/like0413/muse-tune*" },
+        { "url": "https://github.com/like0413" },
+        { "url": "https://musetune.like0413.cn" },
+        { "url": "https://musetune.like0413.cn/changelog/" },
+        { "url": "https://my.feishu.cn/share/base/form/shrcnn3ULhbTAYPtfst2h9fdSqf" }
+      ]
     },
     "settings-commands"
   ]

@@ -59,7 +59,7 @@ pub(super) fn migrate_legacy_entries_directory(cache_path: &Path) {
     }
 }
 
-/// 启动时仅清理旧版目录；未知目录和更高版本需保留，以支持安全回退。
+/// 启动时清理所有非当前版本目录；未知目录保持不变。
 pub(super) fn remove_obsolete_schema_directories(lyrics_path: &Path) {
     if let Err(error) = filesystem::ensure_directory(lyrics_path) {
         log::warn!("歌词缓存根目录边界检查失败: {error}");
@@ -83,11 +83,11 @@ pub(super) fn remove_obsolete_schema_directories(lyrics_path: &Path) {
         else {
             continue;
         };
-        if version >= LYRICS_CACHE_SCHEMA_VERSION {
+        if version == LYRICS_CACHE_SCHEMA_VERSION {
             continue;
         }
         if let Err(error) = fs::remove_dir_all(entry.path()) {
-            log::warn!("清理旧版歌词缓存 v{version} 失败: {error}");
+            log::warn!("清理非当前版本歌词缓存 v{version} 失败: {error}");
         }
     }
 }

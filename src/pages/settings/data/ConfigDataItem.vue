@@ -14,14 +14,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemFooter,
-  ItemTitle,
-} from '@/components/ui/item'
+import { Item, ItemActions, ItemContent, ItemFooter, ItemTitle } from '@/components/ui/item'
 import type { ConfigOverview } from '@/features/data-management/types'
 import { formatBytes } from '@/features/i18n/format'
 
@@ -46,7 +39,6 @@ const emit = defineEmits<{
         <FileCog class="size-4 text-amber-500" />
         {{ t('settings.data.config.title') }}
       </ItemTitle>
-      <ItemDescription>{{ t('settings.data.config.description') }}</ItemDescription>
     </ItemContent>
     <ItemActions>
       <AlertDialog>

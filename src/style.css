@@ -122,7 +122,7 @@
   --info: oklch(0.707 0.165 254.624);
   --info-foreground: oklch(0.145 0 0);
   --success: oklch(0.723 0.219 149.579);
-  --success-foreground: oklch(0.145 0 0);
+  --success-foreground: oklch(1 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: var(--brand);
@@ -174,15 +174,17 @@ html[data-reduce-motion] *::after {
   }
 }
 
-/* 为设置页预留稳定滚动槽位，并用主题变量统一亮色、暗色滚动条。 */
+/* Windows WebView2 使用固定宽度的滚动槽；槽位与内边距合计为四周统一的 20px。 */
 .settings-scrollbar {
-  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 45%, transparent) transparent;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
+  --settings-scrollbar-width: 8px;
+  --settings-content-padding: 20px;
+  scrollbar-gutter: stable both-edges;
+  padding-block: var(--settings-content-padding);
+  padding-inline: calc(var(--settings-content-padding) - var(--settings-scrollbar-width));
 }
 
 .settings-scrollbar::-webkit-scrollbar {
-  width: 8px;
+  width: var(--settings-scrollbar-width);
 }
 
 .settings-scrollbar::-webkit-scrollbar-track {

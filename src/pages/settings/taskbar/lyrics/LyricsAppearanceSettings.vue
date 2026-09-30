@@ -121,7 +121,6 @@ function selectNativeColor(key: EditableColor, event: Event) {
   <Field orientation="horizontal" :data-disabled="disabled">
     <FieldContent>
       <FieldTitle>{{ t('settings.taskbar.lyrics.colors') }}</FieldTitle>
-      <FieldDescription>{{ t('settings.taskbar.lyrics.colorsDescription') }}</FieldDescription>
     </FieldContent>
     <Tabs :model-value="settings.colorScheme" @update:model-value="selectColorScheme">
       <TabsList>

@@ -6,7 +6,7 @@ import type {
   TaskbarWidthMode,
 } from '@/features/taskbar/contracts'
 import { DEFAULT_BRAND_COLOR_HEX, DEFAULT_LYRICS_UNPLAYED_COLOR_HEX } from '@/features/theme/colors'
-import type { UpdateCheckFrequency, UpdateCheckResult } from '@/features/updater/settings'
+import type { UpdateCheckResult } from '@/features/updater/settings'
 
 import type { TaskbarAudioSpectrumSettings } from './audio-spectrum'
 import type { TaskbarBackgroundStyle } from './background-style'
@@ -90,13 +90,10 @@ export const DEFAULT_REDUCED_MOTION = false
 /** 禁用 GPU 加速默认关闭（保持硬件加速的渲染流畅度）。 */
 export const DEFAULT_DISABLE_GPU_ACCELERATION = false
 
-export const DEFAULT_AUTOMATIC_UPDATE_CHECK = true
-
-export const DEFAULT_UPDATE_CHECK_FREQUENCY: UpdateCheckFrequency = 'daily'
-
 export const DEFAULT_UPDATE_CHECK_RESULT: UpdateCheckResult = {
   checkedAt: 0,
   attemptedAt: 0,
+  consecutiveFailures: 0,
   availableVersion: null,
 }
 

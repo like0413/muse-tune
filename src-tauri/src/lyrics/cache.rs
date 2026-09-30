@@ -27,7 +27,7 @@ use freshness::{is_cacheable_status, is_fresh, needs_revalidation, now_seconds};
 use migration::{migrate_legacy_entries_directory, remove_obsolete_schema_directories};
 use pruning::{ensure_directory_boundary, prune_after_write};
 
-const MAX_CACHE_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_CACHE_TOTAL_BYTES: u64 = 1024 * 1024 * 1024;
 /// `write_generations` 表的上限：超过后裁剪最旧的写入记录，避免长时间切歌时单调增长。
 const MAX_WRITE_GENERATIONS: usize = 2048;
 /// 裁剪后保留的比例，防止在临界值附近反复触发裁剪。

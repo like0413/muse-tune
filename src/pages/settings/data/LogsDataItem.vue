@@ -14,14 +14,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemFooter,
-  ItemTitle,
-} from '@/components/ui/item'
+import { Item, ItemActions, ItemContent, ItemFooter, ItemTitle } from '@/components/ui/item'
 import type { LogsOverview } from '@/features/data-management/types'
 import { formatBytes } from '@/features/i18n/format'
 
@@ -48,7 +41,6 @@ const emit = defineEmits<{
         <ScrollText class="size-4 text-sky-500" />
         {{ t('settings.data.logs.title') }}
       </ItemTitle>
-      <ItemDescription>{{ t('settings.data.logs.description') }}</ItemDescription>
     </ItemContent>
     <ItemActions>
       <AlertDialog>

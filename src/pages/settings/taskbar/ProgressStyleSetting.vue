@@ -8,7 +8,7 @@ import {
   FieldGroup,
   FieldTitle,
 } from '@/components/ui/field'
-import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
+import { ItemContent, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { notifySettingSaveFailed, reportBackgroundFailure } from '@/features/feedback/errors'
@@ -197,7 +197,6 @@ onMounted(() => void loadProgressVisibilityAndPosition())
     </ItemMedia>
     <ItemContent>
       <ItemTitle>{{ t('settings.taskbar.progress.title') }}</ItemTitle>
-      <ItemDescription>{{ t('settings.taskbar.progress.description') }}</ItemDescription>
     </ItemContent>
     <template #actions>
       <Switch
@@ -212,9 +211,6 @@ onMounted(() => void loadProgressVisibilityAndPosition())
         <Field orientation="horizontal" :data-disabled="!selectedProgressVisible">
           <FieldContent>
             <FieldTitle>{{ t('settings.taskbar.progress.style') }}</FieldTitle>
-            <FieldDescription>{{
-              t('settings.taskbar.progress.styleDescription')
-            }}</FieldDescription>
           </FieldContent>
           <Tabs :model-value="selectedProgressStyle" @update:model-value="selectProgressStyle">
             <TabsList>

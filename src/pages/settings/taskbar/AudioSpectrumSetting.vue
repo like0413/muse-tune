@@ -8,7 +8,7 @@ import {
   FieldGroup,
   FieldTitle,
 } from '@/components/ui/field'
-import { ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
+import { ItemContent, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -56,7 +56,6 @@ const {
     </ItemMedia>
     <ItemContent>
       <ItemTitle>{{ t('settings.taskbar.spectrum.title') }}</ItemTitle>
-      <ItemDescription>{{ t('settings.taskbar.spectrum.description') }}</ItemDescription>
     </ItemContent>
     <template #actions>
       <Switch
@@ -96,9 +95,6 @@ const {
         <Field orientation="horizontal" :data-disabled="!selectedSettings.visible">
           <FieldContent>
             <FieldTitle>{{ t('settings.taskbar.spectrum.barCount') }}</FieldTitle>
-            <FieldDescription>{{
-              t('settings.taskbar.spectrum.barCountDescription')
-            }}</FieldDescription>
           </FieldContent>
           <div class="flex w-56 items-center gap-3">
             <Slider

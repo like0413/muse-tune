@@ -12,20 +12,8 @@ import {
   ItemHeader,
   ItemTitle,
 } from '@/components/ui/item'
-import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { getApplicationLocaleTag } from '@/features/i18n/locales'
-import { PROJECT_RELEASES_URL } from '@/features/project/metadata'
-import { isUpdateCheckFrequency, type UpdateCheckFrequency } from '@/features/updater/settings'
 import type { AvailableUpdateView, UpdateStatus } from '@/features/updater/types'
 
 const { locale, t } = useI18n({ useScope: 'global' })
@@ -37,10 +25,6 @@ const props = defineProps<{
   isDownloading: boolean
   update: AvailableUpdateView | null
   detectedVersion: string | null
-  automaticCheck: boolean
-  automaticCheckSaving: boolean
-  updateCheckFrequency: UpdateCheckFrequency
-  updateCheckFrequencySaving: boolean
   downloadProgress: number | null
   errorMessage: string | null
   isPortable: boolean
@@ -48,10 +32,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   check: []
-  openReleaseNotes: []
   install: []
-  updateAutomaticCheck: [enabled: boolean]
-  updateAutomaticCheckFrequency: [frequency: UpdateCheckFrequency]
 }>()
 
 const updateDate = computed(() => {
@@ -77,28 +58,21 @@ const installButtonLabel = computed(() => {
     progress: Math.round(props.downloadProgress),
   })
 })
-
-/** 仅接受选择器声明的三个检测周期。 */
-function selectUpdateCheckFrequency(value: unknown) {
-  if (isUpdateCheckFrequency(value)) {
-    emit('updateAutomaticCheckFrequency', value)
-  }
-}
 </script>
 
 <template>
-  <Item>
-    <ItemHeader>
+  <Item role="region" aria-labelledby="application-update">
+    <ItemHeader class="flex-wrap">
       <ItemContent>
         <div class="flex flex-wrap items-center gap-2">
-          <ItemTitle>
+          <ItemTitle id="application-update">
             <RefreshCw class="size-4 text-sky-500" />
             {{ t('settings.about.update.title') }}
           </ItemTitle>
           <Badge v-if="statusLabel" :variant="statusVariant">{{ statusLabel }}</Badge>
           <p v-if="errorMessage" class="text-destructive text-xs">{{ errorMessage }}</p>
         </div>
-        <ItemDescription>
+        <ItemDescription v-if="update || detectedVersion">
           <span>
             <template v-if="update">
               {{
@@ -112,11 +86,7 @@ function selectUpdateCheckFrequency(value: unknown) {
             <template v-else-if="detectedVersion">{{
               t('settings.about.update.detected', { version: detectedVersion })
             }}</template>
-            <template v-else>{{ t('settings.about.update.source') }}</template>
           </span>
-          <a :href="PROJECT_RELEASES_URL" @click.prevent="emit('openReleaseNotes')" class="ml-2">{{
-            t('settings.about.update.releaseNotes')
-          }}</a>
         </ItemDescription>
         <ItemDescription v-if="isPortable">
           {{ t('settings.about.update.portableDescription') }}
@@ -140,41 +110,11 @@ function selectUpdateCheckFrequency(value: unknown) {
         </Button>
       </ItemActions>
     </ItemHeader>
-    <ItemFooter class="flex-col items-stretch gap-3">
-      <Item variant="muted" class="w-full">
-        <ItemContent class="gap-0.5">
-          <Label for="automatic-update-check" class="text-sm">{{
-            t('settings.about.update.automatic')
-          }}</Label>
-          <ItemDescription>{{ t('settings.about.update.automaticDescription') }}</ItemDescription>
-        </ItemContent>
-        <ItemActions>
-          <Switch
-            id="automatic-update-check"
-            :model-value="automaticCheck"
-            :disabled="automaticCheckSaving || isDownloading"
-            @update:model-value="emit('updateAutomaticCheck', $event)"
-          />
-          <Select
-            :model-value="updateCheckFrequency"
-            :disabled="!automaticCheck || updateCheckFrequencySaving || isDownloading"
-            @update:model-value="selectUpdateCheckFrequency"
-          >
-            <SelectTrigger class="w-24" :aria-label="t('settings.about.update.frequency')">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="daily">{{ t('settings.about.update.daily') }}</SelectItem>
-                <SelectItem value="weekly">{{ t('settings.about.update.weekly') }}</SelectItem>
-                <SelectItem value="monthly">{{ t('settings.about.update.monthly') }}</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </ItemActions>
-      </Item>
+    <ItemFooter
+      v-if="isDownloading && downloadProgress !== null"
+      class="flex-col items-stretch gap-3"
+    >
       <Progress
-        v-if="isDownloading && downloadProgress !== null"
         :model-value="downloadProgress"
         :aria-label="t('settings.about.update.downloadProgress')"
       />
