@@ -3,12 +3,14 @@ import { createColor } from 'colorthief'
 import type { CSSProperties } from 'vue'
 
 import type { TaskbarCoverShape } from '@/features/settings/cover'
+import { useTaskbarPlaybackClock } from '@/features/taskbar/playback-clock'
 
 const props = defineProps<{
-  progress: number
   color: string
   shape: TaskbarCoverShape
 }>()
+
+const { progress } = useTaskbarPlaybackClock()
 
 /**
  * 描边中心线位于 32px 封面边界外 0.5px：2px 描边向内覆盖封面边缘 0.5px，
@@ -23,7 +25,7 @@ const SHAPE_PATHS: Record<TaskbarCoverShape, string> = {
 
 /** 将外部播放进度限制到 SVG 路径使用的 0–100 范围。 */
 const progressStyle = computed<CSSProperties>(() => ({
-  strokeDashoffset: 100 - Math.min(100, Math.max(0, props.progress)),
+  strokeDashoffset: 100 - Math.min(100, Math.max(0, progress.value)),
 }))
 
 /** 在 OKLCH 色环上旋转 180°，保留主题色原有的感知明度与色度。 */

@@ -14,10 +14,21 @@ export function useConvertedChineseTexts(
 ) {
   const convertedTexts = shallowRef<string[]>([])
   let revision = 0
+  let previousTexts: readonly string[] | undefined
+  let previousVariant: LyricsChineseVariant | undefined
 
   watch(
     [() => toValue(texts), () => toValue(chineseVariant)],
     async ([nextTexts, nextVariant]) => {
+      // 媒体快照更新不一定改变文字；内容相同就保留结果，避免重复 IPC 和简繁转换。
+      if (
+        nextVariant === previousVariant &&
+        previousTexts?.length === nextTexts.length &&
+        nextTexts.every((text, index) => text === previousTexts?.[index])
+      )
+        return
+      previousTexts = [...nextTexts]
+      previousVariant = nextVariant
       const currentRevision = ++revision
       const fallback = [...nextTexts]
       convertedTexts.value = fallback
@@ -28,6 +39,8 @@ export function useConvertedChineseTexts(
         if (revision === currentRevision) convertedTexts.value = converted
       } catch (error) {
         if (revision === currentRevision) {
+          // 失败不缓存，下次同内容快照仍可重试。
+          previousTexts = undefined
           reportRepeatedFailure('转换歌曲名与歌手简繁失败', error)
         }
       }

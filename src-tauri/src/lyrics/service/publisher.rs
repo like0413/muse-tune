@@ -103,10 +103,10 @@ impl LyricsService {
     }
 
     fn publish(&self, snapshot: LyricsSnapshot, resolution_method: LyricsResolutionMethod) {
-        let source_snapshot = snapshot.clone();
         let snapshot_changed = self.inner.runtime_state.write().map_or(true, |mut state| {
-            if state.source_snapshot != source_snapshot {
-                state.source_snapshot = source_snapshot;
+            // 后台校验常发布同一份结果，先比较再复制，避免等值歌词整份分配。
+            if state.source_snapshot != snapshot {
+                state.source_snapshot.clone_from(&snapshot);
             }
             let changed = state.snapshot != snapshot;
             if changed {

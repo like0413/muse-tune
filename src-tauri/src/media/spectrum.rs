@@ -189,6 +189,8 @@ fn capture_spectrum<R: Runtime>(
     let mut packet = Vec::new();
     let mut analyzer = SpectrumAnalyzer::new();
     let mut last_frame_at = Instant::now() - frame_interval;
+    let mut last_samples_at = Instant::now();
+    let mut frame_was_silent = true;
 
     while !stop.load(Ordering::Acquire) {
         // 本轮是否读到新音频包；没有新包时不再重复发射同一份陈旧频谱。
@@ -200,18 +202,53 @@ fn capture_spectrum<R: Runtime>(
             let packet_size = frame_count as usize * CHANNEL_COUNT * BYTES_PER_SAMPLE;
             packet.resize(packet_size, 0);
             let (read_frames, info) = capture_client.read_from_device(&mut packet)?;
+            if read_frames == 0 {
+                continue;
+            }
+            if info.flags.silent {
+                // WASAPI 已确认静音，无需逐样本写零或继续对零窗口做 FFT。
+                samples.clear();
+                has_new_samples = false;
+                if !frame_was_silent {
+                    analyzer.reset();
+                    emit_spectrum(app, &zero_frame());
+                    frame_was_silent = true;
+                }
+                continue;
+            }
             append_mono_samples(
                 &mut samples,
                 &packet[..read_frames as usize * CHANNEL_COUNT * BYTES_PER_SAMPLE],
-                info.flags.silent,
             );
+            last_samples_at = Instant::now();
             has_new_samples = true;
         }
 
-        // 暂停或无音频输出期间 samples 仍保留旧数据，继续做 FFT 并发射只会让前端反复重绘同一帧。
-        if has_new_samples && samples.len() == FFT_SIZE && last_frame_at.elapsed() >= frame_interval
+        // 暂停可能停止发包；在现有事件等待超时中清空旧窗口，静音只发送一次零帧。
+        if samples.is_empty()
+            || last_samples_at.elapsed() >= Duration::from_millis(STOP_CHECK_INTERVAL_MS.into())
         {
-            emit_spectrum(app, analyzer.analyze(&samples));
+            samples.clear();
+            analyzer.reset();
+            if !frame_was_silent {
+                emit_spectrum(app, &zero_frame());
+                frame_was_silent = true;
+            }
+        } else if has_new_samples
+            && samples.len() == FFT_SIZE
+            && last_frame_at.elapsed() >= frame_interval
+        {
+            if samples.iter().all(|sample| *sample == 0.0) {
+                // 未标 silent 的全零包同样不需要 FFT，防止暂停期持续驱动 IPC 与 Canvas。
+                analyzer.reset();
+                if !frame_was_silent {
+                    emit_spectrum(app, &zero_frame());
+                    frame_was_silent = true;
+                }
+            } else {
+                emit_spectrum(app, analyzer.analyze(&samples));
+                frame_was_silent = false;
+            }
             last_frame_at = Instant::now();
         }
 
@@ -224,20 +261,16 @@ fn capture_spectrum<R: Runtime>(
 }
 
 /// 将交错双声道 float32 数据折叠为单声道，并仅保留最新 FFT 窗口。
-fn append_mono_samples(samples: &mut VecDeque<f32>, packet: &[u8], silent: bool) {
+fn append_mono_samples(samples: &mut VecDeque<f32>, packet: &[u8]) {
     let (frames, _) = packet.as_chunks::<{ CHANNEL_COUNT * BYTES_PER_SAMPLE }>();
+    // 只解码最终保留的窗口；单包超过 FFT_SIZE 时，前面的样本本来也会被逐个淘汰。
+    let frames = &frames[frames.len().saturating_sub(FFT_SIZE)..];
+    let excess = (samples.len() + frames.len()).saturating_sub(FFT_SIZE);
+    samples.drain(..excess);
     for frame in frames {
-        let sample = if silent {
-            0.0
-        } else {
-            let left = f32::from_ne_bytes(frame[..4].try_into().unwrap_or_default());
-            let right = f32::from_ne_bytes(frame[4..8].try_into().unwrap_or_default());
-            (left + right) * 0.5
-        };
-        if samples.len() == FFT_SIZE {
-            samples.pop_front();
-        }
-        samples.push_back(sample);
+        let left = f32::from_ne_bytes(frame[..4].try_into().unwrap_or_default());
+        let right = f32::from_ne_bytes(frame[4..8].try_into().unwrap_or_default());
+        samples.push_back((left + right) * 0.5);
     }
 }
 
@@ -246,15 +279,23 @@ struct SpectrumAnalyzer {
     fft: Arc<dyn rustfft::Fft<f32>>,
     window: Vec<f32>,
     buffer: Vec<Complex<f32>>,
+    scratch: Vec<Complex<f32>>,
     band_ranges: Vec<Range<usize>>,
     smoothed: Vec<f32>,
 }
 
 impl SpectrumAnalyzer {
+    /// 静音后清除历史平滑，避免恢复采集时带回上一段音频能量。
+    fn reset(&mut self) {
+        self.smoothed.fill(0.0);
+    }
+
     /// 创建 Hann 窗与固定大小 FFT 计划。
     fn new() -> Self {
         let mut planner = FftPlanner::new();
         let fft = planner.plan_fft_forward(FFT_SIZE);
+        // process() 每帧创建临时 Vec；由官方 scratch API 复用与当前计划匹配的缓冲区。
+        let scratch = vec![Complex::default(); fft.get_inplace_scratch_len()];
         let window = (0..FFT_SIZE)
             .map(|index| {
                 0.5 - 0.5
@@ -276,6 +317,7 @@ impl SpectrumAnalyzer {
             fft,
             window,
             buffer: vec![Complex::default(); FFT_SIZE],
+            scratch,
             band_ranges,
             smoothed: zero_frame(),
         }
@@ -286,7 +328,8 @@ impl SpectrumAnalyzer {
         for ((output, sample), window) in self.buffer.iter_mut().zip(samples).zip(&self.window) {
             *output = Complex::new(sample * window, 0.0);
         }
-        self.fft.process(&mut self.buffer);
+        self.fft
+            .process_with_scratch(&mut self.buffer, &mut self.scratch);
 
         for (band, range) in self.band_ranges.iter().enumerate() {
             let power = self.buffer[range.clone()]

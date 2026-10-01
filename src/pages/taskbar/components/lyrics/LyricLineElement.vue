@@ -12,6 +12,7 @@ import {
 } from '@/features/lyrics/word-highlight'
 import { useReducedMotionPreference } from '@/features/motion/useReducedMotionPreference'
 import type { TaskbarLyricsAlignment } from '@/features/settings/lyrics'
+import { useTaskbarPlaybackClock } from '@/features/taskbar/playback-clock'
 
 /** 第二行字号比第一行小 2px，晋升到第一行时用缩放补出这段“由小变大”。 */
 const SECONDARY_FONT_SIZE_OFFSET = 2
@@ -32,7 +33,6 @@ const alignmentOrigins: Record<TaskbarLyricsAlignment, string> = {
 const props = defineProps<{
   line: DeepReadonly<LyricLine>
   text: string
-  positionMs: number
   primary: boolean
   wordHighlight: boolean
   animated: boolean
@@ -45,13 +45,14 @@ const props = defineProps<{
 const viewport = useTemplateRef<HTMLElement>('viewport')
 const textMeasure = useTemplateRef<HTMLElement>('textMeasure')
 const reducedMotion = useReducedMotionPreference()
+const { lyricsPositionMs } = useTaskbarPlaybackClock()
 const { width: viewportWidth } = useElementSize(viewport)
 // 测量实际渲染的逐字内容，宽度与字号变化时由 ResizeObserver 同步滚动边界。
 const { width: textWidth } = useElementSize(textMeasure)
 
 /** 当前歌词行的播放比例；异常时间范围的处理见 `resolveLineProgress`。 */
 const lineProgress = computed(() =>
-  resolveLineProgress(props.line.startMs, props.line.endMs, props.positionMs),
+  resolveLineProgress(props.line.startMs, props.line.endMs, positionMs.value),
 )
 
 /** 仅在歌词确实溢出时，于播放中段平滑滚动到行尾。 */
@@ -87,10 +88,17 @@ const renderWords = computed(() =>
   props.wordHighlight && props.text === props.line.text ? props.line.words : [],
 )
 
+/** 短纯文本和未高亮的第二行无需读取高频时钟；溢出行仍按原有时间轴滚动。 */
+const positionMs = computed(() =>
+  overflowDistance.value > 0 || (props.primary && renderWords.value.length > 0)
+    ? lyricsPositionMs.value
+    : props.line.startMs,
+)
+
 /** 逐字高亮状态；非主行不参与，避免翻译行被当前词的渐变染色。 */
 const highlight = computed<WordHighlightState>(() =>
   props.primary
-    ? resolveWordHighlightState(renderWords.value, props.positionMs)
+    ? resolveWordHighlightState(renderWords.value, positionMs.value)
     : { completedCount: 0, activeIndex: -1 },
 )
 const activeWordIndex = computed(() => highlight.value.activeIndex)
@@ -99,7 +107,7 @@ const activeWordIndex = computed(() => highlight.value.activeIndex)
 const activeWordStyle = computed<CSSProperties | undefined>(() => {
   const word = renderWords.value[activeWordIndex.value]
   if (!word) return undefined
-  const gradient = resolveWordGradient(props.positionMs, word)
+  const gradient = resolveWordGradient(positionMs.value, word)
   return {
     '--lyric-word-gradient-start': `${gradient.progressStart}%`,
     '--lyric-word-gradient-center': `${gradient.progressCenter}%`,
@@ -152,6 +160,11 @@ watch(
             <span
               v-for="(word, index) in renderWords"
               :key="`${word.startMs}-${index}`"
+              v-memo="[
+                word.text,
+                wordStateClass(index),
+                index === activeWordIndex ? activeWordStyle : undefined,
+              ]"
               class="lyric-word"
               :class="wordStateClass(index)"
               :style="index === activeWordIndex ? activeWordStyle : undefined"
@@ -186,18 +199,18 @@ watch(
   white-space: pre;
   background-clip: text;
   -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 .lyric-word-pending {
-  background-image: linear-gradient(var(--lyric-unplayed-color), var(--lyric-unplayed-color));
+  -webkit-text-fill-color: var(--lyric-unplayed-color);
 }
 
 .lyric-word-completed {
-  background-image: linear-gradient(var(--lyric-played-color), var(--lyric-played-color));
+  -webkit-text-fill-color: var(--lyric-played-color);
 }
 
 .lyric-word-active {
+  -webkit-text-fill-color: transparent;
   background-image: linear-gradient(
     to right,
     var(--lyric-word-gradient-start-color) 0%,

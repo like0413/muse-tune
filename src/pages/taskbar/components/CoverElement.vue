@@ -11,9 +11,10 @@ const props = defineProps<{
   session: MediaSessionSnapshot | null
   appearance: DeepReadonly<TaskbarCoverAppearance>
   thumbnailDataUrl: string | null
-  progress: number
   progressColor: string
   showProgressRing: boolean
+  /** 内容被自动隐藏或音量层遮挡时暂停旋转。 */
+  active: boolean
 }>()
 
 /** 依据保存的形状与播放状态生成封面图层类名。 */
@@ -25,7 +26,7 @@ const shapeClass = computed(() => ({
   'cover-rotation-paused':
     props.appearance.shape === 'circle' &&
     props.appearance.rotateWhenPlaying &&
-    props.session?.playback.status !== 'playing',
+    (!props.active || props.session?.playback.status !== 'playing'),
 }))
 </script>
 
@@ -38,12 +39,7 @@ const shapeClass = computed(() => ({
       <img v-if="thumbnailDataUrl" class="size-full object-cover" :src="thumbnailDataUrl" alt="" />
       <span v-else>♪</span>
     </div>
-    <CoverProgressRing
-      v-if="showProgressRing"
-      :progress="progress"
-      :color="progressColor"
-      :shape="appearance.shape"
-    />
+    <CoverProgressRing v-if="showProgressRing" :color="progressColor" :shape="appearance.shape" />
     <PlayerSourceBadge
       v-if="appearance.showPlayerSource && session"
       :player="session.player"

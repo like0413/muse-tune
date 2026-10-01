@@ -1,5 +1,6 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
+import type { DeepReadonly } from 'vue'
 
 import { reportBackgroundFailure } from '@/features/feedback/errors'
 
@@ -17,7 +18,7 @@ const EMPTY_LYRICS: LyricsSnapshot = {
 
 /** 同步 Rust 歌词服务的低频快照；播放进度由媒体 composable 单独提供。 */
 export function useLyrics(enabled: Readonly<Ref<boolean>> = ref(true)) {
-  const lyrics = shallowRef<LyricsSnapshot>(EMPTY_LYRICS)
+  const lyrics = shallowRef<DeepReadonly<LyricsSnapshot>>(EMPTY_LYRICS)
   let receivedEvent = false
   let disposed = false
   // 初始化代际号：关闭再开启会重跑一遍订阅与补取，代际号让上一代的监听与读取结果失效。
@@ -75,6 +76,7 @@ export function useLyrics(enabled: Readonly<Ref<boolean>> = ref(true)) {
   })
 
   return {
-    lyrics: readonly(lyrics),
+    // 快照整体替换，嵌套只读由类型约束；逐字高亮无需逐层经过代理读取时间戳。
+    lyrics: shallowReadonly(lyrics),
   }
 }

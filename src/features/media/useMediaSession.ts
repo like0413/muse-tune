@@ -1,5 +1,6 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
+import type { DeepReadonly } from 'vue'
 
 import { reportBackgroundFailure } from '@/features/feedback/errors'
 
@@ -13,8 +14,8 @@ import type { MediaControlAction, MediaSessionSnapshot, MediaTimeline } from './
 
 /** 同步 Windows 当前媒体会话，并提供串行基础播放控制。 */
 export function useMediaSession() {
-  const session = shallowRef<MediaSessionSnapshot | null>(null)
-  const timeline = shallowRef<MediaTimeline | null>(null)
+  const session = shallowRef<DeepReadonly<MediaSessionSnapshot> | null>(null)
+  const timeline = shallowRef<DeepReadonly<MediaTimeline> | null>(null)
   const controlPending = shallowRef(false)
   let receivedEvent = false
   let disposed = false
@@ -73,8 +74,9 @@ export function useMediaSession() {
   })
 
   return {
-    session: readonly(session),
-    timeline: readonly(timeline),
+    // 外部快照整体替换，嵌套只读由类型保证，避免重新给媒体数据套深层代理。
+    session: shallowReadonly(session),
+    timeline: shallowReadonly(timeline),
     controlPending: readonly(controlPending),
     control,
   }

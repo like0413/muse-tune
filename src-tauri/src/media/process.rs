@@ -76,8 +76,10 @@ pub(super) fn find_process_executable(process_ids: &HashSet<u32>) -> Option<Path
     }
 
     let mut system = System::new();
+    let candidates: Vec<Pid> = process_ids.iter().copied().map(Pid::from_u32).collect();
+    // 已知目标 PID 时只读取这些进程的路径与父 PID，避免为整张进程表查询可执行文件。
     system.refresh_processes_specifics(
-        ProcessesToUpdate::All,
+        ProcessesToUpdate::Some(&candidates),
         true,
         ProcessRefreshKind::nothing().with_exe(UpdateKind::OnlyIfNotSet),
     );

@@ -13,16 +13,17 @@ import {
 import type { LyricLine, LyricsSnapshot } from '@/features/lyrics/types'
 import { useReducedMotionPreference } from '@/features/motion/useReducedMotionPreference'
 import type { TaskbarLyricsSettings } from '@/features/settings/lyrics'
+import { useTaskbarPlaybackClock } from '@/features/taskbar/playback-clock'
 
 import LyricLineElement from './lyrics/LyricLineElement.vue'
 
 const props = defineProps<{
   lyrics: DeepReadonly<LyricsSnapshot>
-  positionMs: number
   settings: DeepReadonly<TaskbarLyricsSettings>
   themeColor: string
 }>()
 
+const { lyricsPositionMs } = useTaskbarPlaybackClock()
 const reducedMotion = useReducedMotionPreference()
 /** 减少动态效果时彻底跳过 Vue 过渡，避免零时长透明度状态产生闪烁。 */
 const lyricsAnimationEnabled = computed(
@@ -42,30 +43,17 @@ interface DisplayLine {
 /** 当前动画的切换时长；交叉淡化比位移动画更慢，见 `resolveTransitionDurationMs`。 */
 const transitionDurationMs = computed(() => resolveTransitionDurationMs(props.settings.animation))
 
-const currentLineIndex = computed(() =>
+// Vue 3.4+ 的 computed 会抑制等值通知；时钟每帧推进，行数据只在索引改变时更新。
+const activeLineIndex = computed(() =>
   resolveCurrentLineIndex(
     props.lyrics.lines,
-    props.positionMs,
+    lyricsPositionMs.value,
     resolveTransitionLeadMs(
       lyricsAnimationEnabled.value,
       props.settings.animationPreRoll,
       transitionDurationMs.value,
     ),
   ),
-)
-
-/**
- * 只在行号真正变化时更新。
- * `currentLineIndex` 依赖每帧变化的 `positionMs`，直接作为下游依赖会让行级数据与
- * 样式对象在播放中每帧重建；改由本引用驱动后，它们只在换行时重算。
- */
-const activeLineIndex = shallowRef(-1)
-watch(
-  currentLineIndex,
-  (index) => {
-    activeLineIndex.value = index
-  },
-  { immediate: true },
 )
 
 function currentSecondaryContent(index: number): SecondaryContent | undefined {
@@ -170,7 +158,6 @@ const displayStyle = computed<CSSProperties>(() => {
       :key="line.key"
       :line="line.line"
       :text="line.text"
-      :position-ms="positionMs"
       :primary="line.primary"
       :word-highlight="settings.wordHighlight"
       :animated="lyricsAnimationEnabled"

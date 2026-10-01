@@ -16,7 +16,7 @@ export function useAudioSpectrum(
     ...DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS,
   }),
 ) {
-  const sourceBands = shallowRef<number[]>(createSilentFrame())
+  const sourceBands = shallowRef<readonly number[]>(createSilentFrame())
   let captureEnabled = false
   let disposed = false
   let unlistenFrame: UnlistenFn | undefined
@@ -70,7 +70,8 @@ export function useAudioSpectrum(
 
   return {
     settings: readonly(settings),
-    sourceBands: readonly(sourceBands),
+    // 频谱帧整体替换，数组只读由类型约束；避免每帧频带读取经过深层代理。
+    sourceBands: shallowReadonly(sourceBands),
   }
 }
 

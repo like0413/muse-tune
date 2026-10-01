@@ -23,6 +23,7 @@ import { TASKBAR_WIDTH_PRESETS } from '@/features/settings/bar-width'
 import { isTaskbarCoverVisibleInMode } from '@/features/settings/cover'
 import { normalizeTaskbarElementOrder } from '@/features/settings/element-order'
 import { resolveLyricsChineseVariant } from '@/features/settings/lyrics'
+import { provideTaskbarPlaybackClock } from '@/features/taskbar/playback-clock'
 import { useTaskbarAutoHide } from '@/features/taskbar/useTaskbarAutoHide'
 import { useTaskbarCoverAppearance } from '@/features/taskbar/useTaskbarCoverAppearance'
 import { useTaskbarDisplayedThumbnail } from '@/features/taskbar/useTaskbarDisplayedThumbnail'
@@ -38,6 +39,7 @@ import CoverElement from './components/CoverElement.vue'
 import LyricsNoticeElement from './components/lyrics/LyricsNoticeElement.vue'
 import LyricsElement from './components/LyricsElement.vue'
 import PlaybackControlsElement from './components/PlaybackControlsElement.vue'
+import PlaybackProgressElement from './components/PlaybackProgressElement.vue'
 import TrackInfoElement from './components/TrackInfoElement.vue'
 import VolumeSliderOverlay from './components/VolumeSliderOverlay.vue'
 
@@ -136,6 +138,7 @@ const needsSmoothProgress = needsLyricsTimeline
 const needsProgress = computed(
   () =>
     taskbarContentVisible.value &&
+    !volumeOverlayVisible.value &&
     (progressVisible.value ||
       (spectrumSettings.value.visible && progressStyle.value === 'vertical-gradient') ||
       needsLyricsTimeline.value),
@@ -153,6 +156,7 @@ const lyricsPositionMs = computed(() =>
     positionMs.value - (timeline.value?.startTimeMs ?? 0) - lyricsSettings.value.timingOffsetMs,
   ),
 )
+provideTaskbarPlaybackClock({ progress, lyricsPositionMs })
 // 所有解析入口都要求有效播放器时间线；纯音乐结论本身不伪装成歌词行。
 const hasReliableLyricsTimeline = computed(() => timeline.value !== null)
 /** 不含 hover 的歌词模式资格，供音量层记录退出后应恢复的内容。 */
@@ -288,17 +292,6 @@ const rootStyle = computed<CSSProperties>(() => ({
   ...progressColorStyle.value,
 }))
 
-/** 用合成器缩放已播放区域，避免播放进度变化触发布局。 */
-const barProgressStyle = computed(() => ({
-  width: '100%',
-  transform: `scaleX(${progress.value / 100})`,
-  transformOrigin: 'left center',
-}))
-
-const progressBarPositionClass = computed(() =>
-  progressPosition.value === 'top' ? 'top-0' : 'bottom-0',
-)
-
 /** 显示最新音量；鼠标仍位于 bar 内时保持展示。 */
 function showVolumeOverlay() {
   volumeOverlayReturnsToLyrics.value = lyricsModeAvailable.value
@@ -371,15 +364,6 @@ async function togglePlayer() {
   }
 }
 
-/** 用贴近任务栏背景的同色系渐变标示已播放区域，避免与歌词颜色混在一起。 */
-const verticalProgressStyle = computed(() => ({
-  width: '100%',
-  transform: `scaleX(${progress.value / 100})`,
-  transformOrigin: 'left center',
-  background:
-    'linear-gradient(to right, transparent 0%, color-mix(in srgb, var(--taskbar-progress-color) 40%, var(--taskbar-background)) 100%)',
-}))
-
 onMounted(refreshCoverAnchors)
 </script>
 
@@ -427,7 +411,7 @@ onMounted(refreshCoverAnchors)
             v-else-if="element === 'track-info'"
             :title="trackTitle"
             :artist="trackArtist"
-            :active="!showLyrics"
+            :active="!showLyrics && taskbarContentVisible && !volumeOverlayVisible"
           />
           <PlaybackControlsElement
             v-else-if="element === 'controls'"
@@ -464,7 +448,6 @@ onMounted(refreshCoverAnchors)
             "
             :key="lyrics.trackKey ?? 'no-track'"
             :lyrics="lyrics"
-            :position-ms="lyricsPositionMs"
             :settings="lyricsSettings"
             :theme-color="progressColor"
           />
@@ -488,10 +471,10 @@ onMounted(refreshCoverAnchors)
         :style="coverMotionStyle"
       >
         <CoverElement
+          :active="taskbarContentVisible && !volumeOverlayVisible"
           :session="mediaSession"
           :appearance="coverAppearance"
           :thumbnail-data-url="displayedThumbnail?.source ?? null"
-          :progress="progress"
           :progress-color="progressColor"
           :show-progress-ring="
             Boolean(timeline) && progressVisible && progressStyle === 'cover-ring'
@@ -510,31 +493,14 @@ onMounted(refreshCoverAnchors)
       :settings="spectrumSettings"
       :theme-color="progressColor"
       :foreground-color="activeForegroundColor"
-      :progress="progress"
       :overlaps-progress-gradient="progressStyle === 'vertical-gradient'"
     />
 
-    <div
+    <PlaybackProgressElement
       v-if="!volumeOverlayVisible && timeline && progressVisible"
-      class="pointer-events-none absolute inset-0"
-      role="progressbar"
-      :aria-label="t('media.progress')"
-      aria-valuemin="0"
-      aria-valuemax="100"
-      :aria-valuenow="Math.round(progress)"
-    >
-      <div
-        v-if="progressStyle === 'bottom'"
-        class="absolute left-0 z-0 h-0.5 bg-(--taskbar-progress-color)"
-        :class="progressBarPositionClass"
-        :style="barProgressStyle"
-      />
-      <div
-        v-else-if="progressStyle === 'vertical-gradient'"
-        class="absolute inset-y-0 left-0 z-0"
-        :style="verticalProgressStyle"
-      />
-    </div>
+      :mode="progressStyle"
+      :position="progressPosition"
+    />
 
     <VolumeSliderOverlay
       v-if="volumeOverlayVisible"

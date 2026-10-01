@@ -1,4 +1,4 @@
-import { useIntervalFn, useRafFn } from '@vueuse/core'
+import { useDocumentVisibility, useIntervalFn } from '@vueuse/core'
 import type { DeepReadonly } from 'vue'
 
 import { computeProgressPercent, extrapolatePosition } from './progress'
@@ -15,6 +15,7 @@ export function useMediaProgress(
   smooth: Readonly<Ref<boolean>> = active,
 ) {
   const positionMs = shallowRef(0)
+  const documentVisibility = useDocumentVisibility()
   let anchorPositionMs = 0
   let anchorTime = performance.now()
 
@@ -28,36 +29,28 @@ export function useMediaProgress(
     )
   }
 
-  const { pause: pauseRaf, resume: resumeRaf } = useRafFn(
-    ({ timestamp }) => updatePosition(timestamp),
-    {
-      immediate: false,
-      // 逐字歌词仍需连续更新，但 20 FPS 已足够保持渐变平滑。
-      fpsLimit: 20,
-    },
-  )
-  const { pause: pauseInterval, resume: resumeInterval } = useIntervalFn(
-    () => updatePosition(),
-    // 进度条和频谱进度边界使用独立的 1 FPS 低频更新。
-    1000,
-    { immediate: false },
-  )
+  // 平滑模式仍维持 20 FPS；定时器直接按目标频率唤醒，避免高刷新率屏幕上 RAF 空转。
+  const interval = computed(() => (smooth.value ? 50 : 1000))
+  const { pause, resume } = useIntervalFn(() => updatePosition(), interval, { immediate: false })
 
-  /** 按当前视觉消费者选择平滑 RAF、低频定时器或完全休眠。 */
+  /** 只有可见消费者且正在播放时推进时钟。 */
   function synchronizeLoop() {
-    pauseRaf()
-    pauseInterval()
-    if (!active.value || !timeline.value || playbackStatus.value !== 'playing') return
-    if (smooth.value) resumeRaf()
-    else resumeInterval()
+    pause()
+    if (
+      active.value &&
+      documentVisibility.value === 'visible' &&
+      timeline.value &&
+      playbackStatus.value === 'playing'
+    )
+      resume()
   }
 
   /** 重新设置外推锚点，避免切换平滑与低频模式时产生跳变。 */
   function resynchronizePosition() {
     const now = performance.now()
+    updatePosition(now)
     anchorPositionMs = positionMs.value
     anchorTime = now
-    updatePosition(now)
   }
 
   watch(
@@ -84,11 +77,10 @@ export function useMediaProgress(
   )
 
   watch(
-    active,
-    (enabled) => {
-      if (!enabled) {
-        pauseRaf()
-        pauseInterval()
+    [active, documentVisibility],
+    ([enabled, visibility]) => {
+      if (!enabled || visibility !== 'visible') {
+        pause()
         return
       }
       resynchronizePosition()
