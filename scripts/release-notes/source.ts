@@ -107,11 +107,7 @@ export function collectSource(collectOnly: boolean) {
     files: git('diff', '--name-status', range),
     diff,
   }
-  if (JSON.stringify(source).length > 180_000) {
-    throw new Error(
-      'Release evidence exceeds 180000 characters. Split the release or prepare notes manually; evidence is never silently truncated.',
-    )
-  }
+  // 保留完整证据；字符数不等于模型 token 数，实际上下文限制由 API 校验。
   return source
 }
 

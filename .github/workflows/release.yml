@@ -115,7 +115,8 @@ jobs:
           }
 
   prepare-frontend:
-    needs: validate
+    # 发布说明通过后才开始编译，避免说明失败时仍消耗构建资源。
+    needs: [validate, release-notes]
     runs-on: windows-2025
     timeout-minutes: 15
     steps:
@@ -335,7 +336,7 @@ jobs:
           retention-days: 14
 
   build-portable:
-    needs: [validate, prepare-frontend]
+    needs: [validate, prepare-frontend, release-notes]
     runs-on: windows-2025
     timeout-minutes: 45
     steps:
