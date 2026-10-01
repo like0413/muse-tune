@@ -6,13 +6,14 @@ import type { LyricLine } from '@/features/lyrics/types'
 import {
   resolveLineProgress,
   resolveScrollProgress,
-  resolveWordGradient,
   resolveWordHighlightState,
   type WordHighlightState,
 } from '@/features/lyrics/word-highlight'
 import { useReducedMotionPreference } from '@/features/motion/useReducedMotionPreference'
 import type { TaskbarLyricsAlignment } from '@/features/settings/lyrics'
 import { useTaskbarPlaybackClock } from '@/features/taskbar/playback-clock'
+
+import LyricActiveWordElement from './LyricActiveWordElement.vue'
 
 /** 第二行字号比第一行小 2px，晋升到第一行时用缩放补出这段“由小变大”。 */
 const SECONDARY_FONT_SIZE_OFFSET = 2
@@ -96,32 +97,20 @@ const positionMs = computed(() =>
 )
 
 /** 逐字高亮状态；非主行不参与，避免翻译行被当前词的渐变染色。 */
-const highlight = computed<WordHighlightState>(() =>
-  props.primary
+const highlight = computed<WordHighlightState>((previous) => {
+  const next = props.primary
     ? resolveWordHighlightState(renderWords.value, positionMs.value)
-    : { completedCount: 0, activeIndex: -1 },
-)
-const activeWordIndex = computed(() => highlight.value.activeIndex)
-
-/** 只为当前播放词生成动态渐变变量，其余词复用静态 CSS。 */
-const activeWordStyle = computed<CSSProperties | undefined>(() => {
-  const word = renderWords.value[activeWordIndex.value]
-  if (!word) return undefined
-  const gradient = resolveWordGradient(positionMs.value, word)
-  return {
-    '--lyric-word-gradient-start': `${gradient.progressStart}%`,
-    '--lyric-word-gradient-center': `${gradient.progressCenter}%`,
-    '--lyric-word-gradient-end': `${gradient.progressEnd}%`,
-    '--lyric-word-gradient-start-color': `color-mix(in srgb, var(--lyric-played-color) ${gradient.startStrength}%, var(--lyric-unplayed-color))`,
-    '--lyric-word-gradient-center-color': `color-mix(in srgb, var(--lyric-played-color) ${gradient.centerStrength}%, var(--lyric-unplayed-color))`,
-    '--lyric-word-gradient-end-color': `color-mix(in srgb, var(--lyric-played-color) ${gradient.endStrength}%, var(--lyric-unplayed-color))`,
-  } as CSSProperties
+    : { completedCount: 0, activeIndex: -1 }
+  // 完整计算后再复用旧对象，让 Vue 在词内进度变化时跳过整行依赖更新。
+  return previous?.completedCount === next.completedCount &&
+    previous.activeIndex === next.activeIndex
+    ? previous
+    : next
 })
 
 /** 返回稳定类名，避免为非活动词创建样式对象。 */
 function wordStateClass(index: number) {
   if (index < highlight.value.completedCount) return 'lyric-word-completed'
-  if (index === highlight.value.activeIndex) return 'lyric-word-active'
   return 'lyric-word-pending'
 }
 
@@ -155,21 +144,16 @@ watch(
       :style="contentStyle"
     >
       <div class="lyric-line-track whitespace-pre" :class="trackClass" :style="trackStyle">
-        <span ref="textMeasure" class="inline-block w-max align-top">
+        <span
+          ref="textMeasure"
+          v-memo="[renderWords, text, highlight]"
+          class="inline-block w-max align-top"
+        >
           <template v-if="renderWords.length > 0">
-            <span
-              v-for="(word, index) in renderWords"
-              :key="`${word.startMs}-${index}`"
-              v-memo="[
-                word.text,
-                wordStateClass(index),
-                index === activeWordIndex ? activeWordStyle : undefined,
-              ]"
-              class="lyric-word"
-              :class="wordStateClass(index)"
-              :style="index === activeWordIndex ? activeWordStyle : undefined"
-              >{{ word.text }}</span
-            >
+            <template v-for="(word, index) in renderWords" :key="`${word.startMs}-${index}`">
+              <LyricActiveWordElement v-if="index === highlight.activeIndex" :word="word" />
+              <span v-else class="lyric-word" :class="wordStateClass(index)">{{ word.text }}</span>
+            </template>
           </template>
           <span v-else class="lyric-plain-text">{{ text }}</span>
         </span>
@@ -199,25 +183,15 @@ watch(
   white-space: pre;
   background-clip: text;
   -webkit-background-clip: text;
+  /* 与当前词保持同一绘制方式，避免切换到渐变时字形边缘出现明暗跳变。 */
+  -webkit-text-fill-color: transparent;
 }
 
 .lyric-word-pending {
-  -webkit-text-fill-color: var(--lyric-unplayed-color);
+  background-image: linear-gradient(var(--lyric-unplayed-color), var(--lyric-unplayed-color));
 }
 
 .lyric-word-completed {
-  -webkit-text-fill-color: var(--lyric-played-color);
-}
-
-.lyric-word-active {
-  -webkit-text-fill-color: transparent;
-  background-image: linear-gradient(
-    to right,
-    var(--lyric-word-gradient-start-color) 0%,
-    var(--lyric-word-gradient-start-color) var(--lyric-word-gradient-start),
-    var(--lyric-word-gradient-center-color) var(--lyric-word-gradient-center),
-    var(--lyric-word-gradient-end-color) var(--lyric-word-gradient-end),
-    var(--lyric-word-gradient-end-color) 100%
-  );
+  background-image: linear-gradient(var(--lyric-played-color), var(--lyric-played-color));
 }
 </style>

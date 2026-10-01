@@ -175,6 +175,8 @@ const requestDraw = useThrottleFn(
 
 /** 仅在尺寸变化时缓存频谱相对任务栏的位置，音频帧不读取布局。 */
 function refreshLayoutContext() {
+  // 只有竖向渐变需要频谱的相对坐标，普通模式无需读取布局。
+  if (!props.overlapsProgressGradient) return
   const element = wrapper.value
   if (!element) return
   const parent = element.parentElement
@@ -236,6 +238,7 @@ watch(
   () => [settings.value.alignment, props.overlapsProgressGradient],
   () => {
     pathNeedsUpdate = true
+    refreshLayoutContext()
     requestDraw()
   },
   { flush: 'post' },

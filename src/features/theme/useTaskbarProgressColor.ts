@@ -88,8 +88,11 @@ export function useTaskbarProgressColor(
   })
 
   // 主题色初值读取与变更事件都要重新取色，统一由这里触发。
-  watch(setting, () => void extractCoverColor())
-  watch(thumbnailDataUrl, () => void extractCoverColor())
+  // 合并同一轮曲目信息与来源变化；自定义颜色变化不触发封面解码。
+  watch(
+    [() => setting.value.source, thumbnailDataUrl, trackIdentity],
+    () => void extractCoverColor(),
+  )
   onUnmounted(() => {
     // 让仍在进行的取色请求作废，避免卸载后再写回结果。
     extractionRequestId += 1

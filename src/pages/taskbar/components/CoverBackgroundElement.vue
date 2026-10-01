@@ -69,8 +69,9 @@ watch(
       @transitionend.self="releaseInactiveSource(index, $event)"
     >
       <div
+        v-if="source"
         class="cover-image-blur absolute inset-0"
-        :style="source ? { backgroundImage: `url(${JSON.stringify(source)})` } : undefined"
+        :style="{ backgroundImage: `url(${JSON.stringify(source)})` }"
         aria-hidden="true"
       />
     </div>

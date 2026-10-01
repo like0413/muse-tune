@@ -13,7 +13,10 @@ import {
 import type { LyricLine, LyricsSnapshot } from '@/features/lyrics/types'
 import { useReducedMotionPreference } from '@/features/motion/useReducedMotionPreference'
 import type { TaskbarLyricsSettings } from '@/features/settings/lyrics'
-import { useTaskbarPlaybackClock } from '@/features/taskbar/playback-clock'
+import {
+  provideTaskbarPlaybackClock,
+  useTaskbarPlaybackClock,
+} from '@/features/taskbar/playback-clock'
 
 import LyricLineElement from './lyrics/LyricLineElement.vue'
 
@@ -21,13 +24,32 @@ const props = defineProps<{
   lyrics: DeepReadonly<LyricsSnapshot>
   settings: DeepReadonly<TaskbarLyricsSettings>
   themeColor: string
+  active: boolean
 }>()
 
-const { lyricsPositionMs } = useTaskbarPlaybackClock()
+const clock = useTaskbarPlaybackClock()
+/** 被普通层或音量层遮住时冻结歌词时钟；再次可见时直接追平当前进度。 */
+const lyricsPositionMs = computed<number>((previous) =>
+  props.active || previous === undefined ? clock.lyricsPositionMs.value : previous,
+)
+provideTaskbarPlaybackClock({ progress: clock.progress, lyricsPositionMs })
 const reducedMotion = useReducedMotionPreference()
 /** 减少动态效果时彻底跳过 Vue 过渡，避免零时长透明度状态产生闪烁。 */
 const lyricsAnimationEnabled = computed(
   () => props.settings.animation !== 'none' && !reducedMotion.value,
+)
+const resuming = shallowRef(false)
+/** 恢复显示时直接切到当前行，避免把冻结期间的旧句子做一次可见过渡。 */
+watch(
+  () => props.active,
+  (active) => {
+    if (!active) return
+    resuming.value = true
+    void nextTick(() => (resuming.value = false))
+  },
+)
+const transitionsEnabled = computed(
+  () => lyricsAnimationEnabled.value && props.active && !resuming.value,
 )
 
 interface DisplayLine {
@@ -150,7 +172,7 @@ const displayStyle = computed<CSSProperties>(() => {
     tag="div"
     class="lyric-display relative flex h-full min-w-0 flex-1 flex-col justify-start overflow-hidden"
     :name="transitionName"
-    :css="lyricsAnimationEnabled"
+    :css="transitionsEnabled"
     :style="displayStyle"
   >
     <LyricLineElement
@@ -160,7 +182,7 @@ const displayStyle = computed<CSSProperties>(() => {
       :text="line.text"
       :primary="line.primary"
       :word-highlight="settings.wordHighlight"
-      :animated="lyricsAnimationEnabled"
+      :animated="transitionsEnabled"
       :alignment="settings.alignment"
       :font-size="line.fontSize"
       :line-height="line.lineHeight"

@@ -29,14 +29,24 @@ const visibility = useEventState(
   { ...DEFAULT_TASKBAR_CONTROLS_VISIBILITY },
 )
 
-const isPlaying = computed(() => props.session?.playback.status === 'playing')
+const isPlaying = shallowRef(false)
+/** 切歌中的 changing 没有声明暂停，图标保持同一播放器上一状态；结束后立即同步。 */
+watch(
+  [() => props.session?.player ?? null, () => props.session?.playback.status ?? 'closed'],
+  ([player, status], [previousPlayer]) => {
+    if (player !== null && player === previousPlayer && status === 'changing') return
+    isPlaying.value = status === 'playing'
+  },
+  { immediate: true },
+)
 const controlSize = computed(() => (props.compact ? 'icon-xs' : 'icon-sm'))
 const canTogglePlayback = computed(() => {
   const playback = props.session?.playback
   if (!playback) return false
   return (
     playback.controls.canTogglePlayPause ||
-    (isPlaying.value ? playback.controls.canPause : playback.controls.canPlay)
+    // 图标的过渡保持仅影响展示，控制能力仍按系统原始状态判断。
+    (playback.status === 'playing' ? playback.controls.canPause : playback.controls.canPlay)
   )
 })
 

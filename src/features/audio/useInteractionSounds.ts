@@ -46,7 +46,7 @@ export function useInteractionSounds<const SoundName extends string>(
       })
       .then((encoded) => audioContext.decodeAudioData(encoded))
       .then((decoded) => {
-        if (!disposed && context === audioContext) buffers.set(name, decoded)
+        if (!disposed) buffers.set(name, decoded)
         return decoded
       })
       .finally(() => loadingBuffers.delete(name))
@@ -71,8 +71,7 @@ export function useInteractionSounds<const SoundName extends string>(
       idleTimer = undefined
       if (context !== audioContext) return
       fadeOutActiveVoice(audioContext.currentTime)
-      buffers.clear()
-      loadingBuffers.clear()
+      // AudioBuffer 可跨上下文复用；仅释放硬件资源，避免每次空闲后重新读取与解码。
       context = undefined
       void audioContext.close().catch(() => undefined)
     }, AUDIO_CONTEXT_IDLE_MS)

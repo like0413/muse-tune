@@ -1,9 +1,9 @@
 /**
  * GSMTC 会话的播放状态，与原生侧枚举一一对应。
  *
- * 前端只区分两种：`playing` 是唯一的“正在播放”判据（播放/暂停图标、封面旋转、歌词推进
- * 都只认它），`paused` 只被任务栏自动隐藏策略单独识别。其余 `closed` / `opened` /
- * `changing` / `stopped` / `unknown` 一律按“未在播放”处理，不区分也不显示。
+ * `playing` 是封面旋转、歌词推进等播放行为的唯一判据，`paused` 被自动隐藏策略单独识别。
+ * 播放按钮在同一播放器的 `changing` 过渡期间保留上一图标，原始状态和控制能力仍实时同步。
+ * 其余 `closed` / `opened` / `stopped` / `unknown` 均按“未在播放”处理。
  */
 export type MediaPlaybackStatus =
   | 'closed'

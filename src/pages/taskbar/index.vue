@@ -1,10 +1,5 @@
 <script setup lang="ts">
-import {
-  useElementBounding,
-  useElementHover,
-  useMutationObserver,
-  useThrottleFn,
-} from '@vueuse/core'
+import { useElementHover, useElementSize } from '@vueuse/core'
 import type { CSSProperties, VNodeRef } from 'vue'
 
 import { reportBackgroundFailure } from '@/features/feedback/errors'
@@ -26,6 +21,7 @@ import { resolveLyricsChineseVariant } from '@/features/settings/lyrics'
 import { provideTaskbarPlaybackClock } from '@/features/taskbar/playback-clock'
 import { useTaskbarAutoHide } from '@/features/taskbar/useTaskbarAutoHide'
 import { useTaskbarCoverAppearance } from '@/features/taskbar/useTaskbarCoverAppearance'
+import { useTaskbarCoverPosition } from '@/features/taskbar/useTaskbarCoverPosition'
 import { useTaskbarDisplayedThumbnail } from '@/features/taskbar/useTaskbarDisplayedThumbnail'
 import { useTaskbarTrayMenu } from '@/features/taskbar/useTaskbarTrayMenu'
 import { useTaskbarViewSettings } from '@/features/taskbar/useTaskbarViewSettings'
@@ -74,6 +70,7 @@ const { appearance: coverAppearance } = useTaskbarCoverAppearance()
 const taskbarRoot = useTemplateRef<HTMLElement>('taskbarRoot')
 const contentRoot = useTemplateRef<HTMLElement>('contentRoot')
 const normalLayer = useTemplateRef<HTMLElement>('normalLayer')
+const lyricsLayer = useTemplateRef<HTMLElement>('lyricsLayer')
 const normalCoverAnchor = shallowRef<HTMLElement | null>(null)
 const lyricsCoverAnchor = shallowRef<HTMLElement | null>(null)
 const volumeOverlayVisible = shallowRef(false)
@@ -104,8 +101,8 @@ const {
 const { visible: taskbarContentVisible } = useTaskbarAutoHide(mediaSession)
 // 必须测量根元素（视口）而不是 bar 内容容器：内容容器会被内容撑大（紧凑模式本身会改变内容宽度），
 // 用测量结果判断会形成死循环；同时 bar 窗口由原生 SetWindowPos 改尺寸，不一定派发 window resize 事件。
-const { width: barWindowWidth } = useElementBounding(document.documentElement, {
-  windowScroll: false,
+const { width: barWindowWidth } = useElementSize(document.documentElement, undefined, {
+  box: 'border-box',
 })
 // 宽度可能来自固定设置或自适应计算，因此按实际窗口宽度判断紧凑模式。
 // 窗口按 DPI 换算物理像素、WebView 再折回 CSS 像素时会有几 px 取整误差，需要容差。
@@ -194,10 +191,6 @@ const lyricsCoverVisible = computed(() =>
 const activeCoverVisible = computed(() =>
   showLyrics.value ? lyricsCoverVisible.value : normalCoverVisible.value,
 )
-// 锚点位于固定尺寸的 bar 窗口内，不随页面滚动变化，无需订阅全局 scroll。
-const contentBounds = useElementBounding(contentRoot, { windowScroll: false })
-const normalCoverBounds = useElementBounding(normalCoverAnchor, { windowScroll: false })
-const lyricsCoverBounds = useElementBounding(lyricsCoverAnchor, { windowScroll: false })
 useMediaSessionSelectionPolicy()
 useAutomaticUpdateMonitor()
 useTaskbarTrayMenu(() => ({
@@ -232,39 +225,24 @@ const activeSecondaryForegroundColor = computed(() =>
 
 /** 设置数组就是任务栏从左到右的最终 DOM 顺序。 */
 const resolvedElementOrder = computed(() => normalizeTaskbarElementOrder(elementOrder.value))
+const coverPosition = useTaskbarCoverPosition({
+  content: contentRoot,
+  layers: [normalLayer, lyricsLayer],
+  anchor: computed(() => (showLyrics.value ? lyricsCoverAnchor.value : normalCoverAnchor.value)),
+  enabled: activeCoverVisible,
+  layout: resolvedElementOrder,
+})
 
 /** 把唯一的真实封面移动到当前模式的锚点，两个内容层中不会产生封面副本。 */
 const coverMotionStyle = computed<CSSProperties>(() => {
-  const target = showLyrics.value ? lyricsCoverBounds : normalCoverBounds
-  const ready = activeCoverVisible.value && contentBounds.width.value > 0 && target.width.value > 0
-  if (!ready) return { opacity: 0 }
+  const position = coverPosition.value
+  if (!position) return { opacity: 0 }
 
   return {
     opacity: 1,
-    transform: `translate3d(${target.left.value - contentBounds.left.value}px, ${target.top.value - contentBounds.top.value}px, 0)`,
+    transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
   }
 })
-
-/**
- * 在排列、控件可见性或窗口尺寸变化后刷新两个封面锚点。
- * 普通层在歌词模式下仍保持挂载，其文本变动会持续触发子树变更，因此必须节流，
- * 否则每次变更都会产生 3 次强制布局读取。
- */
-const refreshCoverAnchors = useThrottleFn(
-  () => {
-    void nextTick(() => {
-      contentBounds.update()
-      normalCoverBounds.update()
-      lyricsCoverBounds.update()
-    })
-  },
-  100,
-  true,
-  true,
-)
-
-useMutationObserver(normalLayer, refreshCoverAnchors, { childList: true, subtree: true })
-watch([resolvedElementOrder, () => coverAppearance.value.visibility], refreshCoverAnchors)
 
 /** 封面模式使用不透明深色底层，白色前景不受系统模式和封面明度影响。 */
 const backgroundStyle = computed<CSSProperties>(() => ({
@@ -361,8 +339,6 @@ async function togglePlayer() {
     reportBackgroundFailure('开关当前播放器窗口失败', error)
   }
 }
-
-onMounted(refreshCoverAnchors)
 </script>
 
 <template>
@@ -422,6 +398,7 @@ onMounted(refreshCoverAnchors)
       </div>
 
       <div
+        ref="lyricsLayer"
         class="taskbar-mode-layer pointer-events-none"
         :class="[
           showLyrics ? 'opacity-100' : 'opacity-0',
@@ -448,6 +425,7 @@ onMounted(refreshCoverAnchors)
             :lyrics="lyrics"
             :settings="lyricsSettings"
             :theme-color="progressColor"
+            :active="showLyrics && !volumeOverlayVisible"
           />
           <LyricsNoticeElement
             v-else-if="
