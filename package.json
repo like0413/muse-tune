@@ -1,6 +1,6 @@
 {
   "name": "muse-tune",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "A Windows 11 taskbar media controller built with Vue and Tauri.",
   "keywords": [
