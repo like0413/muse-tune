@@ -26,6 +26,7 @@
   "type": "module",
   "scripts": {
     "dev": "vp dev",
+    "tauri:dev": "tauri dev --config src-tauri/config/development.json",
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vp preview",
     "build-only": "vp build",

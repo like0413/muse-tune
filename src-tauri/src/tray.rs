@@ -145,7 +145,12 @@ impl TrayMenu {
                     apply_result(self.menu.remove(&self.update), "托盘更新入口");
                     apply_result(self.menu.remove(&self.update_separator), "托盘更新分隔线");
                 }
-                apply_result(self.tray.set_tooltip(Some("MuseTune")), "托盘默认提示");
+                // 使用配置中的应用名，保证恢复默认提示时仍能区分开发版与正式版。
+                apply_result(
+                    self.tray
+                        .set_tooltip(Some(&self.tray.app_handle().package_info().name)),
+                    "托盘默认提示",
+                );
             }
         }
     }
@@ -261,7 +266,7 @@ pub(super) fn initialize(app: &App) -> tauri::Result<()> {
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
-        .tooltip("MuseTune")
+        .tooltip(&app.package_info().name)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| handle_menu_event(app, event.id().as_ref()));
     if let Some(icon) = app.default_window_icon() {

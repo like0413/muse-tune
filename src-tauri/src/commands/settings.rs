@@ -76,6 +76,8 @@ fn open_or_activate_settings_window(
     }
 
     let mut builder = WebviewWindowBuilder::from_config(app, &window_config)?;
+    // 窗口标题沿用配置中的应用名，让开发版设置窗口有明确的身份。
+    builder = builder.title(format!("{} 设置", app.package_info().name));
     if let Some(directory) = app.state::<StoragePaths>().webview_directory() {
         builder = builder.data_directory(directory.to_path_buf());
     }

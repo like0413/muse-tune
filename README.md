@@ -115,10 +115,14 @@ MuseTune 为下列 Windows 桌面播放器提供专用识别与适配：
 git clone https://github.com/like0413/muse-tune.git
 cd muse-tune
 vp install
-vp exec tauri dev
+vp run tauri:dev
 ```
 
-`vp exec tauri dev` 会自动启动前端开发服务和 Tauri 桌面应用。便携模式开发可使用 `vp exec tauri dev --features portable`。
+`vp run tauri:dev` 会自动启动前端开发服务和 Tauri 桌面应用，并通过 Tauri 官方的 `--config` 参数合并 `src-tauri/config/development.json`。便携模式开发可使用 `vp run tauri:dev --features portable`。
+
+开发版使用 `MuseTune Dev` 名称和 `com.like.musetune.dev` 标识，独立保存设置、缓存、日志和 WebView 数据，并使用独立的单实例锁及自启动项。原有正式版数据不会迁移到开发版。便携模式仍在开发可执行文件旁的 `data/` 目录保存数据。
+
+请使用上述脚本启动隔离后的开发版；直接运行 `vp exec tauri dev` 不会加载开发配置。普通开发进程使用 Cargo 的 `muse-tune.exe` 名称，正式版安装进程为 `MuseTune.exe`；`mainBinaryName` 仅指定打包产物名称。两版同时显示任务栏组件时可能重叠，可在开发版设置中调整位置或偏移。
 
 如果只需要调试 Vue 前端，可运行 `vp dev`，地址为 `http://localhost:21480`；媒体会话、音量、歌词和任务栏集成等原生能力需要在 Tauri 中验证。
 

@@ -1,0 +1,6 @@
+{
+  "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "MuseTune Dev",
+  "mainBinaryName": "MuseTune-Dev",
+  "identifier": "com.like.musetune.dev"
+}
