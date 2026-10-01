@@ -147,7 +147,7 @@ fn collect_issues(
     if taskbar.detected_display_count == 0 {
         issues.push(issue("任务栏", "没有检测到 Windows 任务栏显示器", true));
     } else if taskbar.bar_window_count == 0 {
-        issues.push(issue("任务栏", "尚未创建 Muse Tune Bar 窗口", false));
+        issues.push(issue("任务栏", "尚未创建 MuseTune Bar 窗口", false));
     }
     if let Some(error) = media.runtime_error.as_deref() {
         issues.push(issue("媒体", error, true));

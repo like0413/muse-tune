@@ -18,7 +18,7 @@ pub struct LyricsResolutionStep {
     pub parallel: bool,
 }
 
-/// Muse Tune 规范化歌词缓存的磁盘状态。
+/// MuseTune 规范化歌词缓存的磁盘状态。
 #[derive(Clone, Debug, Default, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LyricsCacheDiagnostics {

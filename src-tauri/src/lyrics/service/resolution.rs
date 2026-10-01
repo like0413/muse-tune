@@ -189,7 +189,7 @@ impl LyricsService {
                     return;
                 }
 
-                // Spotify 没有对应的官方在线适配器；Muse Tune 缓存已可直接展示时，
+                // Spotify 没有对应的官方在线适配器；MuseTune 缓存已可直接展示时，
                 // 再向其他平台检索只会重复匹配同一歌曲，并增加请求与歌词跳变风险。
                 if track.player == crate::media::MediaPlayer::Spotify {
                     return;

@@ -68,7 +68,7 @@ fn parse_lines(
     Ok(lines)
 }
 
-/// 把第三方解析库的数据收敛为 Muse Tune 的稳定模型。
+/// 把第三方解析库的数据收敛为 MuseTune 的稳定模型。
 pub fn normalize_parsed_lines(data: LyricsData) -> Vec<LyricLine> {
     let mut lines = data
         .lines

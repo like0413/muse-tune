@@ -172,7 +172,7 @@ onUnmounted(() => unlistenSection?.())
                 <img :src="appIconUrl" alt="" class="size-full object-contain" />
               </div>
               <span class="grid flex-1 text-left leading-tight">
-                <span class="truncate font-semibold">Muse Tune</span>
+                <span class="truncate font-semibold">MuseTune</span>
                 <span class="text-muted-foreground truncate text-xs"
                   >v{{ applicationVersion }}</span
                 >

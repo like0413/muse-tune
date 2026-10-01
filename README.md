@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="./src-tauri/icons/app-icon.png" alt="Muse Tune 图标" width="112" />
+<img src="./src-tauri/icons/app-icon.png" alt="MuseTune 图标" width="112" />
 
-# Muse Tune
+# MuseTune
 
 把正在播放的音乐带到 Windows 11 任务栏。
 
@@ -15,10 +15,10 @@
 
 </div>
 
-Muse Tune 是一款面向 Windows 11 的任务栏媒体控制器。它通过 Windows 系统媒体会话读取当前歌曲，在任务栏中展示封面、歌曲信息、歌词、播放进度和实时频谱，并提供常用播放控制。
+MuseTune 是一款面向 Windows 11 的任务栏媒体控制器。它通过 Windows 系统媒体会话读取当前歌曲，在任务栏中展示封面、歌曲信息、歌词、播放进度和实时频谱，并提供常用播放控制。
 
 > [!NOTE]
-> Muse Tune 依赖播放器向 Windows 发布媒体会话。歌曲信息、进度和控制能力以播放器实际提供的内容为准。
+> MuseTune 依赖播放器向 Windows 发布媒体会话。歌曲信息、进度和控制能力以播放器实际提供的内容为准。
 
 ## 功能亮点
 
@@ -44,8 +44,8 @@ Muse Tune 是一款面向 Windows 11 的任务栏媒体控制器。它通过 Win
 便携版首次运行会在 `MuseTune.exe` 相邻位置创建 `data/`，其中分别保存 `config/`、`cache/`、`logs/` 和 `webview/`。移动便携版时请连同 `data/` 一起移动；更新时退出应用、覆盖 `MuseTune.exe`，不要删除 `data/`。便携版可以检查新版本，但不会自动运行安装器，更新按钮会打开 Releases 下载页。
 
 1. 在受支持的播放器中开始播放音乐。
-2. Muse Tune 会自动选择媒体会话，并在任务栏中显示播放器。
-3. 右键单击系统托盘中的 Muse Tune 图标可打开设置、切换常用显示项、重启或退出应用。
+2. MuseTune 会自动选择媒体会话，并在任务栏中显示播放器。
+3. 右键单击系统托盘中的 MuseTune 图标可打开设置、切换常用显示项、重启或退出应用。
 4. 在设置中调整任务栏位置、布局、歌词、主题、频谱和播放器选择策略。
 
 > [!TIP]
@@ -53,7 +53,7 @@ Muse Tune 是一款面向 Windows 11 的任务栏媒体控制器。它通过 Win
 
 ## 支持的播放器
 
-Muse Tune 为下列 Windows 桌面播放器提供专用识别与适配：
+MuseTune 为下列 Windows 桌面播放器提供专用识别与适配：
 
 | 播放器     | 媒体控制 | 播放器本地歌词缓存 | 在线歌词 |
 | ---------- | :------: | :----------------: | :------: |

@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Muse Tune",
+  "productName": "MuseTune",
   "mainBinaryName": "MuseTune",
   "version": "1.0.0",
   "identifier": "com.like.musetune",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "taskbar",
-        "title": "Muse Tune",
+        "title": "MuseTune",
         "url": "index.html#/taskbar",
         "width": 300,
         "height": 48,
@@ -29,7 +29,7 @@
       },
       {
         "label": "settings",
-        "title": "Muse Tune 设置",
+        "title": "MuseTune 设置",
         "url": "index.html#/settings",
         "width": 960,
         "height": 680,
@@ -73,7 +73,7 @@
     "createUpdaterArtifacts": true,
     "targets": ["nsis"],
     "shortDescription": "Windows 11 任务栏媒体控制器",
-    "longDescription": "Muse Tune 可在 Windows 11 任务栏中显示并控制当前系统媒体会话。",
+    "longDescription": "MuseTune 可在 Windows 11 任务栏中显示并控制当前系统媒体会话。",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

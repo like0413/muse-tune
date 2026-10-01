@@ -24,7 +24,7 @@ const { openProjectUrl } = useProjectLinks()
     <div class="flex min-w-0 flex-col items-center gap-2">
       <div class="flex flex-col gap-1.5">
         <div class="flex flex-wrap items-baseline justify-center gap-2">
-          <h2 id="project-name" class="text-xl font-semibold tracking-tight">Muse Tune</h2>
+          <h2 id="project-name" class="text-xl font-semibold tracking-tight">MuseTune</h2>
           <span
             v-if="applicationVersion !== '—'"
             class="text-muted-foreground text-sm tabular-nums"

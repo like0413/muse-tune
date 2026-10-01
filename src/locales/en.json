@@ -67,8 +67,8 @@
       },
       "overlap": {
         "title": "Overlap priority",
-        "description": "When space is limited, let Muse Tune overlap taskbar items or clip it to avoid them",
-        "bar": "Muse Tune first",
+        "description": "When space is limited, let MuseTune overlap taskbar items or clip it to avoid them",
+        "bar": "MuseTune first",
         "taskbar": "Taskbar items first"
       },
       "autoHide": {
@@ -245,7 +245,7 @@
       },
       "mediaSession": {
         "title": "Player selection",
-        "description": "Choose which player Muse Tune displays when multiple media sessions are available",
+        "description": "Choose which player MuseTune displays when multiple media sessions are available",
         "strategy": "Selection strategy",
         "strategyDescription": "Most recently played switches only when a player starts playback; simply opening an app does not take over",
         "placeholder": "Select a strategy",
@@ -289,15 +289,15 @@
         "fileCount": "lyrics cache entries",
         "capacity": "Lyrics cache usage",
         "currentCleared": "Current song cache cleared",
-        "currentClearedDescription": "The current song's lyrics were removed from the Muse Tune cache",
+        "currentClearedDescription": "The current song's lyrics were removed from the MuseTune cache",
         "refreshStarted": "Started refreshing current lyrics",
-        "refreshStartedDescription": "Muse Tune will run the complete retrieval process again using the current network settings"
+        "refreshStartedDescription": "MuseTune will run the complete retrieval process again using the current network settings"
       },
       "config": {
         "title": "App settings",
         "reset": "Reset app settings",
         "resetConfirmTitle": "Reset all app settings?",
-        "resetConfirmDescription": "All settings will return to their defaults and Muse Tune will restart. This cannot be undone.",
+        "resetConfirmDescription": "All settings will return to their defaults and MuseTune will restart. This cannot be undone.",
         "resetAndRestart": "Reset and restart",
         "fileSize": "Settings file"
       },
@@ -317,7 +317,7 @@
         "check": "Check for updates",
         "install": "Download and install",
         "portableAction": "Download portable build",
-        "portableDescription": "The portable build does not run an installer. Download the new archive, exit Muse Tune, and replace the existing executable. The data folder keeps your settings, cache, and logs.",
+        "portableDescription": "The portable build does not run an installer. Download the new archive, exit MuseTune, and replace the existing executable. The data folder keeps your settings, cache, and logs.",
         "downloading": "Downloading",
         "downloadingProgress": "Downloading {progress}%",
         "downloadProgress": "Update download progress",
@@ -326,11 +326,11 @@
         "checkFailed": "Could not check for updates",
         "openReleaseNotesFailed": "Could not open release notes",
         "installConfirmTitle": "Install update",
-        "installConfirmDescription": "After the download finishes, Muse Tune will close and install the update. Continue?",
+        "installConfirmDescription": "After the download finishes, MuseTune will close and install the update. Continue?",
         "installerFailed": "Could not start the installer",
         "installFailed": "Update installation failed: {reason}",
         "initializeFailed": "Could not initialize update settings",
-        "notificationTitle": "A Muse Tune update is available",
+        "notificationTitle": "A MuseTune update is available",
         "notificationBody": "Version {version} is available. Open Settings → About to download and install it.",
         "notificationPortableBody": "Version {version} is available. Open Settings → About to download the new portable archive and replace it manually."
       },
@@ -393,7 +393,7 @@
     "systemVolume": "System master volume"
   },
   "taskbar": {
-    "player": "Muse Tune taskbar player",
+    "player": "MuseTune taskbar player",
     "lyrics": {
       "current": "Current lyrics",
       "noLyrics": "No lyrics available"
@@ -404,7 +404,7 @@
       "lyrics": "Enable lyrics",
       "spectrum": "Show spectrum",
       "updateAvailable": "Update available: v{version}",
-      "updateTooltip": "Muse Tune · Update v{version} available",
+      "updateTooltip": "MuseTune · Update v{version} available",
       "settings": "Open settings",
       "restart": "Restart app",
       "restartProductionOnly": "Restart app (release builds only)",
@@ -442,7 +442,7 @@
       "noLyrics": "No lyrics",
       "unavailable": "Unavailable",
       "error": "Error",
-      "applicationCache": "Muse Tune cache hit",
+      "applicationCache": "MuseTune cache hit",
       "playerCache": "Player local cache",
       "onlineFetch": "Fetched online",
       "wordPrecision": "Word-synced",
@@ -495,7 +495,7 @@
     },
     "taskbar": {
       "title": "Taskbar",
-      "description": "Windows taskbar detection and Muse Tune Bar window status",
+      "description": "Windows taskbar detection and MuseTune Bar window status",
       "displays": "Taskbar displays",
       "windows": "Bar windows",
       "visibleWindows": "Visible Bars",
@@ -503,7 +503,7 @@
       "target": "Display target",
       "placement": "Dock position",
       "overlap": "Overlap policy",
-      "barPriority": "Muse Tune first",
+      "barPriority": "MuseTune first",
       "systemPriority": "System taskbar elements first",
       "logicalWidth": "Logical width",
       "horizontalOffset": "Horizontal offset",
@@ -581,7 +581,7 @@
       "resolutionChain": "Resolution chain",
       "parallelCount": "{count} concurrent",
       "sites": {
-        "applicationCache": "Muse Tune cache",
+        "applicationCache": "MuseTune cache",
         "applicationCacheVariant": "Cached lyric script conversion",
         "local": "Current player local",
         "online": "Current player online",

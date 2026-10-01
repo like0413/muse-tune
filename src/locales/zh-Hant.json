@@ -289,7 +289,7 @@
         "fileCount": "歌詞快取項目",
         "capacity": "歌詞快取用量",
         "currentCleared": "已清除目前歌曲快取",
-        "currentClearedDescription": "目前歌曲的歌詞已從 Muse Tune 快取中移除",
+        "currentClearedDescription": "目前歌曲的歌詞已從 MuseTune 快取中移除",
         "refreshStarted": "已開始重新取得目前歌詞",
         "refreshStartedDescription": "將依照目前連線策略重新執行完整取得流程"
       },
@@ -297,7 +297,7 @@
         "title": "應用程式設定",
         "reset": "重設應用程式設定",
         "resetConfirmTitle": "重設所有應用程式設定？",
-        "resetConfirmDescription": "所有設定將恢復預設值，Muse Tune 隨後會自動重新啟動。此操作無法復原。",
+        "resetConfirmDescription": "所有設定將恢復預設值，MuseTune 隨後會自動重新啟動。此操作無法復原。",
         "resetAndRestart": "重設並重新啟動",
         "fileSize": "設定檔"
       },
@@ -326,11 +326,11 @@
         "checkFailed": "無法檢查更新",
         "openReleaseNotesFailed": "無法開啟版本資訊",
         "installConfirmTitle": "安裝更新",
-        "installConfirmDescription": "下載完成後，Muse Tune 將自動結束並安裝更新。是否繼續？",
+        "installConfirmDescription": "下載完成後，MuseTune 將自動結束並安裝更新。是否繼續？",
         "installerFailed": "無法啟動安裝程式",
         "installFailed": "更新安裝失敗：{reason}",
         "initializeFailed": "無法初始化更新設定",
-        "notificationTitle": "Muse Tune 新版本可用",
+        "notificationTitle": "MuseTune 新版本可用",
         "notificationBody": "版本 {version} 已發布。前往「設定 → 關於」即可下載並安裝。",
         "notificationPortableBody": "版本 {version} 已發布。前往「設定 → 關於」下載新版可攜版並手動覆蓋。"
       },
@@ -393,7 +393,7 @@
     "systemVolume": "系統主音量"
   },
   "taskbar": {
-    "player": "Muse Tune 工作列播放器",
+    "player": "MuseTune 工作列播放器",
     "lyrics": {
       "current": "目前歌詞",
       "noLyrics": "暫無歌詞"
@@ -404,7 +404,7 @@
       "lyrics": "開啟歌詞",
       "spectrum": "顯示頻譜",
       "updateAvailable": "發現新版本 v{version}",
-      "updateTooltip": "Muse Tune · 有新版本 v{version}",
+      "updateTooltip": "MuseTune · 有新版本 v{version}",
       "settings": "開啟設定",
       "restart": "重新啟動應用程式",
       "restartProductionOnly": "重新啟動應用程式（正式版可用）",
@@ -442,7 +442,7 @@
       "noLyrics": "沒有歌詞",
       "unavailable": "不可用",
       "error": "錯誤",
-      "applicationCache": "Muse Tune 快取命中",
+      "applicationCache": "MuseTune 快取命中",
       "playerCache": "播放器本機快取",
       "onlineFetch": "線上重新取得",
       "wordPrecision": "逐字",
@@ -495,7 +495,7 @@
     },
     "taskbar": {
       "title": "工作列",
-      "description": "Windows 工作列偵測結果和 Muse Tune Bar 視窗狀態",
+      "description": "Windows 工作列偵測結果和 MuseTune Bar 視窗狀態",
       "displays": "工作列顯示器",
       "windows": "Bar 視窗",
       "visibleWindows": "可見 Bar",
@@ -503,7 +503,7 @@
       "target": "顯示目標",
       "placement": "停靠位置",
       "overlap": "遮擋策略",
-      "barPriority": "Muse Tune 優先",
+      "barPriority": "MuseTune 優先",
       "systemPriority": "系統工作列元素優先",
       "logicalWidth": "邏輯寬度",
       "horizontalOffset": "水平偏移",
@@ -581,7 +581,7 @@
       "resolutionChain": "解析鏈路",
       "parallelCount": "{count} 項並行",
       "sites": {
-        "applicationCache": "Muse Tune 快取",
+        "applicationCache": "MuseTune 快取",
         "applicationCacheVariant": "快取歌詞簡繁轉換",
         "local": "目前播放器本機",
         "online": "目前播放器線上",

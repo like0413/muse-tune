@@ -289,7 +289,7 @@
         "fileCount": "歌词缓存条目",
         "capacity": "歌词缓存用量",
         "currentCleared": "已清除当前歌曲缓存",
-        "currentClearedDescription": "当前歌曲的歌词已从 Muse Tune 缓存中移除",
+        "currentClearedDescription": "当前歌曲的歌词已从 MuseTune 缓存中移除",
         "refreshStarted": "已开始重新获取当前歌词",
         "refreshStartedDescription": "将按照当前联网策略重新执行完整获取流程"
       },
@@ -297,7 +297,7 @@
         "title": "应用配置",
         "reset": "重置应用设置",
         "resetConfirmTitle": "重置所有应用设置？",
-        "resetConfirmDescription": "所有设置将恢复默认值，Muse Tune 随后会自动重启。此操作无法撤销。",
+        "resetConfirmDescription": "所有设置将恢复默认值，MuseTune 随后会自动重启。此操作无法撤销。",
         "resetAndRestart": "重置并重启",
         "fileSize": "配置文件"
       },
@@ -326,11 +326,11 @@
         "checkFailed": "无法检查更新",
         "openReleaseNotesFailed": "无法打开发行说明",
         "installConfirmTitle": "安装更新",
-        "installConfirmDescription": "下载完成后，Muse Tune 将自动退出并安装更新。是否继续？",
+        "installConfirmDescription": "下载完成后，MuseTune 将自动退出并安装更新。是否继续？",
         "installerFailed": "无法启动安装程序",
         "installFailed": "更新安装失败：{reason}",
         "initializeFailed": "无法初始化更新设置",
-        "notificationTitle": "Muse Tune 新版本可用",
+        "notificationTitle": "MuseTune 新版本可用",
         "notificationBody": "版本 {version} 已发布。前往“设置 → 关于”即可下载并安装。",
         "notificationPortableBody": "版本 {version} 已发布。前往“设置 → 关于”下载新版便携包并手动覆盖。"
       },
@@ -393,7 +393,7 @@
     "systemVolume": "系统主音量"
   },
   "taskbar": {
-    "player": "Muse Tune 任务栏播放器",
+    "player": "MuseTune 任务栏播放器",
     "lyrics": {
       "current": "当前歌词",
       "noLyrics": "暂无歌词"
@@ -404,7 +404,7 @@
       "lyrics": "开启歌词",
       "spectrum": "显示频谱",
       "updateAvailable": "发现新版本 v{version}",
-      "updateTooltip": "Muse Tune · 有新版本 v{version}",
+      "updateTooltip": "MuseTune · 有新版本 v{version}",
       "settings": "打开设置",
       "restart": "重启应用",
       "restartProductionOnly": "重启应用（正式版可用）",
@@ -442,7 +442,7 @@
       "noLyrics": "没有歌词",
       "unavailable": "不可用",
       "error": "错误",
-      "applicationCache": "Muse Tune 缓存命中",
+      "applicationCache": "MuseTune 缓存命中",
       "playerCache": "播放器本地缓存",
       "onlineFetch": "在线重新获取",
       "wordPrecision": "逐字",
@@ -495,7 +495,7 @@
     },
     "taskbar": {
       "title": "任务栏",
-      "description": "Windows 任务栏检测结果和 Muse Tune Bar 窗口状态",
+      "description": "Windows 任务栏检测结果和 MuseTune Bar 窗口状态",
       "displays": "任务栏显示器",
       "windows": "Bar 窗口",
       "visibleWindows": "可见 Bar",
@@ -503,7 +503,7 @@
       "target": "显示目标",
       "placement": "停靠位置",
       "overlap": "遮挡策略",
-      "barPriority": "Muse Tune 优先",
+      "barPriority": "MuseTune 优先",
       "systemPriority": "系统任务栏元素优先",
       "logicalWidth": "逻辑宽度",
       "horizontalOffset": "水平偏移",
@@ -581,7 +581,7 @@
       "resolutionChain": "解析链路",
       "parallelCount": "{count} 项并发",
       "sites": {
-        "applicationCache": "Muse Tune 缓存",
+        "applicationCache": "MuseTune 缓存",
         "applicationCacheVariant": "缓存歌词简繁转换",
         "local": "当前播放器本地",
         "online": "当前播放器在线",
