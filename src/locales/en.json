@@ -399,8 +399,6 @@
       "noLyrics": "No lyrics available"
     },
     "menu": {
-      "normalCover": "Cover in normal mode",
-      "lyricsCover": "Cover in lyrics mode",
       "lyrics": "Enable lyrics",
       "spectrum": "Show spectrum",
       "updateAvailable": "Update available: v{version}",

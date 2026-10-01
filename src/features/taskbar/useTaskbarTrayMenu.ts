@@ -6,13 +6,6 @@ import {
   getTaskbarAudioSpectrumSettings,
   setTaskbarAudioSpectrumSettings,
 } from '@/features/settings/audio-spectrum'
-import {
-  getTaskbarCoverAppearance,
-  isTaskbarCoverVisibleInMode,
-  setTaskbarCoverAppearance,
-  updateTaskbarCoverModeVisibility,
-  type TaskbarCoverDisplayMode,
-} from '@/features/settings/cover'
 import { getTaskbarLyricsSettings, setTaskbarLyricsSettings } from '@/features/settings/lyrics'
 
 import { TRAY_MENU_ACTION_EVENT, setTrayMenuState } from './client'
@@ -20,7 +13,7 @@ import { isTrayMenuAction, type TrayMenuAction, type TrayMenuChecked } from './c
 
 /**
  * 承接托盘菜单：开关动作复用现有设置写入能力，展示状态与文案反向同步回原生菜单。
- * 原生菜单只渲染，勾选与文案的唯一来源仍是任务栏窗口持有的设置状态。
+ * 歌词与频谱勾选来自任务栏设置，自启动勾选由原生插件独立管理。
  */
 export function useTaskbarTrayMenu(readSwitchState: () => TrayMenuChecked) {
   const { t } = useI18n({ useScope: 'global' })
@@ -30,16 +23,6 @@ export function useTaskbarTrayMenu(readSwitchState: () => TrayMenuChecked) {
   /** 执行菜单操作并集中记录失败，避免菜单回调产生未处理的 Promise。 */
   function runAction(action: () => Promise<void>, failureMessage: string) {
     void action().catch((error) => reportBackgroundFailure(failureMessage, error))
-  }
-
-  /** 切换指定界面模式的封面显示，并保留另一个模式当前状态。 */
-  async function toggleCover(mode: TaskbarCoverDisplayMode) {
-    const current = await getTaskbarCoverAppearance()
-    const visible = isTaskbarCoverVisibleInMode(current.visibility, mode)
-    await setTaskbarCoverAppearance({
-      ...current,
-      visibility: updateTaskbarCoverModeVisibility(current.visibility, mode, !visible),
-    })
   }
 
   /** 切换歌词能力，沿用设置模块对原生歌词服务的同步与失败回滚。 */
@@ -57,12 +40,6 @@ export function useTaskbarTrayMenu(readSwitchState: () => TrayMenuChecked) {
   /** 按托盘菜单动作复用与原右键菜单一致的设置写入路径。 */
   function handleAction(action: TrayMenuAction) {
     switch (action) {
-      case 'normal-cover':
-        runAction(() => toggleCover('normal'), '切换普通模式封面失败')
-        break
-      case 'lyrics-cover':
-        runAction(() => toggleCover('lyrics'), '切换歌词模式封面失败')
-        break
       case 'lyrics':
         runAction(toggleLyrics, '切换歌词失败')
         break
@@ -76,8 +53,7 @@ export function useTaskbarTrayMenu(readSwitchState: () => TrayMenuChecked) {
   function pushMenuState(checked: TrayMenuChecked) {
     // 文案在 effect 内同步求值：切换界面语言时会重新推送菜单标题。
     const labels = {
-      normalCover: t('taskbar.menu.normalCover'),
-      lyricsCover: t('taskbar.menu.lyricsCover'),
+      autostart: t('settings.general.autostart.title'),
       lyrics: t('taskbar.menu.lyrics'),
       spectrum: t('taskbar.menu.spectrum'),
       settings: t('taskbar.menu.settings'),

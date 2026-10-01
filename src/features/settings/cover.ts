@@ -37,22 +37,6 @@ export function isTaskbarCoverVisibleInMode(
   return visibility === 'always' || visibility === mode
 }
 
-export function updateTaskbarCoverModeVisibility(
-  visibility: TaskbarCoverVisibility,
-  mode: TaskbarCoverDisplayMode,
-  visible: boolean,
-): TaskbarCoverVisibility {
-  const normalVisible =
-    mode === 'normal' ? visible : isTaskbarCoverVisibleInMode(visibility, 'normal')
-  const lyricsVisible =
-    mode === 'lyrics' ? visible : isTaskbarCoverVisibleInMode(visibility, 'lyrics')
-
-  if (normalVisible && lyricsVisible) return 'always'
-  if (normalVisible) return 'normal'
-  if (lyricsVisible) return 'lyrics'
-  return 'hidden'
-}
-
 export function normalizeTaskbarCoverAppearance(value: unknown): TaskbarCoverAppearance {
   const candidate = typeof value === 'object' && value !== null ? value : {}
   const record = candidate as Partial<Record<keyof TaskbarCoverAppearance | 'visible', unknown>>

@@ -201,8 +201,6 @@ const lyricsCoverBounds = useElementBounding(lyricsCoverAnchor, { windowScroll: 
 useMediaSessionSelectionPolicy()
 useAutomaticUpdateMonitor()
 useTaskbarTrayMenu(() => ({
-  normalCover: isTaskbarCoverVisibleInMode(coverAppearance.value.visibility, 'normal'),
-  lyricsCover: isTaskbarCoverVisibleInMode(coverAppearance.value.visibility, 'lyrics'),
   lyrics: lyricsSettings.value.enabled,
   spectrum: spectrumSettings.value.visible,
 }))

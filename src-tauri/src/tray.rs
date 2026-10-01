@@ -3,11 +3,12 @@
 use std::sync::Mutex;
 
 use tauri::{
-    App, AppHandle, Emitter, Manager, Wry,
+    App, AppHandle, Emitter, Listener, Manager, Wry,
     image::Image,
     menu::{CheckMenuItem, IconMenuItem, Menu, MenuItem, PredefinedMenuItem},
     tray::{TrayIcon, TrayIconBuilder},
 };
+use tauri_plugin_autostart::ManagerExt;
 
 use crate::commands;
 
@@ -16,14 +17,13 @@ const UPDATE_MENU_ID: &str = "tray-update";
 const SETTINGS_MENU_ID: &str = "tray-settings";
 const RESTART_MENU_ID: &str = "tray-restart";
 const EXIT_MENU_ID: &str = "tray-exit";
-const NORMAL_COVER_MENU_ID: &str = "tray-toggle-normal-cover";
-const LYRICS_COVER_MENU_ID: &str = "tray-toggle-lyrics-cover";
+const AUTOSTART_MENU_ID: &str = "tray-toggle-autostart";
+/// 自启动修改成功后广播真实状态，供设置窗口和托盘同步。
+const AUTOSTART_CHANGED_EVENT: &str = "settings://autostart-changed";
 const LYRICS_MENU_ID: &str = "tray-toggle-lyrics";
 const SPECTRUM_MENU_ID: &str = "tray-toggle-spectrum";
 
 /// 托盘菜单动作标识，与前端任务栏窗口约定的取值保持一致。
-const NORMAL_COVER_ACTION: &str = "normal-cover";
-const LYRICS_COVER_ACTION: &str = "lyrics-cover";
 const LYRICS_ACTION: &str = "lyrics";
 const SPECTRUM_ACTION: &str = "spectrum";
 /// 把托盘菜单动作投递给任务栏窗口的事件名。
@@ -51,8 +51,7 @@ pub(crate) struct UpdateTrayPresentation {
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TrayMenuLabels {
-    normal_cover: String,
-    lyrics_cover: String,
+    autostart: String,
     lyrics: String,
     spectrum: String,
     settings: String,
@@ -63,8 +62,6 @@ struct TrayMenuLabels {
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TrayMenuChecked {
-    normal_cover: bool,
-    lyrics_cover: bool,
     lyrics: bool,
     spectrum: bool,
 }
@@ -76,8 +73,7 @@ pub(crate) struct TrayMenu {
     update_separator: PredefinedMenuItem<Wry>,
     update_label: Mutex<Option<String>>,
     tray: TrayIcon<Wry>,
-    normal_cover: CheckMenuItem<Wry>,
-    lyrics_cover: CheckMenuItem<Wry>,
+    autostart: CheckMenuItem<Wry>,
     lyrics: CheckMenuItem<Wry>,
     spectrum: CheckMenuItem<Wry>,
     settings: MenuItem<Wry>,
@@ -89,27 +85,12 @@ impl TrayMenu {
     /// 应用任务栏窗口推送的文案与勾选状态。
     pub(crate) fn apply(&self, presentation: TrayMenuPresentation) {
         let TrayMenuPresentation { labels, checked } = presentation;
-        apply_result(
-            self.normal_cover.set_text(labels.normal_cover),
-            "普通模式封面",
-        );
-        apply_result(
-            self.lyrics_cover.set_text(labels.lyrics_cover),
-            "歌词模式封面",
-        );
+        apply_result(self.autostart.set_text(labels.autostart), "开机自启");
         apply_result(self.lyrics.set_text(labels.lyrics), "歌词");
         apply_result(self.spectrum.set_text(labels.spectrum), "频谱");
         apply_result(self.settings.set_text(labels.settings), "设置");
         apply_result(self.restart.set_text(labels.restart), "重启应用");
         apply_result(self.quit.set_text(labels.quit), "退出");
-        apply_result(
-            self.normal_cover.set_checked(checked.normal_cover),
-            "普通模式封面",
-        );
-        apply_result(
-            self.lyrics_cover.set_checked(checked.lyrics_cover),
-            "歌词模式封面",
-        );
         apply_result(self.lyrics.set_checked(checked.lyrics), "歌词");
         apply_result(self.spectrum.set_checked(checked.spectrum), "频谱");
     }
@@ -217,20 +198,16 @@ pub(super) fn initialize(app: &App) -> tauri::Result<()> {
         None::<&str>,
     )?;
     let update_separator = PredefinedMenuItem::separator(app)?;
-    let normal_cover = CheckMenuItem::with_id(
+    let autostart_enabled = app.autolaunch().is_enabled().unwrap_or_else(|error| {
+        log::warn!("读取托盘开机自启状态失败: {error}");
+        false
+    });
+    let autostart = CheckMenuItem::with_id(
         app,
-        NORMAL_COVER_MENU_ID,
-        "普通模式封面",
+        AUTOSTART_MENU_ID,
+        "开机自启",
         true,
-        true,
-        None::<&str>,
-    )?;
-    let lyrics_cover = CheckMenuItem::with_id(
-        app,
-        LYRICS_COVER_MENU_ID,
-        "歌词模式封面",
-        true,
-        true,
+        autostart_enabled,
         None::<&str>,
     )?;
     let lyrics = CheckMenuItem::with_id(app, LYRICS_MENU_ID, "开启歌词", true, true, None::<&str>)?;
@@ -253,11 +230,10 @@ pub(super) fn initialize(app: &App) -> tauri::Result<()> {
     let menu = Menu::with_items(
         app,
         &[
-            &normal_cover,
-            &lyrics_cover,
             &lyrics,
             &spectrum,
             &separator,
+            &autostart,
             &settings_item,
             &restart_item,
             &exit_item,
@@ -280,13 +256,18 @@ pub(super) fn initialize(app: &App) -> tauri::Result<()> {
         update_separator,
         update_label: Mutex::new(None),
         tray,
-        normal_cover,
-        lyrics_cover,
+        autostart,
         lyrics,
         spectrum,
         settings: settings_item,
         restart: restart_item,
         quit: exit_item,
+    });
+
+    // 设置页和托盘共用官方插件，只在成功修改时通知，避免轮询系统注册表。
+    let handle = app.handle().clone();
+    app.listen(AUTOSTART_CHANGED_EVENT, move |_| {
+        synchronize_autostart(&handle);
     });
 
     Ok(())
@@ -299,11 +280,42 @@ fn handle_menu_event(app: &AppHandle, menu_id: &str) {
         SETTINGS_MENU_ID => open_settings(app.clone()),
         RESTART_MENU_ID => commands::system::restart_application(app.clone()),
         EXIT_MENU_ID => app.exit(0),
-        NORMAL_COVER_MENU_ID => dispatch_menu_action(app, NORMAL_COVER_ACTION),
-        LYRICS_COVER_MENU_ID => dispatch_menu_action(app, LYRICS_COVER_ACTION),
+        AUTOSTART_MENU_ID => toggle_autostart(app),
         LYRICS_MENU_ID => dispatch_menu_action(app, LYRICS_ACTION),
         SPECTRUM_MENU_ID => dispatch_menu_action(app, SPECTRUM_ACTION),
         _ => {}
+    }
+}
+
+/// 从官方插件读取真实状态，覆盖原生菜单点击时的自动勾选及失败状态。
+fn synchronize_autostart(app: &AppHandle) {
+    match app.autolaunch().is_enabled() {
+        Ok(enabled) => apply_result(
+            app.state::<TrayMenu>().autostart.set_checked(enabled),
+            "开机自启",
+        ),
+        Err(error) => log::warn!("同步托盘开机自启状态失败: {error}"),
+    }
+}
+
+/// 切换当前应用的开机自启注册；失败时恢复真实勾选，成功后通知设置页。
+fn toggle_autostart(app: &AppHandle) {
+    let manager = app.autolaunch();
+    let result = manager.is_enabled().and_then(|enabled| {
+        if enabled {
+            manager.disable()
+        } else {
+            manager.enable()
+        }
+    });
+    synchronize_autostart(app);
+    match result {
+        Ok(()) => {
+            if let Err(error) = app.emit(AUTOSTART_CHANGED_EVENT, ()) {
+                log::warn!("广播开机自启状态变化失败: {error}");
+            }
+        }
+        Err(error) => log::warn!("从托盘切换开机自启失败: {error}"),
     }
 }
 

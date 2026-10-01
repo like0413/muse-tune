@@ -399,8 +399,6 @@
       "noLyrics": "暫無歌詞"
     },
     "menu": {
-      "normalCover": "一般模式封面",
-      "lyricsCover": "歌詞模式封面",
       "lyrics": "開啟歌詞",
       "spectrum": "顯示頻譜",
       "updateAvailable": "發現新版本 v{version}",

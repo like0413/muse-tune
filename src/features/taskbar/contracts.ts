@@ -19,14 +19,13 @@ export type TaskbarOverlapPriority = (typeof TASKBAR_OVERLAP_PRIORITIES)[number]
 export type TaskbarWidthMode = (typeof TASKBAR_WIDTH_MODES)[number]
 
 /** 托盘菜单项要求任务栏窗口执行的动作。 */
-export const TRAY_MENU_ACTIONS = ['normal-cover', 'lyrics-cover', 'lyrics', 'spectrum'] as const
+export const TRAY_MENU_ACTIONS = ['lyrics', 'spectrum'] as const
 
 export type TrayMenuAction = (typeof TRAY_MENU_ACTIONS)[number]
 
 /** 托盘菜单文案，由任务栏窗口按当前界面语言提供。 */
 export interface TrayMenuLabels {
-  normalCover: string
-  lyricsCover: string
+  autostart: string
   lyrics: string
   spectrum: string
   settings: string
@@ -36,13 +35,11 @@ export interface TrayMenuLabels {
 
 /** 托盘菜单开关项的勾选状态。 */
 export interface TrayMenuChecked {
-  normalCover: boolean
-  lyricsCover: boolean
   lyrics: boolean
   spectrum: boolean
 }
 
-/** 托盘菜单完整展示状态；原生菜单只负责渲染。 */
+/** 任务栏提供的托盘展示状态；自启动勾选由原生插件负责。 */
 export interface TrayMenuPresentation {
   labels: TrayMenuLabels
   checked: TrayMenuChecked
