@@ -157,7 +157,7 @@ function normalizeTaskbarLyricsOnlineSourceOrder(value: unknown): MediaPlayer[] 
 }
 
 /**
- * 规范化参与在线检索的平台：缺失或损坏时回退为全部启用，允许空数组表示完全停用在线接口。
+ * 规范化参与在线检索的平台：缺失或损坏时回退默认启用集合，允许空数组表示完全停用在线接口。
  *
  * 只保留出现在归一化顺序里的平台，确保启用集合始终是顺序集合的子集。
  */

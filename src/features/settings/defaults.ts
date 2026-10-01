@@ -38,7 +38,7 @@ import type { TaskbarTrackInfoAlignment, TaskbarTrackInfoScrolling } from './tra
 
 /**
  * `native-defaults.json` 承载原生启动期必须自行读取的取值——那时前端尚未运行，
- * 无法依赖前端推送。因此宽度和水平偏移范围与 `taskbar.width` / `widthMode` /
+ * 无法依赖前端推送。因此 GPU 加速开关、宽度和水平偏移范围与 `taskbar.width` / `widthMode` /
  * `horizontalOffset` / `placement` / `overlapPriority` / `displayTarget` / `lyrics`
  * 的默认值以该文件为唯一来源，
  * 原生侧通过 `src-tauri/src/native_defaults.rs` 读取同一份数据。
@@ -58,6 +58,9 @@ import type { TaskbarTrackInfoAlignment, TaskbarTrackInfoScrolling } from './tra
  * `media.sessionSelection` 遵循同一条规则，只是它的推送经由变更事件而非同一个函数。
  */
 const sharedDefaults = nativeDefaultsJson as {
+  application: {
+    disableGpuAcceleration: boolean
+  }
   taskbar: {
     widthMin: number
     widthMax: number
@@ -75,6 +78,7 @@ const sharedDefaults = nativeDefaultsJson as {
       networkPolicy: TaskbarLyricsNetworkPolicy
       onlineStrategy: LyricsOnlineStrategy
       onlineSources: MediaPlayer[]
+      enabledOnlineSources: MediaPlayer[]
     }
   }
   media: {
@@ -87,8 +91,8 @@ const sharedDefaults = nativeDefaultsJson as {
 /** 应用级减少动态效果覆盖项默认关闭，由系统偏好优先。 */
 export const DEFAULT_REDUCED_MOTION = false
 
-/** 禁用 GPU 加速默认关闭（保持硬件加速的渲染流畅度）。 */
-export const DEFAULT_DISABLE_GPU_ACCELERATION = false
+/** GPU 加速开关与原生启动期共用默认值。 */
+export const DEFAULT_DISABLE_GPU_ACCELERATION = sharedDefaults.application.disableGpuAcceleration
 
 export const DEFAULT_UPDATE_CHECK_RESULT: UpdateCheckResult = {
   checkedAt: 0,
@@ -97,7 +101,7 @@ export const DEFAULT_UPDATE_CHECK_RESULT: UpdateCheckResult = {
   availableVersion: null,
 }
 
-export const DEFAULT_TASKBAR_BACKGROUND_TRANSPARENCY = 0
+export const DEFAULT_TASKBAR_BACKGROUND_TRANSPARENCY = 100
 
 export const DEFAULT_TASKBAR_BACKGROUND_STYLE: TaskbarBackgroundStyle = 'cover-blur'
 
@@ -128,7 +132,7 @@ export const ALL_TASKBAR_DISPLAYS = sharedDefaults.taskbar.displayTarget
 
 export const DEFAULT_TASKBAR_PROGRESS_STYLE: TaskbarProgressStyle = 'bottom'
 
-export const DEFAULT_TASKBAR_PROGRESS_POSITION: TaskbarProgressPosition = 'bottom'
+export const DEFAULT_TASKBAR_PROGRESS_POSITION: TaskbarProgressPosition = 'top'
 
 export const DEFAULT_TASKBAR_PROGRESS_VISIBLE = true
 
@@ -138,10 +142,10 @@ export const DEFAULT_TASKBAR_AUTO_HIDE: TaskbarAutoHide = {
   whenNoMediaSession: true,
 }
 
-/** 封面默认始终显示、圆角、播放时旋转，并标注播放器来源。 */
+/** 封面默认始终显示、圆形、播放时旋转，并标注播放器来源。 */
 export const DEFAULT_TASKBAR_COVER_APPEARANCE: TaskbarCoverAppearance = {
   visibility: 'always',
-  shape: 'rounded',
+  shape: 'circle',
   rotateWhenPlaying: true,
   showPlayerSource: true,
 }
@@ -163,7 +167,7 @@ export const DEFAULT_TASKBAR_LYRICS_SETTINGS: TaskbarLyricsSettings = {
   onlineStrategy: sharedDefaults.taskbar.lyrics.onlineStrategy,
   // 在线接口顺序与启用集合只包含真正具备在线能力的平台。
   onlineSourceOrder: [...sharedDefaults.taskbar.lyrics.onlineSources],
-  enabledOnlineSources: [...sharedDefaults.taskbar.lyrics.onlineSources],
+  enabledOnlineSources: [...sharedDefaults.taskbar.lyrics.enabledOnlineSources],
   timingOffsetMs: 0,
   wordHighlight: true,
   animation: 'up',
@@ -185,15 +189,15 @@ export const DEFAULT_TASKBAR_TRACK_INFO_SCROLLING: TaskbarTrackInfoScrolling = {
   mode: 'loop',
 }
 
-/** 频谱默认隐藏、底部对齐、24 条，固定在播放器最右侧且宽 64px。 */
+/** 频谱默认隐藏、底部对齐、15 条，固定在播放器最右侧且宽 50px。 */
 export const DEFAULT_TASKBAR_AUDIO_SPECTRUM_SETTINGS: TaskbarAudioSpectrumSettings = {
   visible: false,
-  barCount: 24,
-  width: 64,
+  barCount: 15,
+  width: 50,
   alignment: 'bottom',
-  sensitivity: 100,
-  smoothing: 55,
-  frameRate: 20,
+  sensitivity: 85,
+  smoothing: 45,
+  frameRate: 25,
 }
 
 export const SUPPORTED_MEDIA_PLAYERS: readonly MediaPlayer[] = sharedDefaults.media.supportedPlayers

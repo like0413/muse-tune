@@ -1,6 +1,7 @@
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_store::StoreExt;
 
+use crate::native_defaults;
 use crate::storage::StoragePaths;
 
 /// 应用内所有 Rust 模块共享的官方 Store 文件名。
@@ -36,14 +37,17 @@ pub(crate) fn disable_gpu_app_args<R: Runtime>(app: &AppHandle<R>) -> Option<&'s
 
 /// 从持久化存储读取禁用 GPU 加速开关，供启动阶段捕获为会话内固定值。
 pub(crate) fn read_disable_gpu_setting<R: Runtime>(app: &AppHandle<R>) -> GpuAccelerationSetting {
+    let default_enabled = native_defaults::shared()
+        .application
+        .disable_gpu_acceleration;
     let enabled = match app.store(app.state::<StoragePaths>().settings_file()) {
         Ok(store) => store
             .get(DISABLE_GPU_ACCELERATION_KEY)
             .and_then(|value| value.as_bool())
-            .unwrap_or(false),
+            .unwrap_or(default_enabled),
         Err(error) => {
-            log::warn!("读取 GPU 加速设置失败，本次启动使用默认(启用加速): {error}");
-            false
+            log::warn!("读取 GPU 加速设置失败，本次启动使用默认设置: {error}");
+            default_enabled
         }
     };
     GpuAccelerationSetting { enabled }

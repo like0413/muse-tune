@@ -1,4 +1,7 @@
 {
+  "application": {
+    "disableGpuAcceleration": true
+  },
   "taskbar": {
     "widthMin": 150,
     "widthMax": 300,
@@ -15,7 +18,8 @@
       "chineseVariant": "follow_interface",
       "networkPolicy": "auto",
       "onlineStrategy": "parallel",
-      "onlineSources": ["qq_music", "netease_cloud_music", "soda_music", "kugou_music"]
+      "onlineSources": ["qq_music", "kugou_music", "soda_music", "netease_cloud_music"],
+      "enabledOnlineSources": ["qq_music", "kugou_music"]
     }
   },
   "media": {

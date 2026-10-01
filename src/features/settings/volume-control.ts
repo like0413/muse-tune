@@ -9,14 +9,14 @@ const VOLUME_CONTROL_TARGET_CHANGED_EVENT = 'settings://volume-control-target-ch
 export const VOLUME_CONTROL_TARGETS = ['application', 'system'] as const
 export type VolumeControlTarget = (typeof VOLUME_CONTROL_TARGETS)[number]
 
-export const DEFAULT_VOLUME_CONTROL_TARGET: VolumeControlTarget = 'application'
+export const DEFAULT_VOLUME_CONTROL_TARGET: VolumeControlTarget = 'system'
 
 /** 判断外部值是否为受支持的音量控制对象。 */
 export function isVolumeControlTarget(value: unknown): value is VolumeControlTarget {
   return VOLUME_CONTROL_TARGETS.some((target) => target === value)
 }
 
-/** 读取音量控制对象，缺失或损坏时保留原有的当前播放器音量行为。 */
+/** 读取音量控制对象，缺失或损坏时回退到默认的系统音量。 */
 export async function getVolumeControlTarget(): Promise<VolumeControlTarget> {
   const value = await settingsStore.get<unknown>(VOLUME_CONTROL_TARGET_KEY)
   return isVolumeControlTarget(value) ? value : DEFAULT_VOLUME_CONTROL_TARGET

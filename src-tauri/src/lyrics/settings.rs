@@ -31,7 +31,12 @@ impl Default for LyricsPreferences {
             chinese_variant: defaults.chinese_variant.resolve("zh-Hans"),
             allow_online: defaults.network_policy.allows_online(),
             online_strategy: defaults.online_strategy,
-            online_sources: defaults.online_sources.clone(),
+            online_sources: defaults
+                .online_sources
+                .iter()
+                .copied()
+                .filter(|player| defaults.enabled_online_sources.contains(player))
+                .collect(),
         }
     }
 }
@@ -93,13 +98,10 @@ pub(super) fn restore_lyrics_preferences<R: Runtime>(app: &tauri::App<R>) -> Lyr
 /// 由持久化的“完整顺序 + 启用集合”解析出实际参与检索的平台。
 ///
 /// 规则与前端 `normalizeTaskbarLyricsSettings` 保持一致：顺序先补齐为全部在线平台各一次，
-/// 再与启用集合求交并保持顺序；任一项缺失或损坏时按“全部平台都启用”回退。
+/// 再与启用集合求交并保持顺序；任一项缺失或损坏时回退对应的共享默认值。
 fn restore_online_sources(value: &serde_json::Value) -> Vec<MediaPlayer> {
-    let supported = native_defaults::shared()
-        .taskbar
-        .lyrics
-        .online_sources
-        .as_slice();
+    let defaults = &native_defaults::shared().taskbar.lyrics;
+    let supported = defaults.online_sources.as_slice();
     let order = value
         .get("onlineSourceOrder")
         .and_then(|order| serde_json::from_value::<Vec<MediaPlayer>>(order.clone()).ok())
@@ -109,7 +111,7 @@ fn restore_online_sources(value: &serde_json::Value) -> Vec<MediaPlayer> {
         .get("enabledOnlineSources")
         .and_then(|enabled| serde_json::from_value::<Vec<MediaPlayer>>(enabled.clone()).ok())
         .map(|enabled| dedupe_supported(&enabled, supported))
-        .unwrap_or_else(|| order.clone());
+        .unwrap_or_else(|| defaults.enabled_online_sources.clone());
     order
         .into_iter()
         .filter(|player| enabled.contains(player))

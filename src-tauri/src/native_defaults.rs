@@ -57,10 +57,18 @@ impl LyricsNetworkPolicy {
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SharedDefaults {
+    pub application: ApplicationDefaults,
     pub taskbar: TaskbarDefaults,
     pub media: MediaDefaults,
     /// 原生启动期需要自行判废的版本化设置；未在此声明的版本条目会被 serde 忽略。
     pub versions: Versions,
+}
+
+/// 原生创建 WebView 前需要读取的应用设置默认值。
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplicationDefaults {
+    pub disable_gpu_acceleration: bool,
 }
 
 /// 原生需要自行校验存储版本的设置分组。
@@ -102,6 +110,8 @@ pub struct LyricsDefaults {
     pub online_strategy: LyricsOnlineStrategy,
     /// 真正具备在线解析能力的平台；本地-only 播放器不能进入在线接口设置。
     pub online_sources: Vec<MediaPlayer>,
+    /// 默认启用的在线平台，完整平台清单仍用于支持列表与顺序归一化。
+    pub enabled_online_sources: Vec<MediaPlayer>,
 }
 
 /// 媒体服务在前端推送到达前使用的会话选择策略。
