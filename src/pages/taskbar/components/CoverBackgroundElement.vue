@@ -27,8 +27,8 @@ function releaseInactiveSource(index: number, event: TransitionEvent) {
 
 /**
  * 交叉淡入淡出：新封面先写入未激活的常驻图层，绘制完成后再切换激活项。
- * 图层始终存在，只有透明度在变，因此过渡中不会出现图层创建或回收带来的亮度跳变，
- * 旧封面也会在过渡期间保持可见，不会整条 bar 先暗下去。
+ * 图层始终存在，仅调整透明度；通过隔离的 plus-lighter 混合保持两层总覆盖率，
+ * 避免普通透明度叠加在过渡中途露出更多底色而变暗。
  */
 watch(
   () => props.image,
@@ -81,6 +81,8 @@ watch(
 <style scoped>
 /* 常驻图层只切换透明度，并保持独立合成层，避免过渡前后重新栅格化导致的亮度跳变。 */
 .cover-image {
+  /* 两层透明度相加，避免交叉淡入淡出产生中途变暗。 */
+  mix-blend-mode: plus-lighter;
   background-position: center;
   background-size: 100% 100%;
   opacity: 0;
@@ -95,6 +97,8 @@ watch(
 }
 
 .cover-background {
+  /* 将混合限制在封面背景内，不影响任务栏底色、歌词与按钮。 */
+  isolation: isolate;
   transition: opacity 420ms ease;
 }
 </style>
